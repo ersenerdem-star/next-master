@@ -43,46 +43,61 @@ export function parseSupplierPriceAmount(value: unknown, { typedNumeric = false 
 
 export type SupplierCsvIssue={row:number;column:string;code:string;message:string;productCode?:string;value?:string};
 export type SupplierCsvReport={totalRows:number;issueCount:number;counts:Record<string,number>;issues:SupplierCsvIssue[]};
+export type SupplierQuantityCsvReport=SupplierCsvReport & {productCount:number;tieredProductCount:number};
 const CODE_HEADERS=['product_code','part_no','part_number','partno','code','sku','article_number','article_no'];
 const PRICE_HEADERS=['buy_price','buy_price_eur','buy_price_usd','buy_price_gbp','buy_price_try','supplier_price','price','net_price','purchase_price'];
-export async function inspectSupplierCsv(file:Blob,signal:AbortSignal):Promise<SupplierCsvReport>{
+export async function inspectSupplierCsv(file:Blob,signal:AbortSignal):Promise<SupplierCsvReport>;
+export async function inspectSupplierCsv(file:Blob,signal:AbortSignal,quantityPricing:true):Promise<SupplierQuantityCsvReport>;
+export async function inspectSupplierCsv(file:Blob,signal:AbortSignal,quantityPricing=false):Promise<SupplierCsvReport|SupplierQuantityCsvReport>{
  const report:SupplierCsvReport={totalRows:0,issueCount:0,counts:{},issues:[]};
  const add=(row:number,column:string,code:string,message:string)=>{
   report.issueCount++;report.counts[code]=(report.counts[code]||0)+1;
   // Bounded report memory. Counts cover every row; downloaded details are capped.
   if(report.issues.length<100000)report.issues.push({row,column,code,message});
  };
- let codeIndex=-1,priceIndex=-1,weightIndex=-1,headerSeen=false;
+ let codeIndex=-1,priceIndex=-1,weightIndex=-1,moqIndex=-1,headerSeen=false;
  const codes=new Map<string,number>();
+ const tiers=new Map<string,number>();
+ const result=()=>quantityPricing ? {...report,productCount:tiers.size,tieredProductCount:[...tiers.values()].filter(count=>count>1).length} : report;
  for await(const cells of streamCsvRows(file)){
   signal.throwIfAborted();
   if(!headerSeen){
    headerSeen=true;
    const headers=cells.map(x=>x.trim().toLowerCase().replace(/[\s-]+/g,'_'));
    codeIndex=headers.findIndex(x=>CODE_HEADERS.includes(x));priceIndex=headers.findIndex(x=>PRICE_HEADERS.includes(x));weightIndex=headers.findIndex(x=>['weight','weight_kg','weightkg'].includes(x));
+   if(quantityPricing)moqIndex=headers.findIndex(x=>['moq','minimum_order_quantity','min_order_qty'].includes(x));
    if(codeIndex<0)add(1,'Product_Code','missing_header','Ürün kodu sütunu bulunamadı.');
    if(priceIndex<0)add(1,'Buy_Price','missing_header','Alış fiyatı sütunu bulunamadı.');
-   if(codeIndex<0||priceIndex<0)return report;
+   if(quantityPricing&&moqIndex<0)add(1,'MOQ','missing_header','Miktar kademesi için MOQ sütunu zorunludur.');
+   if(report.issueCount)return result();
    continue;
   }
   report.totalRows++;const row=report.totalRows+1;
   const beforeIssues=report.issues.length;
   const code=(cells[codeIndex]||'').replace(/\s+/g,'').toUpperCase();
+  const rawMoq=(cells[moqIndex]||'').trim(),moq=Number(rawMoq);
+  const validMoq=/^\+?\d+$/.test(rawMoq)&&Number.isInteger(moq)&&moq>=1&&moq<=2147483647;
+  const priceKey=quantityPricing?JSON.stringify([code,moq]):code;
   if(!/[A-Z0-9]/.test(code))add(row,'Product_Code','missing_code','Ürün kodu boş veya geçersiz.');
-  else if(codes.has(code))add(row,'Product_Code','duplicate_code',`Ürün kodu tekrar ediyor; ilk kayıt: ${codes.get(code)}.`);
-  else codes.set(code,row);
+  else if(quantityPricing&&!validMoq)add(row,'MOQ','invalid_moq','Miktar kademesi pozitif tam sayı olmalı.');
+  else if(codes.has(priceKey))add(row,quantityPricing?'MOQ':'Product_Code',quantityPricing?'duplicate_tier':'duplicate_code',
+    quantityPricing?`Aynı ürünün miktar kademesi tekrar ediyor; ilk kayıt: ${codes.get(priceKey)}.`:`Ürün kodu tekrar ediyor; ilk kayıt: ${codes.get(priceKey)}.`);
+  else {
+   codes.set(priceKey,row);
+   if(quantityPricing)tiers.set(code,(tiers.get(code)||0)+1);
+  }
   const price=(cells[priceIndex]||'').trim();const parsed=parseSupplierPriceAmount(price);
   if(!price)add(row,'Buy_Price','missing_price','Alış fiyatı boş.');
   else if(/[€$£₺]/.test(price))add(row,'Buy_Price','currency_symbol','Fiyat hücresindeki para birimi işaretini kaldırın; örnek: 14,19.');
   else if(parsed.ambiguous)add(row,'Buy_Price','ambiguous_price','Fiyatın ondalık/binlik ayrımı belirsiz; örnek: 1234 veya 1,2340.');
   else if(parsed.value===null||parsed.value<=0)add(row,'Buy_Price','invalid_price','Fiyat sıfırdan büyük, geçerli bir sayı olmalı.');
   if(weightIndex>=0){const weight=(cells[weightIndex]||'').trim();if(weight&&parseSupplierWeight(weight)===null)add(row,'Weight_kg','invalid_weight','Ağırlık kg cinsinden sıfırdan büyük bir sayı olmalı; örnek: 0,355.');}
-  for(const issue of report.issues.slice(beforeIssues)){issue.productCode=cells[codeIndex]||'';issue.value=issue.column==='Weight_kg'?(cells[weightIndex]||''):(issue.column==='Buy_Price'?price:(cells[codeIndex]||''));}
+  for(const issue of report.issues.slice(beforeIssues)){issue.productCode=cells[codeIndex]||'';issue.value=issue.column==='Weight_kg'?(cells[weightIndex]||''):(issue.column==='Buy_Price'?price:issue.column==='MOQ'?rawMoq:(cells[codeIndex]||''));}
   if(report.totalRows%2000===0)await new Promise(resolve=>setTimeout(resolve,0));
  }
  if(!headerSeen)add(1,'','empty_file','Dosya boş.');
  else if(!report.totalRows&&!report.issueCount)add(2,'','empty_file','Dosyada ürün satırı yok.');
- return report;
+ return result();
 }
 export function supplierCsvIssueCsv(report:SupplierCsvReport){
  // Protect spreadsheet readers from supplier-controlled formula cells.

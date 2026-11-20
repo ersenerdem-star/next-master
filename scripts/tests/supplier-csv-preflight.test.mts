@@ -3,6 +3,15 @@ import assert from 'node:assert/strict';
 import {inspectSupplierCsv,parseSupplierPriceAmount,supplierCsvIssueCsv} from '../../apps/web/src/shared/supplierCsvPreflight.ts';
 import {parseSupplierPriceAmount as workerAmount} from '../../apps/engine/supplier-price-shadow/src/streaming-csv.mjs';
 const check=(text:string,signal=new AbortController().signal)=>inspectSupplierCsv(new Blob([text]),signal);
+test('quantity preview distinguishes repeated products from repeated thresholds',async()=>{
+ const data='Product_Code;MOQ;Buy_Price_Eur\nA;1;30,58\nA;16;29,68\nA;016;28,82\nB;1;1,20';
+ const regular=await check(data);
+ assert.equal(regular.counts.duplicate_code,2);
+ const result=await inspectSupplierCsv(new Blob([data]),new AbortController().signal,true);
+ assert.equal(result.productCount,2);
+ assert.equal(result.tieredProductCount,1);
+ assert.deepEqual(result.issues.map(issue=>[issue.row,issue.column,issue.code]),[[4,'MOQ','duplicate_tier']]);
+});
 test('reports all missing codes, currency signs and duplicates with record positions',async()=>{
  const r=await check('Product_Code;Buy_Price_Eur\nA; € 14,19 \n;2,80\nA;5\nB;0\nC;1.234\nD;\n');
  assert.equal(r.totalRows,6);assert.equal(r.issueCount,6);

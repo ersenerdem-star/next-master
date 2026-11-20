@@ -1,5 +1,5 @@
 import {InterfaceText,useInterfaceText} from "../../i18n/InterfaceText";
-import {inspectSupplierCsv,supplierCsvIssueCsv,type SupplierCsvReport} from "../../shared/supplierCsvPreflight";
+import {inspectSupplierCsv,supplierCsvIssueCsv,type SupplierCsvReport,type SupplierQuantityCsvReport} from "../../shared/supplierCsvPreflight";
 import {downloadCsv} from "../../shared/csv";
 import { SupplierReleaseReviewPanel } from "../../modules/admin/SupplierReleaseReviewPanel";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -86,6 +86,8 @@ export function SuppliersPage() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [showManualPriceDialog, setShowManualPriceDialog] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [quantityPreview, setQuantityPreview] = useState<{file:File; result:SupplierQuantityCsvReport} | null>(null);
+  const [previewingQuantity, setPreviewingQuantity] = useState(false);
   const [importMode, setImportMode] = useState("replace");
   const [importSupplierId, setImportSupplierId] = useState("");
   const [importSupplierName, setImportSupplierName] = useState("");
@@ -1079,12 +1081,37 @@ export function SuppliersPage() {
                   accept={verifiedUploadEnabled ? ".csv,.xlsx" : ".csv,text/csv"}
                   disabled={importingSupplier}
                   onChange={(event) => {
-                    setImportFile(event.target.files?.[0] ?? null);setCsvReport(null);setVerifiedProgress(null);
+                    setImportFile(event.target.files?.[0] ?? null);setCsvReport(null);setVerifiedProgress(null);setQuantityPreview(null);
                   }}
                 />
               </label>
               <Input label={p("fields.selectedFile")} value={importFile?.name ?? ""} onChange={() => undefined} disabled />
             </div>
+            {verifiedUploadEnabled && importFile && /\.csv$/i.test(importFile.name) ? <section className="section-card">
+              <Button variant="secondary" disabled={importingSupplier || previewingQuantity} onClick={async()=>{
+                const file=importFile;
+                setPreviewingQuantity(true);
+                setQuantityPreview(null);
+                try {
+                  const result=await inspectSupplierCsv(file,new AbortController().signal,true);
+                  setQuantityPreview({file,result});
+                } catch {
+                  setError(locale==='tr'?'Miktar kademeleri okunamadı.':'Quantity tiers could not be read.');
+                } finally {
+                  setPreviewingQuantity(false);
+                }
+              }}>{locale==='tr'?'Miktar kademelerini önizle':'Preview quantity tiers'}</Button>
+              {quantityPreview?.file===importFile ? <div role="status">
+                <p>{locale==='tr'
+                  ? `${quantityPreview.result.productCount} ürün · ${quantityPreview.result.totalRows} fiyat satırı · ${quantityPreview.result.tieredProductCount} kademeli ürün`
+                  : `${quantityPreview.result.productCount} products · ${quantityPreview.result.totalRows} price rows · ${quantityPreview.result.tieredProductCount} tiered products`}</p>
+                {quantityPreview.result.issueCount ? <>
+                  <p>{locale==='tr'?`${quantityPreview.result.issueCount} sorun bulundu.`:`${quantityPreview.result.issueCount} issues found.`}</p>
+                  <Button variant="secondary" onClick={()=>downloadCsv('supplier-quantity-preview-errors.csv',supplierCsvIssueCsv(quantityPreview.result))}>{locale==='tr'?'Hata listesini indir':'Download issues'}</Button>
+                </> : null}
+                <p>{locale==='tr'?'Bu önizleme dosyayı yüklemez.':'This preview does not upload the file.'}</p>
+              </div> : null}
+            </section> : null}
             {verifiedUploadEnabled&&csvReport&&csvReport.issueCount>0?<section className="section-card" role="alert">
               <h4>Dosya kontrolü — {csvReport.issueCount.toLocaleString('tr-TR')} sorun</h4>
               <p>{csvReport.totalRows.toLocaleString('tr-TR')} ürün satırı tarandı. Dosya gönderilmedi.</p>
