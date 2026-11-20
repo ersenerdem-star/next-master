@@ -31,8 +31,8 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
     : {staged:'File processed — pre-publication review pending',processing_interrupted:'Processing stopped — operational review needed',rejected:'Source rejected — not published',review_required:'Review required — publication held',inactive:'Not active',active:'Current active release',previous_publication:'Previous publication — not current',unverified:'Check not verified',awaiting_publication:'Validated — not yet published',processing:'Processing'};
   return <div className="list-stack">{rows.map(row=>{
     const state=releaseReviewState(row);
-    const visibleBrands=row.audit?.brands.filter(b=>row.audit?.reviewThresholdPercent===5
-      ? b.matches*100>row.audit.totalCodes*5 : true) || [];
+    const visibleBrands=row.audit?.brands.filter(b=>row.audit?.reviewThresholdPercent!==undefined
+      ? b.matches*100>row.audit.totalCodes*row.audit.reviewThresholdPercent : true) || [];
     return <article key={row.id} className="list-stack" style={{border:'1px solid var(--border-color, #d8e1ee)',borderRadius:12,padding:16}}>
       <strong>{row.brand} · {row.supplier}</strong>
       <span className={`mark-badge mark-badge--${state==='review_required'||state==='rejected'||state==='processing_interrupted'?'failed':state==='active'||state==='previous_publication'?'completed':'pending'}`}>{labels[state]}</span>

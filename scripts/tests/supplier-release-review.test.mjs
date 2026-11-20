@@ -9,6 +9,16 @@ const org='10000000-0000-0000-0000-000000000001',brand='30000000-0000-0000-0000-
 const row={id:'40000000-0000-0000-0000-000000000001',brandId:brand,brand:'Gates',supplier:'Romany',status:'validated',createdAt:'2026-10-04T16:00:00+00:00',totalRows:5000,processedRows:5000,errorCode:null,current:false,audit:null};
 const audit=(overrides={})=>({policy:'cross-brand-v1',checked:true,review_required:true,selected_brand_id:brand,distinct_incoming_codes:5000,
  brands:[{brand_id:other,brand_name:'Mahle',matching_codes:5000,incoming_percent:1,sample_codes:['001','A-02']}],...overrides});
+test('BorgWarner threshold matches the server; other or invalid policies retain five-percent protection',()=>{
+ const base=audit({policy:'cross-brand-v3',review_required:false,selected_brand_name:'BorgWarner (Schwitzer)',ratio_threshold_percent:50,distinct_incoming_codes:100,historical_brands:[],brands:[{brand_id:other,brand_name:'Febi',matching_codes:26,sample_codes:[]}]});
+ assert.equal(parseReleaseAudit(base,brand).reviewRequired,false);
+ assert.equal(parseReleaseAudit(base,brand).reviewThresholdPercent,50);
+ assert.equal(parseReleaseAudit({...base,ratio_threshold_percent:5,owner_approved_exception:'groupauto-borgwarner-20261120'},brand).reviewRequired,false);
+ assert.equal(parseReleaseAudit({...base,brands:[{...base.brands[0],matching_codes:51}]},brand).reviewRequired,true);
+ assert.equal(parseReleaseAudit({...base,selected_brand_name:'Bosch'},brand).reviewRequired,true);
+ assert.equal(parseReleaseAudit({...base,ratio_threshold_percent:100},brand).reviewRequired,true);
+ assert.equal(parseReleaseAudit({...base,review_required:true},brand).reviewRequired,true);
+});
 test('Evidence is whitelisted; percentage is computed, not trusted from JSON',()=>{
  const parsed=parseReleaseAudit(audit({internal_note:'PRIVATE',buy_price:123}),brand);
  assert.equal(parsed.brands[0].percent,100);assert.ok(!JSON.stringify(parsed).includes('PRIVATE'));assert.ok(!('buy_price' in parsed));

@@ -68,8 +68,11 @@ export function parseReleaseAudit(value:unknown,brandId:string): ReleaseAudit | 
   const historicalBrands=a.policy!=='cross-brand-v1' ? parseBrands(a.historical_brands) : undefined;
   if (!brands || historicalBrands===null) return null;
   const percentRule=a.policy==='cross-brand-v3';
-  const detected=n===0 || brands.some(b=>percentRule ? b.matches*100>n*5 : b.matches>=5000 || (b.matches>=100 && b.matches*100>=n*80));
-  return {checked:true,reviewRequired:a.review_required || detected,totalCodes:n,brands,...(percentRule ? {reviewThresholdPercent:5} : {}),...(historicalBrands ? {historicalBrands} : {})};
+  const borgwarnerBrands=['BORGWARNER','BORGWARNER (BERU)','BORGWARNER (KKK)','BORGWARNER (SCHWITZER)'];
+  const threshold=percentRule && (a.ratio_threshold_percent===50 || a.owner_approved_exception==='groupauto-borgwarner-20261120') && typeof a.selected_brand_name==='string'
+    && borgwarnerBrands.includes(a.selected_brand_name.trim().toUpperCase()) ? 50 : 5;
+  const detected=n===0 || brands.some(b=>percentRule ? b.matches*100>n*threshold : b.matches>=5000 || (b.matches>=100 && b.matches*100>=n*80));
+  return {checked:true,reviewRequired:a.review_required || detected,totalCodes:n,brands,...(percentRule ? {reviewThresholdPercent:threshold} : {}),...(historicalBrands ? {historicalBrands} : {})};
 }
 export function releaseReviewState(row:ReleaseReviewRow) {
   if (row.status==='cancelled' && row.errorCode==='REVIEW_REJECTED') return 'rejected';
