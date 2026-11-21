@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import ExcelJS from 'exceljs';
 import {preparePriceExport,assemblePriceExport,exportBinding} from '../../apps/engine/supplier-price-shadow/src/export/partitioned-price-export.mjs';
+import {parseManualMarginPercent, adminPriceListFileLabel} from '../../shared/admin-price-list-margin.mjs';
+import {markupMoney} from '../../shared/order-money.mjs';
 import {quantityTierLabels} from '../../shared/wahler-price-tiers.mjs';
 import {
   materializeSealedSnapshotWithDuckDB,
@@ -115,17 +117,17 @@ for(const kind of ['sealed','paged'])test(`${kind} export preserves rare commas/
  }finally{await rm(directory,{recursive:true,force:true});}
 });
 
-test('Wahler ready workbook carries selling tiers through DuckDB with one base row',async()=>{
+async function checkWahlerWorkbook({customerId,audience,margin,base,tiersText}){
  const directory=await mkdtemp(join(tmpdir(),'wahler-ready-workbook-'));
- const input={tenantId:'org',requesterId:'invite',customerId:'customer',audience:'customer',
+ const input={tenantId:'org',requesterId:'actor',customerId,audience,
   snapshotId:'wahler-snapshot',pricingVersion:'test',brand:'Wahler',currency:'EUR',expectedRows:1};
  const binding=exportBinding(input);
  const tiers=quantityTierLabels([
   {code:'411471.103D',minimum_quantity:256,unit_buy_price:28.82},
   {code:'411471.103D',minimum_quantity:16,unit_buy_price:'29.68'},
- ],10);
+ ],margin);
  const row={cursorKey:'000000000001',code:'411471.103D',brand:'Wahler',description:'Thermostat',
-  price:'33.64',priceDate:'2026-11-12',currency:'EUR',discontinued:false,
+  price:markupMoney('30.58',margin).toFixed(2),priceDate:'2026-11-12',currency:'EUR',discontinued:false,
   quantityTiers:tiers.get('411471.103D')};
  try{
   const result=await materializePagedExportWithDuckDB({
@@ -140,7 +142,22 @@ test('Wahler ready workbook carries selling tiers through DuckDB with one base r
   assert.equal(sheet.rowCount,2);
   assert.equal(sheet.getCell('F1').value,'Quantity_Prices_EUR');
   assert.equal(sheet.getCell('A2').value,'411471.103D');
-  assert.equal(sheet.getCell('C2').value,33.64);
-  assert.equal(sheet.getCell('F2').value,'16+: 32.65 | 256+: 31.70');
+  assert.equal(sheet.getCell('C2').value,base);
+  assert.equal(sheet.getCell('F2').value,tiersText);
  }finally{await rm(directory,{recursive:true,force:true});}
+}
+
+test('Wahler customer workbook carries selling tiers through DuckDB with one base row',async()=>{
+ await checkWahlerWorkbook({customerId:'customer',audience:'customer',margin:10,base:33.64,tiersText:'16+: 32.65 | 256+: 31.70'});
+});
+
+test('Wahler admin workbook carries the custom 12,5% rate through DuckDB',async()=>{
+ const margin=parseManualMarginPercent('12,5');
+ assert.equal(margin,0.125);
+ assert.equal(parseManualMarginPercent('12.5'),margin);
+ assert.equal(parseManualMarginPercent('0'),0);
+ assert.equal(parseManualMarginPercent(''),null);
+ assert.equal(adminPriceListFileLabel('Manual',margin),'Manual-12.5pct');
+ assert.equal(adminPriceListFileLabel('A',margin),'A');
+ await checkWahlerWorkbook({customerId:null,audience:'admin',margin:margin*100,base:34.40,tiersText:'16+: 33.39 | 256+: 32.42'});
 });

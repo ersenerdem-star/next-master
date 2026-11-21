@@ -44,7 +44,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       actor=(await client.query('select id,organization_id,role,department,permissions,is_active,session_revoked_at::text from public.profiles where id=$1 and organization_id=$2',[job.requested_by,job.organization_id])).rows[0];
       if(!actor||!actor.is_active||!operationsAllowed(actor.role,actor.department,actor.permissions)
         ||actor.session_revoked_at&&Date.parse(actor.session_revoked_at)>=Date.parse(job.created_at))fail('ACTOR_DENIED');
-      if(!['A','B'].includes(s.priceListType)||typeof s.marginPercent!=='number'||!Number.isFinite(s.marginPercent))fail('PRICING_INVALID');
+      if(!['A','B','Manual'].includes(s.priceListType)||typeof s.marginPercent!=='number'||!Number.isFinite(s.marginPercent))fail('PRICING_INVALID');
       requesterId=actor.id;margin=s.marginPercent;currency=s.currency??'EUR';
       context={priceListType:s.priceListType,margin,currency,unit:'decimal'};
     }else if(job.audience==='portal'&&job.export_type==='portal_price_list'){
@@ -127,6 +127,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
       return client.query("insert into export_snapshot_private.snapshots(id,job_id,status,authority_digest) values($1,$2,'building',$3)",[id,jobId,a.authorityDigest]);
     });
     const fn=a.job.audience==='admin'?'cloud_admin_price_list_page_fast':'cloud_portal_customer_price_list_page_fast';
+    const rpcPriceListType=a.context.priceListType==='B'?'B':'A';
     const existingProgress=existing?await withShortTransaction(client=>client.query(`
       select
         (select count(*)::bigint from export_snapshot_private.rows where snapshot_id=$1) as count,
@@ -143,7 +144,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
     };
     if(total!=null) spec=makeSpec(total);
     if(processed>0&&total==null){
-      const header=await withShortTransaction(client=>client.query(`select total_count::text from public.${fn}($1,$2,$3,$4,null,null,$5) limit 1`,[a.job.organization_id,a.brand.id,a.context.priceListType==='Other'?'A':a.context.priceListType,a.context.margin,pageSize]).then(result=>result.rows[0]));
+      const header=await withShortTransaction(client=>client.query(`select total_count::text from public.${fn}($1,$2,$3,$4,null,null,$5) limit 1`,[a.job.organization_id,a.brand.id,rpcPriceListType,a.context.margin,pageSize]).then(result=>result.rows[0]));
       total=Number(header?.total_count??0)||null;if(total!=null) spec=makeSpec(total);
     }
     while(total==null||processed<total){
@@ -162,7 +163,7 @@ export function createJobPriceSnapshotReader({pool,mode,operationsAllowed,resolv
         await assertWriteLease(client,jobId);
         const pricingStarted=performance.now();
         const page=(await client.query(`select normalized_code,product_code,brand,description,sales_price::text,price_date::text,lifecycle_status,total_count::text
-          from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,a.context.priceListType==='Other'?'A':a.context.priceListType,a.context.margin,after,pageSize])).rows;
+          from public.${fn}($1,$2,$3,$4,null,$5,$6)`,[a.job.organization_id,a.brand.id,rpcPriceListType,a.context.margin,after,pageSize])).rows;
         timing.pricingRpcMs=performance.now()-pricingStarted;
         if(!page.length)fail('SOURCE_EMPTY');
         if(page.length>pageSize)fail('SOURCE_COVERAGE');

@@ -1,3 +1,4 @@
+import { adminPriceListFileLabel } from "../../../shared/admin-price-list-margin.mjs";
 // V3-only server bridge for the C3 immutable snapshot/export path.
 // Feature-flagged by NM_V3_EXPORT_BRIDGE=1; never selected by production defaults.
 import { Pool } from "pg";
@@ -305,7 +306,8 @@ export async function runV3PriceExportJob(jobId: string) {
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
     const brandName = String(job.scope?.brandName || spec.brand);
     const priceListType = String(job.scope?.priceListType || "A");
-    const fileName = `portal-price-list-${brandName}-${priceListType}-${stamp}.xlsx`;
+    const listLabel = adminPriceListFileLabel(priceListType, Number(job.scope?.marginPercent));
+    const fileName = `portal-price-list-${brandName}-${listLabel}-${stamp}.xlsx`;
     // Stop renewal before clearing ownership in the final fenced update.
     clearInterval(leaseHeartbeatTimer);
     leaseHeartbeatTimer = null;

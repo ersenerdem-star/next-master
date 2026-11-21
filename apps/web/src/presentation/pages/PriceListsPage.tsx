@@ -1,3 +1,4 @@
+import { parseManualMarginPercent, type AdminPriceListType } from "../../../../../shared/admin-price-list-margin.mjs";
 import { useEffect, useState } from "react";
 import { fetchCloudPriceListBrands } from "../../infrastructure/api/brandsApi";
 import { fetchPriceListSettings, updateMarginPriceList } from "../../infrastructure/api/priceListsApi";
@@ -20,7 +21,8 @@ export function PriceListsPage() {
   const [marginB, setMarginB] = useState("15");
   const [savingMargins, setSavingMargins] = useState(false);
   const [downloadBrandId, setDownloadBrandId] = useState("");
-  const [downloadListType, setDownloadListType] = useState<"A" | "B">("A");
+  const [downloadListType, setDownloadListType] = useState<AdminPriceListType>("A");
+  const [manualMargin, setManualMargin] = useState("");
   const [downloadingPriceList, setDownloadingPriceList] = useState(false);
 
   useEffect(() => {
@@ -53,7 +55,9 @@ export function PriceListsPage() {
   const downloadListOptions = [
     { value: "A", label: t("sales.priceLists.aPriceList") },
     { value: "B", label: t("sales.priceLists.bPriceList") },
+    { value: "Manual", label: t("sales.priceLists.manualPriceList") },
   ];
+  const manualRate = parseManualMarginPercent(manualMargin);
   const selectedDownloadBrand = brands.find((item) => item.id === downloadBrandId) || null;
   const downloadBrandOptions = [
     { value: "", label: brands.length ? t("sales.priceLists.selectBrand") : t("sales.priceLists.noBrandsAvailable") },
@@ -95,18 +99,21 @@ export function PriceListsPage() {
       setStatusTone("error");
       return;
     }
-    const marginPercent = downloadListType === "A" ? Number(marginA) / 100 : Number(marginB) / 100;
-    if (!Number.isFinite(marginPercent)) {
-      setStatus(t("sales.priceLists.marginsMustBeNumeric"));
+    const marginPercent = downloadListType === "Manual"
+      ? manualRate
+      : Number(downloadListType === "A" ? marginA : marginB) / 100;
+    if (marginPercent === null || !Number.isFinite(marginPercent)) {
+      setStatus(t(downloadListType === "Manual" ? "sales.priceLists.invalidManualMargin" : "sales.priceLists.marginsMustBeNumeric"));
       setStatusTone("error");
       return;
     }
 
+    const listLabel = downloadListType === "Manual" ? t("sales.priceLists.manualListLabel") : downloadListType;
     try {
       setStatus("");
       setStatusTone(null);
       setDownloadingPriceList(true);
-      actionFeedback.begin(t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName }));
+      actionFeedback.begin(t("sales.priceLists.preparingDownload", { listType: listLabel, brandName }));
       const initialJob = await startAdminPriceListExport({
         brandId: selectedDownloadBrand.id,
         brandName,
@@ -117,10 +124,10 @@ export function PriceListsPage() {
         const progress = job.progressTotal
           ? ` ${job.progressDone.toLocaleString("en-US")} / ${job.progressTotal.toLocaleString("en-US")}`
           : job.progressDone ? ` ${job.progressDone.toLocaleString("en-US")}` : "";
-        setStatus(`${t("sales.priceLists.preparingDownload", { listType: downloadListType, brandName })}${progress}`);
+        setStatus(`${t("sales.priceLists.preparingDownload", { listType: listLabel, brandName })}${progress}`);
       });
       await downloadExportJob(readyJob.id);
-      const downloadedMessage = t("sales.priceLists.downloaded", { listType: downloadListType, brandName });
+      const downloadedMessage = t("sales.priceLists.downloaded", { listType: listLabel, brandName });
       setStatus(downloadedMessage);
       setStatusTone("success");
       actionFeedback.succeed(downloadedMessage);
@@ -159,11 +166,30 @@ export function PriceListsPage() {
         </div>
         <div className="settings-item">
           <span className="settings-label">{t("sales.priceLists.priceListType")}</span>
-          <Select value={downloadListType} options={downloadListOptions} onChange={(value) => setDownloadListType(value as "A" | "B")} />
+          <Select value={downloadListType} options={downloadListOptions} onChange={(value) => setDownloadListType(value as AdminPriceListType)} />
         </div>
+        {downloadListType === "Manual" && (
+          <div className="settings-item">
+            <label className="field">
+              <span className="settings-label">{t("sales.priceLists.manualMarginLabel")}</span>
+              <input
+                className="field__input"
+                inputMode="decimal"
+                value={manualMargin}
+                onChange={(event) => setManualMargin(event.target.value)}
+                placeholder={t("sales.priceLists.manualMarginPlaceholder")}
+                aria-describedby="manual-margin-hint"
+                aria-invalid={Boolean(manualMargin && manualRate === null)}
+              />
+            </label>
+            <span className="muted-text" id="manual-margin-hint">
+              {t(manualMargin && manualRate === null ? "sales.priceLists.invalidManualMargin" : "sales.priceLists.manualMarginHint")}
+            </span>
+          </div>
+        )}
       </div>
       <div className="toolbar toolbar--wrap">
-        <Button variant="secondary" onClick={() => void handleDownloadPriceList()} disabled={!downloadBrandId} busy={downloadingPriceList} busyLabel={t("sales.priceLists.preparing")}>
+        <Button variant="secondary" onClick={() => void handleDownloadPriceList()} disabled={!downloadBrandId || (downloadListType === "Manual" && manualRate === null)} busy={downloadingPriceList} busyLabel={t("sales.priceLists.preparing")}>
           {t("sales.priceLists.downloadPriceList")}
         </Button>
       </div>

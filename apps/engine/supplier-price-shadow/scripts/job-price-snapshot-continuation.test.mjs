@@ -18,11 +18,11 @@ const source=Array.from({length:5},(_,index)=>({
   sales_price:'12.50',price_date:'2026-10-13',lifecycle_status:'active',total_count:index===0?'5':null,
 }));
 
-function fakeDatabase({portal=false,prepared=false,currency='EUR',sourceRows=source,replacementRefs=[]}={}){
+function fakeDatabase({portal=false,prepared=false,currency='EUR',sourceRows=source,replacementRefs=[],brandName='Clevite',quantityTiers=[]}={}){
   const inviteUpdatedAt='2026-10-13T00:00:00.000Z';
   const state={
     job:{id:jobId,organization_id:organizationId,requested_by:actorId,audience:'admin',export_type:'admin_price_list',
-      status:'running',scope:{brandId,brandName:'Clevite',priceListType:'A',marginPercent:0.1,currency:'EUR'},
+      status:'running',scope:{brandId,brandName,priceListType:'A',marginPercent:0.1,currency:'EUR'},
       data_version:'v1',progress_total:null,created_at:'2026-10-13T00:00:00Z',unexpired:true},
     sourceVersion:'v1',owner:'worker-1',snapshot:null,rows:[],pageReads:0,rpcPriceListTypes:[],rpcMargins:[],
     portalInviteStatus:'active',portalMargin:12.5,portalAllowedBrandIds:[brandId],customerSelectSql:'',
@@ -42,7 +42,7 @@ function fakeDatabase({portal=false,prepared=false,currency='EUR',sourceRows=sou
   const client={release(){},async query(sql,args=[]){
     if(/^(begin|commit|rollback|set local)/i.test(sql))return {rows:[],rowCount:0};
     if(sql.includes('from public.app_export_jobs where id=$1'))return {rows:[{...state.job}]};
-    if(sql.includes('from public.brands where id=$1'))return {rows:[{id:brandId,name:'Clevite'}]};
+    if(sql.includes('from public.brands where id=$1'))return {rows:[{id:brandId,name:brandName}]};
     if(sql.includes('from public.profiles where id=$1'))return {rows:[{id:actorId,organization_id:organizationId,
       role:'admin',department:'operations',permissions:{},is_active:true,session_revoked_at:null}]};
     if(sql.includes('from public.portal_invites where id=$1'))return {rows:[{id:actorId,organization_id:organizationId,
@@ -74,6 +74,7 @@ function fakeDatabase({portal=false,prepared=false,currency='EUR',sourceRows=sou
         ...row,total_count:after==null&&index===0?String(sourceRows.length):null,
       }))};
     }
+    if(sql.includes('wahler_quantity_price_curves'))return {rows:quantityTiers};
     if(sql.includes('from public.item_code_references')){
       assert.match(sql,/normalize_catalog_product_code\(ref\.old_code\)=requested\.code/);
       return {rows:replacementRefs.filter(ref=>args[2].includes(ref.oldCode.replace(/\s+/g,'').toUpperCase()))
@@ -226,4 +227,21 @@ test('publication-bound admin and customer snapshots use the same new version co
     state.sourceVersion='new-publication';
     await assert.rejects(reader({state,pool,owner:'worker-1'}).resolveAuthorizedInput(jobId),/EXPORT_SNAPSHOT_SOURCE_CHANGED/);
   }
+});
+
+test('manual admin margin reaches the base price RPC and the Wahler quantity tiers',async()=>{
+  const code='411471.103D';
+  const {state,pool}=fakeDatabase({
+    brandName:'Wahler',prepared:true,sourceRows:[{
+      ...source[0],normalized_code:code,product_code:code,brand:'Wahler',sales_price:'34.40',
+    }],
+    quantityTiers:[{code,minimum_quantity:16,unit_buy_price:29.68},{code,minimum_quantity:256,unit_buy_price:28.82}],
+  });
+  Object.assign(state.job.scope,{priceListType:'Manual',marginPercent:0.125});
+  const spec=await reader({state,pool,owner:'worker-1'}).resolveAuthorizedInput(jobId);
+  assert.equal(spec.expectedRows,1);
+  assert.deepEqual(state.rpcPriceListTypes,['A']);
+  assert.deepEqual(state.rpcMargins,[0.125]);
+  assert.equal(state.rows[0].payload.price,'34.40');
+  assert.equal(state.rows[0].payload.quantityTiers,'16+: 33.39 | 256+: 32.42');
 });

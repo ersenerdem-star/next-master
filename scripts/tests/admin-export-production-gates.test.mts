@@ -93,3 +93,16 @@ test("an authenticated background handoff cannot bypass the production pause", a
     assert.deepEqual(calls, []);
   });
 });
+
+test("invalid manual margins cannot queue an admin price export", async () => {
+  await fixture(production, "admin_price_list", async ({ calls, waits }) => {
+    for (const marginPercent of [undefined, null, "", "0.125", -0.1, 0.12555]) {
+      const response = await start(request("admin-export-start", {
+        exportType: "admin_price_list", priceListType: "Manual", marginPercent,
+      }), { waitUntil: (p: Promise<unknown>) => waits.push(p) } as any);
+      assert.equal(response.status, 400);
+    }
+    assert.equal(calls.some(call => call.includes("/rpc/")), false);
+    assert.equal(waits.length, 0);
+  });
+});

@@ -1,3 +1,4 @@
+import { isManualMargin } from "../../shared/admin-price-list-margin.mjs";
 import type { Config, Context } from "@netlify/functions";
 import { getAppAuthStatus, resolveCaller } from "./_shared/app-auth.mts";
 import { canAccessOperationsModules } from "./_shared/roles.mts";
@@ -34,6 +35,11 @@ export default async (req: Request, context: Context) => {
     if (exportType !== "admin_price_list" && exportType !== "catalog_export" && exportType !== "catalog_master" && exportType !== "supplier_price_list") {
       return exportJson({ error: "Unsupported export type." }, 400);
     }
+    const requestedListType = String(body?.priceListType || "A").toUpperCase();
+    const manual = exportType === "admin_price_list" && requestedListType === "MANUAL";
+    if (manual && !isManualMargin(body?.marginPercent)) {
+      return exportJson({ error: "Enter a non-negative margin percentage with up to two decimal places." }, 400);
+    }
     if (exportType === "admin_price_list" && isV3ExportBridgeEnabled() && isProductionExportPaused()) {
       return exportJson({ error: "V3 export bridge is temporarily paused while the production safety gate is closed." }, 503, { "Retry-After": "300" });
     }
@@ -67,7 +73,7 @@ export default async (req: Request, context: Context) => {
         : await startAdminPriceListExport(supabaseUrl, serviceRoleKey, caller, {
             brandId: String(body?.brandId || ""),
             brandName: String(body?.brandName || ""),
-            priceListType: String(body?.priceListType || "A").toUpperCase() === "B" ? "B" : "A",
+            priceListType: manual ? "Manual" : requestedListType === "B" ? "B" : "A",
             marginPercent: Number(body?.marginPercent || 0),
           });
 

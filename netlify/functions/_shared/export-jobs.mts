@@ -1,3 +1,4 @@
+import { adminPriceListFileLabel, type AdminPriceListType } from "../../../shared/admin-price-list-margin.mjs";
 import { isWahlerBrand, quantityTierLabels } from "../../../shared/wahler-price-tiers.mjs";
 import { readSupplierCommercialTerms } from "../../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
 import * as XLSX from "xlsx";
@@ -69,7 +70,7 @@ export type ExportJobPublicStatus = {
 export type AdminPriceListExportInput = {
   brandId: string;
   brandName?: string;
-  priceListType: "A" | "B";
+  priceListType: AdminPriceListType;
   marginPercent: number;
 };
 
@@ -748,7 +749,7 @@ function appendAdminPriceListWorksheetRows(
   worksheet: XLSX.WorkSheet,
   rows: AdminPriceListPageRow[],
   brandName: string,
-  priceListType: "A" | "B",
+  priceListType: AdminPriceListType,
   tierLabels?: Map<string,string>,
 ) {
   XLSX.utils.sheet_add_aoa(
@@ -762,7 +763,7 @@ function appendAdminPriceListWorksheetRows(
       row.hsCode || "",
       row.origin || "",
       row.weightKg ?? "",
-      `${row.priceListType || priceListType} Price List`,
+      `${priceListType === "Manual" ? priceListType : row.priceListType || priceListType} Price List`,
       row.salesPrice ?? "",
       row.priceDate || "",
       row.lifecycleStatus || "active",
@@ -773,7 +774,7 @@ function appendAdminPriceListWorksheetRows(
   );
 }
 
-function buildAdminPriceListWorkbookFromWorksheet(worksheet: XLSX.WorkSheet, brandName: string, priceListType: "A" | "B") {
+function buildAdminPriceListWorkbookFromWorksheet(worksheet: XLSX.WorkSheet, brandName: string, priceListType: AdminPriceListType) {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sanitizeSheetName(`${brandName} ${priceListType}`));
   return XLSX.write(workbook, {
@@ -1370,7 +1371,7 @@ export async function startAdminPriceListExport(
 ) {
   const brandId = String(input.brandId || "").trim();
   if (!brandId) throw new Error("Select a brand before download.");
-  const priceListType: "A" | "B" = input.priceListType === "B" ? "B" : "A";
+  const { priceListType } = input;
   const marginPercent = Number.isFinite(input.marginPercent) ? Number(input.marginPercent) : 0;
   const brand = await resolveAdminPriceListBrand(supabaseUrl, serviceRoleKey, caller.organizationId, brandId);
   const dataVersion = await getAdminPriceListDataVersion(supabaseUrl, serviceRoleKey, caller.organizationId, brand.id, true);
@@ -1458,6 +1459,11 @@ async function admitPreparedPriceListExport(
     input_export_type: exportType, input_scope: scope, input_cache_key: cacheKey, input_data_version: dataVersion,
   };
   type Admission = { job: ExportJobRow; cached: boolean; needsLegacyProbe?: boolean };
+  // Manual downloads have their own cache identity and no legacy artifacts.
+  // The prepared-profile trigger only registers A, B and Other.
+  if (scope.priceListType === "Manual") {
+    return rpcJson<Admission>(supabaseUrl, serviceRoleKey, "admit_prepared_price_list_export", input, 15_000);
+  }
   const existing = await rpcJson<Admission>(supabaseUrl, serviceRoleKey, "admit_prepared_price_list_export", {
     ...input, input_probe_only: true,
   }, 15_000);
@@ -1623,7 +1629,7 @@ export async function runAdminPriceListExportJob(
   const scope = job.scope || {};
   const brandId = String(scope.brandId || "");
   const brandName = String(scope.brandName || "Price List");
-  const priceListType: "A" | "B" = String(scope.priceListType || "A").toUpperCase() === "B" ? "B" : "A";
+  const priceListType = scope.priceListType === "Manual" ? "Manual" : String(scope.priceListType || "A").toUpperCase() === "B" ? "B" : "A";
   const marginPercent = Number(scope.marginPercent || 0);
   const startedAt = new Date().toISOString();
   await patchExportJob(supabaseUrl, serviceRoleKey, job.id, {
@@ -1648,7 +1654,7 @@ export async function runAdminPriceListExportJob(
         organizationId: job.organization_id,
         brandId,
         brandName,
-        priceListType,
+        priceListType: priceListType === "B" ? "B" : "A",
         marginPercent,
         afterNormalizedCode,
       });
@@ -1685,7 +1691,7 @@ export async function runAdminPriceListExportJob(
     });
     const workbook = buildAdminPriceListWorkbookFromWorksheet(worksheet, brandName, priceListType);
     const stamp = new Date().toISOString().slice(0, 10).replaceAll("-", "");
-    const fileName = `${sanitizeDownloadFileName(`price-list-${brandName}-${priceListType}-${stamp}`)}.xlsx`;
+    const fileName = `${sanitizeDownloadFileName(`price-list-${brandName}-${adminPriceListFileLabel(priceListType, marginPercent)}-${stamp}`)}.xlsx`;
     const storagePath = `${job.organization_id}/admin-price-list/${job.cache_key}/${fileName}`;
     const contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     await uploadExportArtifact(supabaseUrl, serviceRoleKey, {

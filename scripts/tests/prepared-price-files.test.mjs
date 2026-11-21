@@ -84,7 +84,7 @@ test('same profile admission coalesces work; expired access receipt reuses ident
   assert.equal((await admit(db)).job.id,first.job.id);
   const path=org+'/fixture/file.xlsx';
   await db.query("insert into storage.objects values('app-exports',$1,'{\"size\":100}')",[path]);
-  await db.query("update app_export_jobs set status='finalized',row_count=12,progress_total=12,progress_done=12,byte_size=100,storage_bucket='app-exports',storage_path=$1,file_name='file.xlsx',content_type='xlsx',finalized_at=now(),expires_at='2000-01-01' where id=$2",[path,first.job.id]);
+  await db.query("update app_export_jobs set status='finalized',row_count=12,progress_total=12,progress_done=12,byte_size=100,storage_bucket='app-exports',storage_path=$1,file_name='file.xlsx',content_type='xlsx',finalized_at='1999-12-31',expires_at='2000-01-01' where id=$2",[path,first.job.id]);
   const reused=await admit(db);assert.equal(reused.cached,true);assert.equal(reused.job.status,'finalized');
   assert.notEqual(reused.job.id,first.job.id);assert.equal(reused.job.storage_path,path);
   assert.equal((await admit(db)).job.id,reused.job.id);
@@ -94,6 +94,20 @@ test('same profile admission coalesces work; expired access receipt reuses ident
   assert.equal((await admit(db,'customer-scope','v1',{...scope,marginPercent:.2})).cached,false,'different margin never shares a receipt');
   await db.query('delete from storage.objects where name=$1',[path]);
   const missing=await admit(db);assert.equal(missing.cached,false);assert.equal(missing.job.status,'queued');
+ }finally{await db.close();}
+});
+
+test('manual admin downloads coalesce at the same rate without creating a prewarm profile',async()=>{
+ const db=await fixture();try{
+  const standard=await admit(db);
+  const manualScope={...scope,priceListType:'Manual',marginPercent:.125};
+  const manual=await admit(db,'manual12.5','v1',manualScope);
+  assert.notEqual(manual.job.id,standard.job.id);
+  assert.equal((await admit(db,'manual12.5','v1',manualScope)).job.id,manual.job.id);
+  const nextRate=await admit(db,'manual14','v1',{...manualScope,marginPercent:.14});
+  assert.notEqual(nextRate.job.id,manual.job.id);
+  const profiles=(await db.query('select seed_job_id from prepared_price_export_profiles')).rows;
+  assert.deepEqual(profiles,[{seed_job_id:standard.job.id}]);
  }finally{await db.close();}
 });
 

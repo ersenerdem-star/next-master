@@ -1,3 +1,4 @@
+import type { AdminPriceListType } from "../../../../../shared/admin-price-list-margin.mjs";
 import { supabaseClient } from "./supabaseClient";
 import { downloadUrl, type ExportDownloadPart } from "../../shared/xlsx";
 import { sanitizeUserFacingMessage } from "../../shared/userMessage";
@@ -41,7 +42,7 @@ type ExportDownloadResponse = {
 type AdminPriceListExportInput = {
   brandId: string;
   brandName: string;
-  priceListType: "A" | "B";
+  priceListType: AdminPriceListType;
   marginPercent: number;
 };
 
