@@ -35,7 +35,12 @@ begin
       and r.source_file_path ~ '/wahler-quantity-tiers-[^/]+[.][cC][sS][vV]$'
       and r.source_verification_required and r.mode='replace'
       and r.source_file_sha256=input_original_sha256
-      and r.source_file_bytes between 1 and 1048576
+      and exists (
+        select 1 from public.supplier_price_upload_sessions u
+        where u.release_id=r.id and u.organization_id=r.organization_id
+          and u.storage_bucket='supplier-price-imports' and u.storage_object_path=r.source_file_path
+          and u.checksum_sha256=input_original_sha256 and u.total_bytes between 1 and 1048576
+      )
     for update of r;
   if not found then raise exception 'QUANTITY_TIERS_RELEASE_MISMATCH'; end if;
   select * into receipt from supplier_price_ingestion_internal.quantity_tier_receipts where release_id=release.id;

@@ -28,7 +28,10 @@ test('verified base matches every product; publish pointer enables tiers and man
       create table public.supplier_price_releases (
         id uuid primary key, organization_id uuid, supplier_id uuid, brand_id uuid, source_file_sha256 text,
         source_verification_required boolean, mode text, status text, total_rows bigint, accepted_rows bigint,
-        rejected_rows bigint, conflict_rows bigint, warning_rows bigint, error_code text, source_file_path text, source_file_bytes bigint
+        rejected_rows bigint, conflict_rows bigint, warning_rows bigint, error_code text, source_file_path text
+      );
+      create table public.supplier_price_upload_sessions (
+        release_id uuid, organization_id uuid, storage_bucket text, storage_object_path text, checksum_sha256 text, total_bytes bigint
       );
       create table public.supplier_price_release_rows (
         id bigint generated always as identity primary key, release_id uuid, product_code text, normalized_code text,
@@ -74,7 +77,7 @@ test('verified base matches every product; publish pointer enables tiers and man
     const file = await prepareSupplierQuantityRelease(original, date);
     const base = [];
     for await (const row of parseNormalizedSupplierPriceRows(Readable.from([file.baseCsv]), {commercialFields:true,sourceDate:date})) base.push(row);
-    await db.query(`insert into supplier_price_releases values ($1,$2,$3,$4,$5,true,'replace','validated',$6,$6,0,0,0,null,null,null)`,
+    await db.query(`insert into supplier_price_releases values ($1,$2,$3,$4,$5,true,'replace','validated',$6,$6,0,0,0,null,null)`,
       [release,org,supplier,brand,file.baseSha256,base.length]);
     await db.query(`insert into supplier_price_release_rows(release_id,product_code,normalized_code,row_status,currency,moq,buy_price,valid_from)
        select $1,b.product_code,b.normalized_code,'accepted',b.currency,b.moq,b.buy_price,b.valid_from
@@ -115,8 +118,10 @@ test('verified base matches every product; publish pointer enables tiers and man
       ['411471.103D',16,29.68],['411471.103D',256,28.82],
     ]);
 
-    await db.query("insert into supplier_price_releases values($1,$2,$3,$4,$5,true,'replace','staged',$6,$6,0,0,0,null,'a/wahler-quantity-tiers-fixture.csv',$7)",
-      [marked,org,supplier,brand,file.originalSha256,base.length,original.length]);
+    await db.query("insert into supplier_price_releases values($1,$2,$3,$4,$5,true,'replace','staged',$6,$6,0,0,0,null,'a/wahler-quantity-tiers-fixture.csv')",
+      [marked,org,supplier,brand,file.originalSha256,base.length]);
+    await db.query("insert into public.supplier_price_upload_sessions values ($1,$2,'supplier-price-imports','a/wahler-quantity-tiers-fixture.csv',$3,$4)",
+      [marked,org,file.originalSha256,original.length]);
     const validate = () => db.query("update supplier_price_releases set status='validated' where id=$1",[marked]);
     await assert.rejects(validate(),/QUANTITY_TIERS_SOURCE_REQUIRED/);
     const sealArgs = [org,marked,file.originalSha256,JSON.stringify(file.rows)];
