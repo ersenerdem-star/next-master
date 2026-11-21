@@ -73,6 +73,7 @@ const LOGO_PRESETS: LogoPreset[] = [
   { match: /beru/i, label: "Beru", wordmark: "BERU", assetSrc: "/brand-logos/beru_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#111827", stroke: "#cbd5e1" },
   { match: /(^|\\s)ae(\\s|$)|ae parts/i, label: "AE", wordmark: "AE", assetSrc: "/brand-logos/ae_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#1d4ed8", stroke: "#93c5fd" },
   { match: /fp\\s*diesel|fp-diesel/i, label: "FP Diesel", wordmark: "FP DIESEL", assetSrc: "/brand-logos/fpdiesel_logo.png", bgFrom: "#fef2f2", bgTo: "#ffffff", fg: "#111827", stroke: "#fca5a5" },
+  { match: /titanx/i, label: "TITANX", wordmark: "TITANX", assetSrc: "/brand-logos/titanx_logo.png", bgFrom: "#eff6ff", bgTo: "#ffffff", fg: "#00569d", stroke: "#7db7e8" },
   { match: /luk/i, label: "LuK", wordmark: "LUK", assetSrc: "/brand-logos/luk_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /ina/i, label: "INA", wordmark: "INA", assetSrc: "/brand-logos/ina_logo.png", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
   { match: /fag/i, label: "FAG", wordmark: "FAG", assetSrc: "/brand-logos/fag_logo.jpg", bgFrom: "#f8fafc", bgTo: "#ffffff", fg: "#0f172a", stroke: "#cbd5e1" },
