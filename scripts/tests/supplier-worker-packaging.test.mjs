@@ -13,7 +13,8 @@ const exec = promisify(execFile);
 // Parse imports, re-exports and literal import()/require() calls, including
 // transitive modules. A new runtime dependency must enter the Docker context.
 async function runtimeClosure() {
-  const pending = ['src/worker.mjs'], visited = new Set();
+  // The staging-only operator benchmark is an explicit executable in this image.
+  const pending = ['src/worker.mjs', 'src/staging-batch-benchmark.mjs'], visited = new Set();
   while (pending.length) {
     const path = pending.pop();
     if (visited.has(path)) continue;
