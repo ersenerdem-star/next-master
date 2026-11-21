@@ -38,6 +38,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 import {uploadVerifiedSupplierFile,fetchVerifiedUploadStatus,fetchVerifiedSupplierUploadOptions,isVerifiedSupplierUploadEnabled,verifiedSupplierUploadRequested} from "../../infrastructure/api/supplierVerifiedUploadApi";
 import {supplierUploadStatusView,type UploadProgress} from "../../shared/supplierUploadProtocol";
 import { fetchSupplierPriceUsage, setSupplierPriceUsage, type SupplierPriceUsage } from "../../infrastructure/api/supplierPriceUsageApi";
+import { useSupplierUploadRefresh } from "../../shared/useSupplierUploadRefresh";
 
 const freshnessValues = ["all", "fresh", "aging", "stale", "unknown"] as const;
 
@@ -92,6 +93,7 @@ export function SuppliersPage() {
   const [importSupplierId, setImportSupplierId] = useState("");
   const [importSupplierName, setImportSupplierName] = useState("");
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
+  const supplierLoadVersion = useRef(0);
   const [supplierUsage, setSupplierUsage] = useState<SupplierPriceUsage[] | null>(null);
   const [usageError, setUsageError] = useState('');
   const [showDisabledSuppliers, setShowDisabledSuppliers] = useState(false);
@@ -110,6 +112,13 @@ export function SuppliersPage() {
   const [warning, setWarning] = useState("");
   const [importingSupplier, setImportingSupplier] = useState(false);
   const verifiedUploadEnabled = isVerifiedSupplierUploadEnabled();
+  const uploadSupplierRefresh = useSupplierUploadRefresh(showImportDialog, async () => {
+    // Invalidate an older initial page load so it cannot replace a newer list.
+    supplierLoadVersion.current += 1;
+    return verifiedUploadEnabled
+      ? (await fetchVerifiedSupplierUploadOptions<{ suppliers: SupplierSummary[] }>()).suppliers
+      : await fetchCloudSuppliers();
+  }, setSuppliers);
   const uploadController = useRef<AbortController | null>(null);
   const [verifiedProgress, setVerifiedProgress] = useState<UploadProgress | null>(null);
   const [uploadSourceDate, setUploadSourceDate] = useState("");
@@ -206,6 +215,7 @@ export function SuppliersPage() {
 
   useEffect(() => {
     let cancelled = false;
+    const requestVersion = ++supplierLoadVersion.current;
 
     async function run() {
       setLoadingSuppliers(true);
@@ -214,13 +224,13 @@ export function SuppliersPage() {
         const result = verifiedUploadEnabled
           ? (await fetchVerifiedSupplierUploadOptions<{suppliers: SupplierSummary[]}>()).suppliers
           : await fetchCloudSuppliers();
-        if (cancelled) return;
+        if (cancelled || requestVersion !== supplierLoadVersion.current) return;
         setSuppliers(result);
         const defaultSupplierId = result[0]?.supplier_id || "";
         setImportSupplierId((current) => current || defaultSupplierId);
         setImportSupplierName((current) => current || result[0]?.name || "");
       } catch (caught) {
-        if (!cancelled) {
+        if (!cancelled && requestVersion === supplierLoadVersion.current) {
           setError(caught instanceof Error ? caught.message : p("suppliers.errors.requestFailed"));
         }
       } finally {
@@ -318,7 +328,13 @@ export function SuppliersPage() {
     value: supplier.supplier_id,
     label: supplier.name,
   }));
-  const importSupplierOptions = [...selectableSupplierOptions, ...(verifiedUploadEnabled ? [] : [{ value: "__new__", label: p("suppliers.filters.newSupplier") }])];
+  const importSupplierAvailable = importSupplierId === "__new__" ? !verifiedUploadEnabled : suppliers.some((supplier) => supplier.supplier_id === importSupplierId);
+  const importSupplierOptions = [
+    ...(importSupplierId ? [] : [{ value: "", label: locale === "tr" ? "Tedarikçi seçin" : "Select a supplier" }]),
+    ...(!importSupplierAvailable && importSupplierId && importSupplierId !== "__new__" ? [{ value: importSupplierId, label: `${importSupplierName || importSupplierId} — ${locale === "tr" ? "kullanılamıyor" : "unavailable"}` }] : []),
+    ...selectableSupplierOptions,
+    ...(verifiedUploadEnabled ? [] : [{ value: "__new__", label: p("suppliers.filters.newSupplier") }]),
+  ];
 
   const columns = useMemo(
     () => [
@@ -1031,6 +1047,7 @@ export function SuppliersPage() {
                 label={p("fields.supplier")}
                 value={importSupplierId}
                 options={importSupplierOptions}
+                disabled={uploadSupplierRefresh.loading || uploadSupplierRefresh.failed || importingSupplier}
                 onChange={(value) => {
                   setImportSupplierId(value);
                   if (value === "__new__") {
@@ -1047,6 +1064,12 @@ export function SuppliersPage() {
                 onChange={setImportSupplierName}
                 disabled={importSupplierId !== "__new__"}
               />
+              {uploadSupplierRefresh.loading ? <p role="status">{locale === "tr" ? "Tedarikçi listesi güncelleniyor…" : "Refreshing suppliers…"}</p> : null}
+              {uploadSupplierRefresh.failed ? <div role="alert">
+                <p>{locale === "tr" ? "Tedarikçi listesi güncellenemedi. Dosyanız ve seçiminiz korunuyor; tekrar deneyin." : "The supplier list could not be refreshed. Your file and selection are retained; try again."}</p>
+                <Button variant="secondary" onClick={uploadSupplierRefresh.retry}>{locale === "tr" ? "Tekrar dene" : "Try again"}</Button>
+              </div> : null}
+              {!uploadSupplierRefresh.loading && !uploadSupplierRefresh.failed && importSupplierId && !importSupplierAvailable ? <p role="alert">{locale === "tr" ? "Seçili tedarikçi güncel listede yok. Devam etmek için başka bir tedarikçi seçin." : "The selected supplier is not in the current list. Select another supplier to continue."}</p> : null}
               <Select
                 label={p("fields.brand")}
                 value={importBrand}
@@ -1181,6 +1204,7 @@ export function SuppliersPage() {
                   }}
                   disabled={
                     !importSupplierId ||
+                    !importSupplierAvailable || uploadSupplierRefresh.loading || uploadSupplierRefresh.failed ||
                     !importSupplierName.trim() ||
                     !importBrand ||
                     !(importBrand === "__new__" ? importBrandName.trim() : true) ||
