@@ -92,6 +92,7 @@ export type PortalPreparedLine = {
 
 type PortalOrderResponse = {
   updatedAt?: string;
+  prices?: Array<{index:number;sellPrice:number|null}>;
   salesTotal?: number;
   ok?: boolean;
   error?: string;
@@ -130,7 +131,7 @@ type PortalOrderResponse = {
 export async function savePortalOrderQuantities(credentials: PortalCredentials, input: {orderId:string;updatedAt:string;edits:Array<{index:number;code:string;previousQty:number;qty:number}>}) {
   const data = await postPortalOrderJson('/api/portal-order-quantities',{...credentials,...input});
   if (!data.updatedAt || typeof data.salesTotal !== 'number') throw new Error('Quantity save could not be verified.');
-  return {updatedAt:data.updatedAt,salesTotal:data.salesTotal};
+  return {updatedAt:data.updatedAt,salesTotal:data.salesTotal,prices:data.prices || []};
 }
 
 

@@ -5,7 +5,7 @@ import { useInterfaceText } from '../../../i18n/InterfaceText';
 
 type Order = PortalSnapshot['salesOrders'][number];
 export type QuantityEdit = {index:number;code:string;previousQty:number;qty:number};
-type Props = { order:Order; edits:Record<string,number>; credentials:PortalCredentials; paused:boolean; onBusy:(value:boolean)=>void; onSaved:(order:Order, edits:QuantityEdit[], result:{updatedAt:string;salesTotal:number})=>void };
+type Props = { order:Order; edits:Record<string,number>; credentials:PortalCredentials; paused:boolean; onBusy:(value:boolean)=>void; onSaved:(order:Order, edits:QuantityEdit[], result:Awaited<ReturnType<typeof savePortalOrderQuantities>>)=>void };
 
 export function PortalQuantityAutosave(props:Props) {
   const ui=useInterfaceText();

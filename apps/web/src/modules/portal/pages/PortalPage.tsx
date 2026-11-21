@@ -3275,8 +3275,10 @@ export function PortalPage() {
       const lines = (order.lines || []).map((line,index) => {
         const edit=edits.find(item=>item.index===index);
         if (!edit) return line;
-        const total=line.sell_price == null ? null : multiplyMoney(Number(line.sell_price),edit.qty);
-        return {...line,qty:edit.qty,line_total:total,sales_total:total};
+        const price=result.prices.find(item=>item.index===index);
+        const sellPrice=price ? price.sellPrice : line.sell_price;
+        const total=sellPrice == null ? null : multiplyMoney(Number(sellPrice),edit.qty);
+        return {...line,qty:edit.qty,sell_price:sellPrice,line_total:total,sales_total:total};
       });
       const saved={...order,lines,updated_at:result.updatedAt,sales_total:result.salesTotal,subtotal:sumMoney([result.salesTotal,Number(order.discount_amount || 0),-Number(order.shipping_cost || 0)])};
       setPortalOrderDetailsById(current=>({...current,[order.id]:saved}));

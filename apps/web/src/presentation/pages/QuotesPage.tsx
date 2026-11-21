@@ -1,3 +1,4 @@
+import { isWahlerBrand } from "../../../../../shared/wahler-price-tiers.mjs";
 import {InterfaceText} from "../../i18n/InterfaceText";
 import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
 import { confirmOrderForCapability } from "../../shared/confirmOrderForCapability";
@@ -888,6 +889,8 @@ export function QuotesPage({
   const [marginA, setMarginA] = useState(10);
   const [marginB, setMarginB] = useState(15);
   const [quoteBuilderLines, setQuoteBuilderLines] = useState<QuoteBuilderLine[]>(initialWorkspaceCache?.quoteBuilderLines || []);
+  const [wahlerQuantityEdits, setWahlerQuantityEdits] = useState<Record<string, number>>({});
+  const wahlerQuantityRequests = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
   const [builderStatus, setBuilderStatus] = useState(initialWorkspaceCache?.builderStatus || "");
@@ -948,6 +951,9 @@ export function QuotesPage({
   const effectiveMarginA =
     (customerType === "A" || customerType === "Other") && customerMarginOverride != null ? customerMarginOverride : marginA;
   const effectiveMarginB = customerType === "B" && customerMarginOverride != null ? customerMarginOverride : marginB;
+  const wahlerPricingScope = JSON.stringify([customerType, effectiveMarginA, effectiveMarginB, selectedCustomerProfile?.id, currency]);
+  const wahlerPricingScopeRef = useRef(wahlerPricingScope);
+  wahlerPricingScopeRef.current = wahlerPricingScope;
   const accountMarginActive = customerType !== "C" && customerMarginOverride != null && Number.isFinite(customerMarginOverride);
   const customerPricingIssue =
     customerType === "C" || selectedCustomerProfile?.price_list_type === "C"
@@ -1935,6 +1941,7 @@ export function QuotesPage({
     }
     try {
       if (customerPricingIssue) throw new Error(customerPricingIssue);
+      assertWahlerQuantityPricesReady();
       setResyncingCatalog(true);
       actionFeedback.begin(t("sales.orders.resyncingOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const { lines: syncedLines, preservedOtherPrices } = await resyncSalesOrderWithCodeReferenceFallback(quoteBuilderLines, {
@@ -2138,7 +2145,86 @@ export function QuotesPage({
     localSalesOrdersLoaded,
   ]);
 
+  function assertWahlerQuantityPricesReady() {
+    if (quoteBuilderLines.some(line => wahlerQuantityRequests.current.has(line.lineId))) {
+      throw new Error(locale === "tr" ? "Wahler kademe fiyatı hesaplanıyor. Tamamlanınca tekrar deneyin." : "Wahler quantity pricing is still being calculated. Try again when it finishes.");
+    }
+  }
+
+  function changeWahlerQuantity(row: QuoteBuilderLine, requestedQty: number) {
+    const previousRequest = wahlerQuantityRequests.current.get(row.lineId);
+    if (previousRequest !== undefined) clearTimeout(previousRequest);
+    wahlerQuantityRequests.current.delete(row.lineId);
+
+    function clearEdit() {
+      setWahlerQuantityEdits(current => {
+        const { [row.lineId]: _removed, ...rest } = current;
+        return rest;
+      });
+    }
+
+    if (requestedQty === row.qty) {
+      clearEdit();
+      return;
+    }
+
+    setWahlerQuantityEdits(current => ({ ...current, [row.lineId]: requestedQty }));
+    const request = setTimeout(async () => {
+      const adjustment = normalizeOrderQuantity(requestedQty, row);
+      try {
+        const code = row.resolvedCode || row.requestedCode;
+        const priced = await buildBuilderLineWithTimeout({ code, brand: row.brand, qty: adjustment.corrected });
+        if (wahlerQuantityRequests.current.get(row.lineId) !== request) return;
+        const selected = row.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === row.selectedSupplierKey);
+        const optionIndex = row.supplier_name
+          ? priced.supplierOptions.findIndex(option => selected?.supplier_id
+            ? option.supplier_id === selected.supplier_id
+            : option.supplier_name === row.supplier_name)
+          : 0;
+        const option = priced.supplierOptions[optionIndex];
+        if (wahlerPricingScopeRef.current !== wahlerPricingScope || !priced.found || confirmationSku(priced.resolvedCode) !== confirmationSku(code) || !isWahlerBrand(priced.brand)
+            || option?.buy_price == null || option.sell_price == null
+            || normalizeOrderQuantity(adjustment.corrected, option).corrected !== adjustment.corrected) {
+          throw new Error("Wahler quantity price could not be verified.");
+        }
+
+        setQuoteBuilderLines(current => current.map(item => {
+          if (item.lineId !== row.lineId || item.supplier_name !== row.supplier_name
+              || confirmationSku(item.resolvedCode || item.requestedCode) !== confirmationSku(code)) return item;
+          return {
+            ...item,
+            qty: adjustment.corrected,
+            requested_qty: adjustment.adjusted ? adjustment.requested : null,
+            quantity_adjusted: adjustment.adjusted,
+            quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
+            moq: option.moq ?? null,
+            order_multiple: option.order_multiple ?? null,
+            supplier_name: option.supplier_name,
+            supplierOptions: priced.supplierOptions,
+            selectedSupplierKey: `${option.supplier_name}-${optionIndex}`,
+            buy_price: option.buy_price,
+            sell_price: item.manual_sell_price ? item.sell_price : priced.c_sell_price ?? option.sell_price,
+            c_sell_price: priced.c_sell_price,
+            price_date: option.price_date || "",
+          };
+        }));
+      } catch {
+        if (wahlerQuantityRequests.current.get(row.lineId) !== request) return;
+        actionFeedback.fail(locale === "tr"
+          ? "Wahler için bu adedin güncel kademe fiyatı doğrulanamadı. Satır önceki adet ve fiyatıyla kaldı."
+          : "The Wahler tier price could not be verified for this quantity. The line kept its previous quantity and price.");
+      } finally {
+        if (wahlerQuantityRequests.current.get(row.lineId) === request) {
+          wahlerQuantityRequests.current.delete(row.lineId);
+          clearEdit();
+        }
+      }
+    }, 300);
+    wahlerQuantityRequests.current.set(row.lineId, request);
+  }
+
   async function persistSalesOrderDraft() {
+    assertWahlerQuantityPricesReady();
     if (customerPricingIssue) throw new Error(customerPricingIssue);
     if (!quoteBuilderLines.length) {
       actionFeedback.fail(t("sales.orders.addLinesBeforeSavingDraft"));
@@ -2268,9 +2354,14 @@ export function QuotesPage({
                 type="number"
                 min={1}
                 step={1}
-                value={row.qty}
+                value={wahlerQuantityEdits[row.lineId] ?? row.qty}
+                disabled={isWahlerBrand(row.brand) && (savingDraft || confirmingOrder || resyncingCatalog)}
                 onChange={(event) => {
                   const nextQty = Math.max(1, Number(event.target.value || 1) || 1);
+                  if (isWahlerBrand(row.brand)) {
+                    changeWahlerQuantity(row, nextQty);
+                    return;
+                  }
                   setQuoteBuilderLines((current) =>
                     current.map((item) => {
                       if (item.lineId !== row.lineId) return item;
@@ -2286,6 +2377,9 @@ export function QuotesPage({
                   );
                 }}
               />
+              {wahlerQuantityEdits[row.lineId] !== undefined ? (
+                <div className="info-text" role="status">{locale === "tr" ? "Kademe fiyatı hesaplanıyor…" : "Updating quantity price…"}</div>
+              ) : null}
               {row.quantity_adjustment_note ? <div className="warning-text">{row.quantity_adjustment_note}</div> : null}
             </div>
           ),
@@ -2312,6 +2406,7 @@ export function QuotesPage({
             <select
               className="inline-edit-input"
               value={row.selectedSupplierKey}
+              disabled={wahlerQuantityEdits[row.lineId] !== undefined}
               onChange={(event) => {
                 const nextKey = event.target.value;
                 setQuoteBuilderLines((current) =>
@@ -2437,7 +2532,7 @@ export function QuotesPage({
     });
 
     return columns;
-  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t]);
+  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t, locale, wahlerQuantityEdits, shouldUseCPricePricing, wahlerPricingScope, savingDraft, confirmingOrder, resyncingCatalog]);
 
   const attentionColumns = useMemo(
     () => [
@@ -3314,6 +3409,7 @@ export function QuotesPage({
       return;
     }
     try {
+      assertWahlerQuantityPricesReady();
       setConfirmingOrder(true);
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, customerType, effectiveMarginA, effectiveMarginB, currency, selectedLocalSalesOrderId || undefined, selectedCustomerProfile?.id ?? null, resolvedCustomerName);

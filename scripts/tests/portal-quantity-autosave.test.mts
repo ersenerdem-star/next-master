@@ -56,3 +56,45 @@ test('autosaves have an independent bounded rate limit',async()=>{
   try {const result=await enforcePortalRateLimit(new Request('https://example.test'), 'https://example.test','key','quantity_autosave','client@example.test');assert.equal(result.allowed,true);assert.equal(observed.p_route,'quantity_autosave');assert.equal(observed.p_limit,240);assert.equal(observed.p_window_seconds,600);}
   finally {globalThis.fetch=saved;}
 });
+
+test('Wahler autosave persists the current whole-line tier without touching other lines or exposing supplier costs', async () => {
+  const savedFetch = globalThis.fetch;
+  const sku = '411471.103D';
+  const invite = {id:'invite',organization_id:'org',party_type:'customer',access_can_view_orders:true};
+  let order = {...structuredClone(original), lines:[
+    {resolvedCode:sku,brand:'Wahler',qty:1,buy_price:30.58,sell_price:33.64,supplier_name:'GroupAuto',notes:'keep'},
+    structuredClone(original.lines[1]),
+  ]};
+  const expected = [
+    {qty:15,buy:30.58,sell:33.64,tier:null,amount:504.60},
+    {qty:16,buy:29.68,sell:32.65,tier:16,amount:522.40},
+    {qty:17,buy:29.68,sell:32.65,tier:16,amount:555.05},
+    {qty:256,buy:28.82,sell:31.70,tier:256,amount:8115.20},
+    {qty:15,buy:30.58,sell:33.64,tier:null,amount:504.60},
+  ];
+  globalThis.fetch = async (input, init) => {
+    if (init?.method !== 'PATCH') return Response.json([order]);
+    assert.equal(new URL(String(input)).searchParams.get('updated_at'), 'eq.' + order.updated_at);
+    order = {...order,...JSON.parse(String(init.body))};
+    return Response.json([{updated_at:order.updated_at}]);
+  };
+  try {
+    for (const {qty,buy,sell,tier,amount} of expected) {
+      const result = await savePortalQuantities('https://example.test','secret',invite,order.id,order.updated_at,
+        [{index:0,code:sku,previousQty:order.lines[0].qty,qty}], async rows => {
+          assert.deepEqual(rows.map(row => [row.code,row.qty]),[[sku,qty]]);
+          return [{resolvedCode:sku,brand:'Wahler',qty,buy_price:buy,sell_price:sell,supplier_name:'GroupAuto',price_date:'2026-11-12',applied_min_quantity:tier}];
+        });
+      assert.equal(order.lines[0].buy_price,buy);
+      assert.equal(order.lines[0].sell_price,sell);
+      assert.equal(order.lines[0].notes,'keep');
+      assert.deepEqual(order.lines[1],original.lines[1]);
+      assert.equal(result.salesTotal,amount+10);
+      assert.deepEqual(result.prices,[{index:0,sellPrice:sell}]);
+    }
+    const previous = structuredClone(order);
+    await assert.rejects(savePortalQuantities('https://example.test','secret',invite,order.id,order.updated_at,
+      [{index:0,code:sku,previousQty:15,qty:16}], async () => []), /quantity price could not be verified/);
+    assert.deepEqual(order,previous);
+  } finally { globalThis.fetch = savedFetch; }
+});

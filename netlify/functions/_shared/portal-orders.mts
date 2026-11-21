@@ -2481,12 +2481,12 @@ export async function preparePortalOrderLines(
   serviceRoleKey: string,
   invite: PortalInviteRow,
   rows: PortalOrderInputRow[],
-  includeSuggestions = false,
+  { includeSuggestions = false, mergeRows = true } = {},
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   assertPortalRowsWithinBrandScope(invite, brandMap, rows);
-  const mergedRows = mergeInputRows(rows);
+  const mergedRows = mergeRows ? mergeInputRows(rows) : rows;
   const prepared: PreparedPortalLine[] = [];
 
   for (let index = 0; index < mergedRows.length; index += 10) {
@@ -2552,7 +2552,7 @@ export async function prepareCustomerPortalOrderLines(
   invite: PortalInviteRow,
   rows: PortalOrderInputRow[],
 ) {
-  const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows, true);
+  const prepared = await preparePortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows, { includeSuggestions: true });
   return {
     ...prepared,
     lines: prepared.lines.map(toCustomerPortalPreparedLine),
