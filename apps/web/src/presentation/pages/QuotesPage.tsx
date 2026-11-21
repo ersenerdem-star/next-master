@@ -45,6 +45,7 @@ import { buildSalesPurchaseAnalysis, loadSalesPurchaseAnalysisOffers } from "../
 import { isSuperadminRole } from "../../shared/roles";
 import { buildBusinessDocumentHtml, openBusinessDocumentPreview } from "../../shared/documentPrint";
 import { buildEntityAlias } from "../../shared/entityAlias";
+import { hasAmbiguousSku, selectExactOeCandidates, type SalesOrderOeCandidate } from "../../shared/salesOrderOeSelection";
 import { Select } from "../components/common/Select";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
@@ -875,6 +876,10 @@ export function QuotesPage({
   const [quoteLinePreview, setQuoteLinePreview] = useState<QuoteBuilderLine | null>(null);
 
   const [quoteCode, setQuoteCode] = useState("");
+  const [oeCandidates, setOeCandidates] = useState<SalesOrderOeCandidate[]>([]);
+  const [oeSearchMessage, setOeSearchMessage] = useState("");
+  const [searchingOe, setSearchingOe] = useState(false);
+  const oeSearchGenerationRef = useRef(0);
   const [quoteBrand, setQuoteBrand] = useState(initialWorkspaceCache?.quoteBrand || "");
   const [quoteBrandSelection, setQuoteBrandSelection] = useState(initialWorkspaceCache?.quoteBrandSelection || "");
   const [quoteQty, setQuoteQty] = useState(initialWorkspaceCache?.quoteQty || "1");
@@ -2628,6 +2633,73 @@ export function QuotesPage({
     return allLines;
   }
 
+  function clearOeSearch() {
+    oeSearchGenerationRef.current += 1;
+    setOeCandidates([]);
+    setOeSearchMessage("");
+    setSearchingOe(false);
+  }
+
+  useEffect(() => {
+    // Invalidate results (and in-flight responses) when the query or brand changes.
+    clearOeSearch();
+  }, [quoteCode, quoteBrand, quoteBrandSelection]);
+
+  async function handleSearchOe() {
+    const code = quoteCode.trim();
+    const brand = getSelectedBrandValue(quoteBrandSelection, quoteBrand);
+    if (normalizePartCode(code).length < 3) {
+      setOeSearchMessage(locale === "tr" ? "En az 3 harf veya rakam içeren bir OE numarası girin." : "Enter an OE number with at least 3 letters or digits.");
+      return;
+    }
+    const generation = ++oeSearchGenerationRef.current;
+    setOeCandidates([]);
+    setSearchingOe(true);
+    setOeSearchMessage(locale === "tr" ? "OE numarasına bağlı ürünler aranıyor…" : "Searching products linked to this OE number…");
+    try {
+      const rows: SalesOrderOeCandidate[] = [];
+      const pageSize = 50;
+      const maxPages = 20;
+      let hasMore = false;
+      for (let page = 1; page <= maxPages; page += 1) {
+        const batch = await callAppRpc<SalesOrderOeCandidate[]>("sales_order_exact_oe_candidates", {
+          input_oe: code,
+          input_brand: brand,
+          input_page: page,
+          input_page_size: pageSize,
+        });
+        if (generation !== oeSearchGenerationRef.current) return;
+        rows.push(...batch);
+        hasMore = Boolean(batch.at(-1)?.has_more);
+        if (!hasMore || !batch.length) break;
+      }
+      const candidates = selectExactOeCandidates(rows, code);
+      setOeCandidates(candidates);
+      setOeSearchMessage(hasMore
+        ? locale === "tr" ? "Sonuçlar çok fazla; liste eksik olabilir. Marka seçip yeniden arayın." : "There are too many results; the list may be incomplete. Select a brand and search again."
+        : candidates.length
+          ? locale === "tr" ? `${candidates.length} ürün bulundu. Siparişe eklemek için bir ürün seçin.` : `${candidates.length} products found. Select a product to add it to the order.`
+          : locale === "tr" ? "Bu OE numarasına bağlı ürün bulunamadı." : "No products linked to this OE number were found.");
+    } catch (caught) {
+      if (generation !== oeSearchGenerationRef.current) return;
+      const reason = caught instanceof Error ? caught.message : "";
+      setOeSearchMessage(locale === "tr" ? `OE araması tamamlanamadı${reason ? `: ${reason}` : "."}` : `OE search failed${reason ? `: ${reason}` : "."}`);
+    } finally {
+      if (generation === oeSearchGenerationRef.current) setSearchingOe(false);
+    }
+  }
+
+  function selectOeCandidate(row: SalesOrderOeCandidate) {
+    // Use the chosen manufacturer's real SKU and brand for the existing price
+    // resolver; an OE identifier itself is never used to choose a supplier.
+    setQuoteCode(row.product_code);
+    const brandOption = brandOptions.find((option) => normalizeBrandKey(option.value) === normalizeBrandKey(row.brand));
+    setQuoteBrandSelection(brandOption?.value || "__manual__");
+    setQuoteBrand(row.brand);
+    clearOeSearch();
+    setBuilderStatus(locale === "tr" ? `${row.brand} ${row.product_code} seçildi. Fiyatı getirmek ve satırı eklemek için “Yeni satır ekle”ye basın.` : `${row.brand} ${row.product_code} selected. Press “Add new row” to retrieve its price and add it.`);
+  }
+
   async function handleResolveQuoteLine() {
     const code = quoteCode.trim();
     const brand = getSelectedBrandValue(quoteBrandSelection, quoteBrand);
@@ -3864,6 +3936,9 @@ export function QuotesPage({
                     />
                     {quoteBrandSelection === "__manual__" ? <Input value={quoteBrand} onChange={setQuoteBrand} placeholder={t("sales.orders.manualBrand")} /> : null}
                     <Input value={quoteQty} onChange={setQuoteQty} placeholder={t("sales.orders.qty")} />
+                    <Button variant="secondary" onClick={() => void handleSearchOe()} busy={searchingOe} busyLabel={locale === "tr" ? "OE aranıyor…" : "Searching OE…"}>
+                      {locale === "tr" ? "OE ile ürün ara" : "Find products by OE"}
+                    </Button>
                     <Button onClick={() => void handleResolveQuoteLine()} busy={resolvingLine} busyLabel={t("sales.orders.resolving")}>
                       {t("sales.orders.addNewRow")}
                     </Button>
@@ -3871,6 +3946,23 @@ export function QuotesPage({
                       {t("sales.orders.addItemsInBulk")}
                     </Button>
                   </div>
+                  {oeSearchMessage ? <div className="info-text" role="status">{oeSearchMessage}</div> : null}
+                  {oeCandidates.length ? (
+                    <div style={{ maxHeight: 320, overflowY: "auto", marginTop: 12 }}>
+                      {oeCandidates.map((row) => (
+                        <div key={row.product_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 0", borderBottom: "1px solid #dce4ec" }}>
+                          <div>
+                            <strong>{row.brand} · {row.product_code}</strong>
+                            <div className="info-text">{row.description || "—"}{row.vehicle ? ` · ${row.vehicle}` : ""}</div>
+                            {hasAmbiguousSku(oeCandidates, row) ? <div className="error-text">{locale === "tr" ? "Aynı marka ve kodla birden fazla katalog kaydı var; önce kayıtlar incelenmeli." : "Multiple catalog records share this brand and code; review them first."}</div> : null}
+                          </div>
+                          <Button variant="secondary" disabled={hasAmbiguousSku(oeCandidates, row)} onClick={() => selectOeCandidate(row)}>
+                            {locale === "tr" ? "Bu ürünü seç" : "Select product"}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

@@ -1,0 +1,26 @@
+-- Test fixture: run only in a fresh, disposable PostgreSQL database.
+create role anon;
+create role authenticated;
+create role service_role;
+create function public.current_profile_org_id() returns uuid language sql stable as $$ select current_setting('test.org', true)::uuid $$;
+create table public.brands(id uuid primary key, organization_id uuid, name text);
+create table public.catalog_products(id uuid primary key,organization_id uuid,brand_id uuid,oem_no text);
+create table public.catalog_product_identifiers(id int primary key, organization_id uuid,catalog_product_id uuid,identifier_type text,normalized_value text);
+create table public.catalog_integrity_summary(organization_id uuid,total_products bigint,projected_products bigint,clear_count bigint,incomplete_count bigint,conflict_count bigint,pending_count bigint,failed_count bigint,catalog_complete_count bigint,catalog_incomplete_count bigint,missing_description_count bigint,missing_origin_count bigint,missing_hs_code_count bigint,missing_weight_count bigint,missing_ean_count bigint,missing_oem_count bigint,missing_vehicle_count bigint,missing_image_count bigint,last_catalog_change_at timestamptz,last_evaluated_at timestamptz,backfill_status text,backfill_queued_products bigint,backfill_updated_at timestamptz,backfill_error text);
+create table public.catalog_operations_brand_summary(organization_id uuid,brand_id uuid,total_products bigint,complete_count bigint,incomplete_count bigint,missing_ean_count bigint,missing_oem_count bigint,missing_vehicle_count bigint,missing_image_count bigint,missing_description_count bigint,missing_description_tr_count bigint,missing_vehicle_model_count bigint,missing_market_segment_count bigint,last_catalog_change_at timestamptz,updated_at timestamptz);
+grant select on public.brands,public.catalog_products,public.catalog_product_identifiers,public.catalog_integrity_summary,public.catalog_operations_brand_summary to authenticated;
+alter table public.brands enable row level security;
+alter table public.catalog_products enable row level security;
+alter table public.catalog_product_identifiers enable row level security;
+alter table public.catalog_integrity_summary enable row level security;
+alter table public.catalog_operations_brand_summary enable row level security;
+create policy own_org on public.brands to authenticated using (organization_id=public.current_profile_org_id());
+create policy own_org on public.catalog_products to authenticated using (organization_id=public.current_profile_org_id());
+create policy own_org on public.catalog_product_identifiers to authenticated using (organization_id=public.current_profile_org_id());
+create policy own_org on public.catalog_integrity_summary to authenticated using (organization_id=public.current_profile_org_id());
+create policy own_org on public.catalog_operations_brand_summary to authenticated using (organization_id=public.current_profile_org_id());
+insert into brands values ('00000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','Titanx'),('00000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000001','Other'),('00000000-0000-0000-0000-000000000013','10000000-0000-0000-0000-000000000002','Titanx');
+insert into catalog_products values ('00000000-0000-0000-0000-000000000101','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011',null),('00000000-0000-0000-0000-000000000102','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011','existing'),('00000000-0000-0000-0000-000000000103','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011',''),('00000000-0000-0000-0000-000000000104','10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000012',null),('00000000-0000-0000-0000-000000000105','10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000013',null);
+insert into catalog_product_identifiers values (1,'10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000101','oem','OE1'),(2,'10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000101','oem','OE2'),(3,'10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000102','oem','OE3'),(4,'10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000103','oem',''),(5,'10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000104','oem','OE4'),(6,'10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000105','oem','OE5');
+insert into catalog_operations_brand_summary(organization_id,brand_id,total_products,missing_oem_count) values ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000011',3,2),('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000012',1,1),('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000013',1,1);
+insert into catalog_integrity_summary(organization_id,total_products,missing_oem_count) values ('10000000-0000-0000-0000-000000000001',4,3),('10000000-0000-0000-0000-000000000002',1,1);
