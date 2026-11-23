@@ -12,7 +12,7 @@ const foundation = await readFile(new URL('../../supabase/migrations/20261014110
 const publication = await readFile(new URL('../../supabase/migrations/20261014110614_supplier_price_production_publication_decision.sql',import.meta.url),'utf8');
 const migration = await readFile(new URL('../../supabase/migrations/20261014162139_supplier_admin_release_action_queue.sql',import.meta.url),'utf8');
 const compatibility = await readFile(new URL('../../supabase/migrations/20261014175649_supplier_source_commercial_compatibility_guard.sql',import.meta.url),'utf8');
-const overlap = await readFile(new URL('../../supabase/migrations/20261123162458_supplier_overlap_superadmin_approval.sql',import.meta.url),'utf8');
+const overlap = await readFile(new URL('../../supabase/migrations/20261123165203_supplier_overlap_superadmin_approval.sql',import.meta.url),'utf8');
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const org=id(1),supplier=id(3),brand=id(5),actor=id(7),authSession=id(8),owner=id(50);
 const staging='kaxsqafdevabkxofwdod',production='zjgueqijumzlfioihnkt';
