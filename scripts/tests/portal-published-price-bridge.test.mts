@@ -7,6 +7,7 @@ test("portal keeps published SKUs separate and prices exact order/search request
   const requestedCodes: string[] = [];
   let orderWrites = 0;
   let accountMargin = 10;
+  let savedOptionAvailable = true;
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith("/sales_orders") && init?.method !== "GET") orderWrites += 1;
@@ -16,12 +17,17 @@ test("portal keeps published SKUs separate and prices exact order/search request
     } else if (url.pathname.endsWith("/company_profiles")) {
       data = [{ company_name: "Seller" }];
     } else if (url.pathname.endsWith("/brands")) {
-      data = [{ id: "brand-1", name: "Clevite" }];
+      data = [{ id: "brand-1", name: "Clevite" }, { id: "brand-2", name: "Wahler" }];
     } else if (url.pathname.endsWith("/supplier_current_price_pointers")) {
       data = [{ release_id: "published-release-1" }];
     } else if (/\/cloud_current_supplier_(?:commercial|quantity)_options_service$/.test(url.pathname)) {
       const body = JSON.parse(String(init?.body || "{}")) as Record<string, string>;
       assert.equal(body.input_organization_id, "org-1");
+      if (body.input_brand === "Wahler") {
+        const options = [{supplier_id:"cheaper",supplier_name:"Alternative",buy_price:29,applied_min_quantity:16}];
+        if (savedOptionAvailable) options.push({supplier_id:"saved",supplier_name:"GroupAuto",buy_price:29.68,applied_min_quantity:16});
+        return Response.json(options.map(option=>({...option,brand_id:"brand-2",product_code:body.input_code,price_date:"2026-11-12",moq:null,order_multiple:null,stock_qty:null,valid_to:null})));
+      }
       assert.equal(body.input_brand, "Clevite");
       requestedCodes.push(body.input_code);
       // Even if a looser RPC ever returns a different SKU, the caller must
@@ -51,6 +57,16 @@ test("portal keeps published SKUs separate and prices exact order/search request
     assert.deepEqual(prepared.lines.map((line) => line.buy_price), [8.34, 405.72, null]);
     assert.deepEqual(prepared.lines.map((line) => line.sell_price), [9.17, 446.29, null]);
     assert.deepEqual(prepared.lines.map((line) => line.resolvedCode), ["61/1", "611", "61-1"]);
+
+    const wahlerRows = [{ code: "411471.103D", brand: "Wahler", qty: 16 }, { code: "411471.103D", brand: "Wahler", qty: 17 }];
+    const options = {savedSuppliers:[{id:"saved",name:"Historical name"},{id:"",name:"GroupAuto"}]};
+    const savedSupplierLines = (await preparePortalOrderLines("https://supabase.example.invalid","service-key",invite,wahlerRows,options)).lines;
+    assert.deepEqual(savedSupplierLines.map(line=>[line.qty,line.supplier_name,line.sell_price,line.selectedSupplierKey]),
+      [[16,"GroupAuto",32.65,"GroupAuto-1"],[17,"GroupAuto",32.65,"GroupAuto-1"]]);
+    assert.equal((await preparePortalOrderLines("https://supabase.example.invalid","service-key",invite,[wahlerRows[0]])).lines[0].supplier_name,"Alternative");
+    savedOptionAvailable = false;
+    const unavailable = (await preparePortalOrderLines("https://supabase.example.invalid","service-key",invite,wahlerRows,options)).lines;
+    assert.ok(unavailable.every(line=>line.buy_price===null&&line.sell_price===null&&line.supplier_name===""));
 
     const search = await searchPortalCatalog("https://supabase.example.invalid", "service-key", invite, "61/1", "Clevite");
     assert.deepEqual(search.items.map((item) => item.code), ["61/1"]);

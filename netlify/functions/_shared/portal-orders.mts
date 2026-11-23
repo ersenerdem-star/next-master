@@ -1,3 +1,4 @@
+import type { SavedQuantitySupplier } from "./portal-quantity-autosave.mts";
 import { isWahlerBrand, type QuantityCurveRow } from "../../../shared/wahler-price-tiers.mjs";
 import { resolveQuantityPrice } from "../../../shared/quantity-pricing.mjs";
 import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from "./http.mts";
@@ -2396,6 +2397,7 @@ async function resolvePreparedLine(
   serviceRoleKey: string,
   row: PortalOrderInputRow,
   context: CustomerPricingContext,
+  savedSupplier?: SavedQuantitySupplier,
 ): Promise<PreparedPortalLine> {
   const referenceMatch = await findPortalCodeReferenceMatch(
     supabaseUrl,
@@ -2412,7 +2414,12 @@ async function resolvePreparedLine(
     row,
     codeToResolve,
   );
-  const fallbackSupplier = supplierOptions[0] || null;
+  const supplierIndex = savedSupplier
+    ? supplierOptions.findIndex(option => savedSupplier.id
+      ? option.supplier_id === savedSupplier.id
+      : option.supplier_name === savedSupplier.name)
+    : 0;
+  const fallbackSupplier = supplierOptions[supplierIndex] || null;
   const resolvedCode = String(catalogMatch?.product_code || codeToResolve || row.code || "");
   const codeChanged = Boolean(referenceMatch) || exactSkuKey(resolvedCode) !== exactSkuKey(row.code);
   const buyPrice = fallbackSupplier?.buy_price ?? null;
@@ -2464,7 +2471,7 @@ async function resolvePreparedLine(
     replacement_reason: referenceMatch?.reason || null,
     replacement_warning: referenceMatch ? buildReplacementWarning(referenceMatch.old_code, referenceMatch.new_code || resolvedCode, referenceMatch.reason) : null,
     supplierOptions,
-    selectedSupplierKey: supplierOptions[0] ? `${supplierOptions[0].supplier_name}-0` : "",
+    selectedSupplierKey: fallbackSupplier ? `${fallbackSupplier.supplier_name}-${supplierIndex}` : "",
   };
 }
 
@@ -2481,17 +2488,18 @@ export async function preparePortalOrderLines(
   serviceRoleKey: string,
   invite: PortalInviteRow,
   rows: PortalOrderInputRow[],
-  { includeSuggestions = false, mergeRows = true } = {},
+  { includeSuggestions = false, savedSuppliers }: { includeSuggestions?: boolean; savedSuppliers?: Array<SavedQuantitySupplier | undefined> } = {},
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
   assertPortalRowsWithinBrandScope(invite, brandMap, rows);
-  const mergedRows = mergeRows ? mergeInputRows(rows) : rows;
+  const mergedRows = savedSuppliers ? rows : mergeInputRows(rows);
   const prepared: PreparedPortalLine[] = [];
 
   for (let index = 0; index < mergedRows.length; index += 10) {
     const chunk = mergedRows.slice(index, index + 10);
-    const resolvedChunk = await Promise.all(chunk.map((row) => resolvePreparedLine(supabaseUrl, serviceRoleKey, row, context)));
+    const resolvedChunk = await Promise.all(chunk.map((row, offset) =>
+      resolvePreparedLine(supabaseUrl, serviceRoleKey, row, context, savedSuppliers?.[index + offset])));
     prepared.push(...resolvedChunk);
   }
 

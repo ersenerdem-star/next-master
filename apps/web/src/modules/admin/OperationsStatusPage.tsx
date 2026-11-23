@@ -37,6 +37,8 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
   const numberLocale = locale === "tr" ? "tr-TR" : "en-US";
   const [operationsRows, setOperationsRows] = useState<SupplierOperationsStatusRow[]>([]);
   const [catalogIntegrity, setCatalogIntegrity] = useState<CatalogIntegritySummary | null>(null);
+  const [catalogIntegrityFailed, setCatalogIntegrityFailed] = useState(false);
+  const [catalogBrandOperationsFailed, setCatalogBrandOperationsFailed] = useState(false);
   const [catalogBrandOperations, setCatalogBrandOperations] = useState<CatalogOperationsBrandStatus[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierSummary[]>([]);
   const [loadingOperations, setLoadingOperations] = useState(false);
@@ -64,12 +66,14 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
           const [result, integrity, brandOperations] = await Promise.all([
             !releaseReviewEnabled || showUploadArchive ? fetchCloudSupplierOperationsStatusAll(refreshedSuppliers) : Promise.resolve([]),
             fetchCatalogIntegritySummary().catch(() => null),
-            fetchCatalogOperationsBrandStatus(100).catch(() => []),
+            fetchCatalogOperationsBrandStatus(100).catch(() => null),
           ]);
           setSuppliers(refreshedSuppliers);
           setOperationsRows(result);
-          setCatalogIntegrity(integrity);
-          setCatalogBrandOperations(brandOperations);
+          if (integrity) setCatalogIntegrity(integrity);
+          if (brandOperations) setCatalogBrandOperations(brandOperations);
+          setCatalogIntegrityFailed(!integrity);
+          setCatalogBrandOperationsFailed(!brandOperations);
           setOperationsErrorKey(null);
           operationsLoadedOnce.current = true;
           return;
@@ -479,7 +483,9 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
             </Button>
           }
         >
-        {operationsLoadedOnce.current && !catalogIntegrity ? <div className="operations-data-state operations-data-state--warning" role="status">{t("catalog.integrity.dataUnavailable")}</div> : null}
+        {catalogIntegrityFailed ? <div className="operations-data-state operations-data-state--warning" role="status">
+          {t(catalogIntegrity ? "catalog.integrity.summaryStale" : "catalog.integrity.dataUnavailable")}
+        </div> : null}
         {catalogIntegrity?.initialization_state === "not_initialized" ? <div className="warning-text">{t("catalog.integrity.notInitialized")}</div> : null}
         {catalogIntegrity?.initialization_state === "partial" ? <div className="warning-text">{t("catalog.integrity.partial")}</div> : null}
         {catalogIntegrity?.initialization_state === "running" ? (
@@ -526,8 +532,6 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
           <span><small>{t("catalog.integrity.missingImage")}</small><strong>{formatIntegrityCount(catalogIntegrity?.missing_image_count)}</strong></span>
         </div>
         </> : null}
-        {!catalogBrandOperations.length ? <CatalogJobProgress locale={locale} search={enrichmentBrandSearch} /> : null}
-        {catalogBrandOperations.length ? (
           <div className="catalog-brand-operations">
             <div className="catalog-brand-operations__heading">
               <strong>{t("catalog.integrity.enrichmentTitle")}</strong>
@@ -544,6 +548,9 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
               </span>
             </div>
             <CatalogJobProgress locale={locale} search={enrichmentBrandSearch} />
+            {catalogBrandOperationsFailed ? <div className="operations-data-state operations-data-state--warning" role="status">
+              {t(catalogBrandOperations.length ? "catalog.integrity.brandStatusStale" : "catalog.integrity.brandStatusUnavailable")}
+            </div> : null}
             {filteredCatalogBrandOperations.length ? (
               <div className="catalog-enrichment-table-wrap">
                 <table className="catalog-enrichment-table">
@@ -605,9 +612,9 @@ export function OperationsStatusPage({onOpenSupplierPrices}:{onOpenSupplierPrice
                   </tbody>
                 </table>
               </div>
-            ) : <div className="catalog-enrichment-progress__empty">{t("catalog.integrity.enrichmentNoBrandMatches")}</div>}
+            ) : !catalogBrandOperationsFailed && !loadingOperations && operationsLoadedOnce.current
+              ? <div className="catalog-enrichment-progress__empty">{t("catalog.integrity.enrichmentNoBrandMatches")}</div> : null}
           </div>
-        ) : null}
         <div className="meta-row catalog-meta-strip">
           {catalogIntegrity?.last_catalog_change_at ? <span>{t("catalog.integrity.lastCatalogChange")}: <strong>{new Date(catalogIntegrity.last_catalog_change_at).toLocaleString(locale)}</strong></span> : null}
           {catalogIntegrity?.last_evaluated_at ? <span>{t("catalog.integrity.lastEvaluation")}: <strong>{new Date(catalogIntegrity.last_evaluated_at).toLocaleString(locale)}</strong></span> : null}

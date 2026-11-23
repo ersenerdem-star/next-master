@@ -2,12 +2,28 @@ import { buildRestUrl, getJson, sendJson, serviceRoleHeaders } from './http.mts'
 import { isWahlerBrand } from '../../../shared/wahler-price-tiers.mjs';
 import { multiplyMoney, salesOrderTotals } from '../../../shared/order-money.mjs';
 
-type QuantityPriceInput = { code: string; brand: string; qty: number; market_segment?: string };
+export type SavedQuantitySupplier = { id: string; name: string };
+type QuantityPriceInput = { code: string; brand: string; qty: number; savedSupplier?: SavedQuantitySupplier };
+
+export class PortalQuantityPriceError extends Error {
+  constructor(public readonly lineNumber: number, public readonly code: string) {
+    super(`No current quantity price could be verified for line ${lineNumber} (${code}).`);
+  }
+}
+
+function savedQuantitySupplier(line: Record<string, unknown>): SavedQuantitySupplier | undefined {
+  const name = String(line.supplier_name || '').trim();
+  if (!name) return undefined;
+  const options: Array<Record<string, unknown>> = Array.isArray(line.supplierOptions) ? line.supplierOptions : [];
+  const selected = options.find((option, index) => option && option.supplier_name === line.supplier_name
+    && `${option.supplier_name}-${index}` === line.selectedSupplierKey);
+  return { id: String(selected?.supplier_id || ''), name };
+}
 type QuantityPrice = {
   resolvedCode: string; brand: string; qty: number; supplier_name: string;
   buy_price: number | null; sell_price: number | null; price_date: string;
   applied_min_quantity?: number | null;
-  supplierOptions?: unknown[];
+  supplierOptions?: Array<{ supplier_id?: string | null; supplier_name: string }>;
   selectedSupplierKey?: string;
 };
 
@@ -24,7 +40,7 @@ export function sameOrderVersion(a: string, b: string) {
   const left = micros(a), right = micros(b);
   return left !== null && right !== null && left === right;
 }
-export function buildQuantityOnlyUpdate(order: Record<string, any>, edits: QuantityEdit[], prices: ReadonlyMap<number, QuantityPrice> = new Map()) {
+export function buildQuantityOnlyUpdate(order: Record<string, any>, edits: QuantityEdit[], prices: ReadonlyMap<number, QuantityPrice | undefined> = new Map()) {
   if (!Array.isArray(order.lines) || !Array.isArray(edits) || !edits.length || edits.length > 200) throw new Error('Invalid quantity changes.');
   const seen = new Set<number>();
   const lines = order.lines.map((line: Record<string, unknown>) => ({ ...line }));
@@ -35,12 +51,17 @@ export function buildQuantityOnlyUpdate(order: Record<string, any>, edits: Quant
     const code = String(line.resolvedCode || line.requestedCode || line.product_code || line.code || '').trim();
     if (code !== edit.code || Number(line.qty) !== edit.previousQty) throw new Error('Order changed elsewhere. Reload before saving quantities.');
     line.qty = edit.qty;
-    const price = prices.get(edit.index);
-    if (price) {
-      if (price.qty !== edit.qty || price.resolvedCode.trim().toUpperCase() !== code.toUpperCase()
-          || !isWahlerBrand(price.brand) || price.buy_price == null || price.sell_price == null
-          || (line.supplier_name && line.supplier_name !== price.supplier_name)) {
-        throw new Error('The Wahler quantity price could not be verified. Review the supplier and quantity before saving.');
+    if (prices.has(edit.index)) {
+      const price = prices.get(edit.index);
+      if (!price || price.qty !== edit.qty || price.resolvedCode.trim().toUpperCase() !== code.toUpperCase()
+          || !isWahlerBrand(price.brand) || price.buy_price == null || price.sell_price == null) {
+        throw new PortalQuantityPriceError(edit.index + 1, code);
+      }
+      const saved = savedQuantitySupplier(line);
+      const chosen = price.supplierOptions?.find((option, index) =>
+        `${option.supplier_name}-${index}` === price.selectedSupplierKey);
+      if (saved && (saved.id ? chosen?.supplier_id !== saved.id : price.supplier_name !== saved.name)) {
+        throw new PortalQuantityPriceError(edit.index + 1, code);
       }
       line.buy_price = price.buy_price;
       if (!line.manual_sell_price) line.sell_price = price.sell_price;
@@ -82,10 +103,9 @@ export async function savePortalQuantities(url: string, key: string, invite: { i
       code: edit.code,
       brand: 'Wahler',
       qty: edit.qty,
-      market_segment: String(quantityOnly.lines[edit.index].market_segment || ''),
+      savedSupplier: savedQuantitySupplier(quantityOnly.lines[edit.index]),
     })));
-    if (prices?.length !== wahlerEdits.length) throw new Error('The Wahler quantity price could not be verified.');
-    update = buildQuantityOnlyUpdate(order, edits, new Map(wahlerEdits.map((edit, index) => [edit.index, prices[index]])));
+    update = buildQuantityOnlyUpdate(order, edits, new Map(wahlerEdits.map((edit, index) => [edit.index, prices?.[index]])));
   }
   const rows = await sendJson<Array<{updated_at:string}>>(buildRestUrl(url,'sales_orders',{...scope,updated_at:`eq.${order.updated_at}`,select:'updated_at'}),{
     method:'PATCH',headers:{...serviceRoleHeaders(key),Prefer:'return=representation'},body:JSON.stringify({...update,updated_at:new Date(Math.max(Date.now(),Date.parse(order.updated_at)+1)).toISOString()})

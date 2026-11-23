@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildQuantityOnlyUpdate, savePortalQuantities, sameOrderVersion } from '../../netlify/functions/_shared/portal-quantity-autosave.mts';
+import { buildQuantityOnlyUpdate, PortalQuantityPriceError, savePortalQuantities, sameOrderVersion } from '../../netlify/functions/_shared/portal-quantity-autosave.mts';
 import { enforcePortalRateLimit } from '../../netlify/functions/_shared/portal-rate-limit.mts';
 
 const original={id:'order',updated_at:'2026-11-14T10:00:00.000+00:00',shipping_cost:0,discount_amount:0,lines:[{resolvedCode:'P550428',qty:60,buy_price:1.25,sell_price:2,notes:'keep',supplier_name:'GNK'},{resolvedCode:'OTHER',qty:2,buy_price:3,sell_price:5,extra:{x:1}}]};
@@ -94,7 +94,8 @@ test('Wahler autosave persists the current whole-line tier without touching othe
     }
     const previous = structuredClone(order);
     await assert.rejects(savePortalQuantities('https://example.test','secret',invite,order.id,order.updated_at,
-      [{index:0,code:sku,previousQty:15,qty:16}], async () => []), /quantity price could not be verified/);
+      [{index:0,code:sku,previousQty:15,qty:16},{...edit,index:1,code:'OTHER',previousQty:2,qty:3}], async () => []),
+      error => error instanceof PortalQuantityPriceError && error.lineNumber === 1 && error.code === sku);
     assert.deepEqual(order,previous);
   } finally { globalThis.fetch = savedFetch; }
 });

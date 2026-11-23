@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { savePortalOrderQuantities } from '../../../infrastructure/api/portalOrderApi';
+import { PortalQuantityPriceUnavailable, savePortalOrderQuantities } from '../../../infrastructure/api/portalOrderApi';
 import type { PortalCredentials, PortalSnapshot } from '../../../types/portalSession';
 import { useInterfaceText } from '../../../i18n/InterfaceText';
+import { useI18n } from '../../../i18n/I18nProvider';
 
 type Order = PortalSnapshot['salesOrders'][number];
 export type QuantityEdit = {index:number;code:string;previousQty:number;qty:number};
@@ -9,6 +10,7 @@ type Props = { order:Order; edits:Record<string,number>; credentials:PortalCrede
 
 export function PortalQuantityAutosave(props:Props) {
   const ui=useInterfaceText();
+  const { locale } = useI18n();
   const latest=useRef(props); latest.current=props;
   const active=useRef(false);
   const [failure,setFailure]=useState('');
@@ -27,11 +29,13 @@ export function PortalQuantityAutosave(props:Props) {
       const order=props.order;
       void savePortalOrderQuantities(props.credentials,{orderId:order.id,updatedAt:order.updated_at!,edits:changes})
         .then(result=>latest.current.onSaved(order,changes,result))
-        .catch(error=>setFailure(error instanceof Error ? error.message : 'Quantity save failed.'))
+        .catch(error=>setFailure(error instanceof PortalQuantityPriceUnavailable && locale === 'tr'
+          ? `${error.lineNumber}. satır (${error.code}) için güncel kademe fiyatı doğrulanamadı.`
+          : error instanceof Error ? error.message : 'Quantity save failed.'))
         .finally(()=>{active.current=false;latest.current.onBusy(false);});
     },2000);
     return ()=>window.clearTimeout(timer);
-  },[props.order.id,props.order.updated_at,editSignature,props.paused,failure]);
+  },[props.order.id,props.order.updated_at,editSignature,props.paused,failure,locale]);
   const pending=props.order.lines?.some((line,index)=>props.edits[`${props.order.id}:${index}`] != null && props.edits[`${props.order.id}:${index}`] !== Number(line.qty));
   useEffect(()=>{ if (!pending && !active.current) return; const handler=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';}; window.addEventListener('beforeunload',handler); return ()=>window.removeEventListener('beforeunload',handler); },[pending]);
   if (pending && !props.order.updated_at) return <span role="alert">{ui('Cannot verify order version. Reload before saving quantities.')}</span>;

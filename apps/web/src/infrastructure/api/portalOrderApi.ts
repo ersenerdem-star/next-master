@@ -92,6 +92,7 @@ export type PortalPreparedLine = {
 
 type PortalOrderResponse = {
   updatedAt?: string;
+  blockedLine?: { number: number; code: string };
   prices?: Array<{index:number;sellPrice:number|null}>;
   salesTotal?: number;
   ok?: boolean;
@@ -127,6 +128,12 @@ type PortalOrderResponse = {
   expiresIn?: number;
   parts?: ExportDownloadPart[];
 };
+
+export class PortalQuantityPriceUnavailable extends Error {
+  constructor(public readonly lineNumber: number, public readonly code: string, message: string) {
+    super(message);
+  }
+}
 
 export async function savePortalOrderQuantities(credentials: PortalCredentials, input: {orderId:string;updatedAt:string;edits:Array<{index:number;code:string;previousQty:number;qty:number}>}) {
   const data = await postPortalOrderJson('/api/portal-order-quantities',{...credentials,...input});
@@ -175,6 +182,11 @@ async function postPortalOrderJson(path: string, payload: Record<string, unknown
   }
   const data = (await response.json().catch(() => ({}))) as PortalOrderResponse;
   if (!response.ok) {
+    const blocked = data.blockedLine;
+    if (path === "/api/portal-order-quantities" && blocked
+      && Number.isSafeInteger(blocked.number) && blocked.number > 0 && typeof blocked.code === "string") {
+      throw new PortalQuantityPriceUnavailable(blocked.number, blocked.code, data.error || "Quantity price unavailable.");
+    }
     throw new Error(
       data.error ||
         (response.status === 502
