@@ -150,3 +150,14 @@ test('evidence operation and terminal failures preserve action kind and never in
  assert.equal((await invoke('review',{receipt:{...failed,errorCode:null}})).status,503);
  assert.equal((await invoke('review',{body:{expectedError:'A'.repeat(101)}})).status,400);
 });
+
+test('overlap approval accepts only exact source and pointer CAS and never reports publication',async()=>{
+ const body={action:'approve_overlap',reason:'cross_brand_overlap_accepted',expectedError:'CROSS_BRAND_BULK_OVERLAP',expectedAudit:{checked:true},expectedSourceSha256:'a'.repeat(64),expectedMatchSha256:'b'.repeat(64),expectedRowsSha256:'c'.repeat(64),expectedPreviousPublicationId:null};
+ const ok=await invoke('review',{body,receipt:{action:'approve_overlap',status:'overlap_approved',reviewRevision:1}});
+ assert.equal(ok.status,200);assert.equal(ok.data.status,'overlap_approved');assert.equal(ok.data.published,false);
+ for(const patch of [{expectedSourceSha256:'bad'},{expectedMatchSha256:'bad'},{expectedRowsSha256:'bad'},{expectedError:'OTHER_ERROR'},{reason:'comparison_repaired'},{expectedPreviousPublicationId:'bad'}]){
+  const denied=await invoke('review',{body:{...body,...patch}});assert.equal(denied.status,400);
+ }
+ const forged=await invoke('review',{body,receipt:{action:'reject',status:'overlap_approved',reviewRevision:1}});assert.equal(forged.status,503);
+ const legacy=await invoke('evidence');assert.equal(legacy.data.canApproveOverlap,false);assert.equal(legacy.data.overlapApproved,false);assert.equal(legacy.data.overlapApprovalStale,false);assert.equal(legacy.data.sourceSha256,null);
+});

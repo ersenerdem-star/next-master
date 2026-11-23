@@ -7,6 +7,7 @@ import {actionScope,parseReleaseActionEvidence,prepareDurableAction,publicationC
   type ActionReceipt,type DurableAction,type ReleaseActionEvidence} from '../../apps/web/src/shared/supplierReleaseActions.ts';
 import {createSupplierReleaseActionsClient,SupplierReleaseActionError} from '../../apps/web/src/infrastructure/api/supplierReleaseActionsApi.ts';
 import {SupplierReleaseActionView} from '../../apps/web/src/modules/admin/SupplierReleaseActionPanel.tsx';
+import {parseReleaseAudit} from '../../apps/web/src/shared/supplierReleaseReview.ts';
 
 const id=(n:number)=>`10000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
 const origin='https://portal.next-master.com';
@@ -184,7 +185,7 @@ function render(patch:Record<string,unknown>={}) {
   // automatic runtime for existing shared components such as Button.
   const previous=(globalThis as any).React;(globalThis as any).React=React;
   try{return renderToStaticMarkup(React.createElement(SupplierReleaseActionView,{tr:true,evidence,records:{review:null,publish:null},error:null,
-    loading:false,busy:false,confirmed:false,reason:'comparison_repaired',onConfirm:()=>{},onReason:()=>{},onRefresh:()=>{},onReview:()=>{},onPublish:()=>{},onRetry:()=>{},...patch} as any));
+    loading:false,busy:false,confirmed:false,reason:'comparison_repaired',onConfirm:()=>{},onReason:()=>{},onRefresh:()=>{},onReview:()=>{},onApproveOverlap:()=>{},onPublish:()=>{},onRetry:()=>{},...patch} as any));
   }finally{(globalThis as any).React=previous;}
 }
 
@@ -236,4 +237,64 @@ test('initial review uses neutral completion language and remote operations rema
   const html=render({records:{review:null,publish:r}});
   const details=html.match(/<details>[\s\S]*?<\/details>/g)||[];
   assert.ok(details.some(text=>text.includes(id(6))));assert.ok(details.some(text=>text.includes(id(31))));
+});
+
+test('only explicit server-authorized overlap review offers approval, which stays separate from publication',()=>{
+  const overlap={...held,errorCode:'CROSS_BRAND_BULK_OVERLAP',canApproveOverlap:true,sourceSha256:'a'.repeat(64),overlapMatchFingerprint:'b'.repeat(64),overlapRowsFingerprint:'c'.repeat(64),overlapApproved:false};
+  const parsed=parseReleaseActionEvidence(overlap,overlap.releaseId);
+  const html=render({evidence:parsed});
+  assert.match(html,/Bu dosyadaki marka örtüşmesini onayla/);
+  assert.match(html,/fiyatlar henüz yayınlanmaz/);
+  const publishIndex=html.indexOf('Onayla ve yayınla');
+  assert.match(html.slice(html.lastIndexOf('<button',publishIndex),publishIndex),/disabled/);
+  assert.doesNotMatch(render({evidence:{...overlap,canApproveOverlap:false}}),/Bu dosyadaki marka örtüşmesini onayla/);
+  assert.throws(()=>parseReleaseActionEvidence({...overlap,sourceSha256:null},overlap.releaseId),/ACTION_EVIDENCE_INVALID/);
+  assert.throws(()=>parseReleaseActionEvidence({...overlap,overlapMatchFingerprint:null},overlap.releaseId),/ACTION_EVIDENCE_INVALID/);
+  assert.throws(()=>parseReleaseActionEvidence({...overlap,overlapRowsFingerprint:null},overlap.releaseId),/ACTION_EVIDENCE_INVALID/);
+  assert.throws(()=>parseReleaseActionEvidence({...overlap,overlapRowsFingerprint:'Z'.repeat(64)},overlap.releaseId),/ACTION_EVIDENCE_INVALID/);
+  assert.throws(()=>parseReleaseActionEvidence({...overlap,errorCode:'OTHER'},overlap.releaseId),/ACTION_EVIDENCE_INVALID/);
+});
+
+test('approval command binds the exact audit, source, revision and publication pointer; stale state fails closed',()=>{
+  const overlap={...held,errorCode:'CROSS_BRAND_BULK_OVERLAP',canApproveOverlap:true,sourceSha256:'a'.repeat(64),overlapMatchFingerprint:'b'.repeat(64),overlapRowsFingerprint:'c'.repeat(64),overlapApproved:false};
+  const command=reviewCommand(overlap,'cross_brand_overlap_accepted',id(70));
+  assert.equal(command.action,'approve_overlap');assert.equal(command.expectedSourceSha256,'a'.repeat(64));
+  assert.equal(command.expectedMatchSha256,'b'.repeat(64));assert.equal(command.expectedRowsSha256,'c'.repeat(64));
+  assert.equal(command.expectedPreviousPublicationId,id(6));assert.equal(command.expectedRevision,overlap.reviewRevision);
+  assert.deepEqual(command.expectedAudit,overlap.brandIdentityAudit);
+  const s=storage(),scope=actionScope(overlap,origin),saved=prepareDurableAction(s,scope,'review',command);
+  assert.deepEqual(readDurableAction(s,scope,'review')?.command,command);
+  assert.throws(()=>reviewCommand({...overlap,canApproveOverlap:false},'cross_brand_overlap_accepted',id(71)),/ACTION_NOT_READY/);
+  assert.throws(()=>reviewCommand({...overlap,sourceSha256:null},'cross_brand_overlap_accepted',id(71)),/ACTION_NOT_READY/);
+  assert.throws(()=>reviewCommand({...overlap,overlapMatchFingerprint:null},'cross_brand_overlap_accepted',id(71)),/ACTION_NOT_READY/);
+  assert.throws(()=>reviewCommand({...overlap,overlapRowsFingerprint:null},'cross_brand_overlap_accepted',id(71)),/ACTION_NOT_READY/);
+  assert.notEqual(publicationConfirmationKey(overlap),publicationConfirmationKey({...overlap,sourceSha256:'b'.repeat(64)}));
+  assert.notEqual(publicationConfirmationKey(overlap),publicationConfirmationKey({...overlap,overlapMatchFingerprint:'d'.repeat(64)}));
+  assert.notEqual(publicationConfirmationKey(overlap),publicationConfirmationKey({...overlap,overlapRowsFingerprint:'e'.repeat(64)}));
+  const receipt:ActionReceipt={releaseId:overlap.releaseId,decisionId:id(70),action:'approve_overlap',status:'overlap_approved',reviewRevision:3,published:false,replayed:false};
+  const updated=updateDurableAction(s,saved,{receipt});assert.equal(updated.phase,'completed');assert.equal(updated.receipt?.published,false);
+  assert.equal(releasePublicationReady({...overlap,overlapApproved:true,canPublish:true,status:'validated',errorCode:null}),false);
+});
+
+test('release cards display an overlap approval only with complete explicit server evidence',()=>{
+ const audit={policy:'cross-brand-v3',checked:true,review_required:false,original_review_required:true,superadmin_overlap_approved:true,
+  selected_brand_id:id(5),distinct_incoming_codes:100,historical_brands:[],brands:[{brand_id:id(8),brand_name:'Other',matching_codes:30,sample_codes:[]}]};
+ assert.equal(parseReleaseAudit(audit,id(5))?.reviewRequired,false);
+ assert.equal(parseReleaseAudit(audit,id(5))?.overlapApproved,true);
+ for(const patch of [{original_review_required:false},{superadmin_overlap_approved:false},{review_required:true}])
+  assert.equal(parseReleaseAudit({...audit,...patch},id(5))?.reviewRequired,true);
+});
+
+test('stale approval blocks publication and approval until current checks are refreshed',()=>{
+ const stale={...evidence,status:'validated',errorCode:null,canPublish:true,canReview:true,overlapApproved:true,overlapApprovalStale:true};
+ assert.equal(releasePublicationReady(stale),false);
+ assert.notEqual(publicationConfirmationKey(stale),publicationConfirmationKey({...stale,overlapApprovalStale:false}));
+ const html=render({evidence:stale,confirmed:true});
+ assert.match(html,/onayı güncelliğini yitirdi/);assert.match(html,/Kontrolü tamamla/);assert.match(html,/yeniden onaylayın/);
+ const index=html.indexOf('Onayla ve yayınla');assert.match(html.slice(html.lastIndexOf('<button',index),index),/disabled/);
+ const blocked={...held,errorCode:'CROSS_BRAND_BULK_OVERLAP',canApproveOverlap:true,overlapApprovalStale:true,sourceSha256:'a'.repeat(64),overlapMatchFingerprint:'b'.repeat(64),overlapRowsFingerprint:'c'.repeat(64)};
+ assert.doesNotMatch(render({evidence:blocked}),/Bu dosyadaki marka örtüşmesini onayla/);
+ assert.throws(()=>reviewCommand(blocked,'cross_brand_overlap_accepted',id(73)),/ACTION_NOT_READY/);
+ assert.throws(()=>parseReleaseActionEvidence({...stale,overlapApprovalStale:'yes'},stale.releaseId),/ACTION_EVIDENCE_INVALID/);
+ assert.doesNotThrow(()=>parseReleaseActionEvidence(evidence,evidence.releaseId));
 });

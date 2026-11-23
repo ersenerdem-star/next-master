@@ -36,14 +36,19 @@ export async function readSupplierReleaseActionBody(req:Request,kind:'review'|'p
   if(bytes>BODY_LIMIT){await reader.cancel();throw new ActionError(413,'ACTION_INPUT_TOO_LARGE');}chunks.push(value);
  }}finally{reader.releaseLock();}
  let body:unknown;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new ActionError(400,'ACTION_INPUT_INVALID');}
- const keys=kind==='review'?['releaseId','decisionId','action','reason','expectedRevision','expectedStatus','expectedError','expectedAudit']
+ const reviewKeys=['releaseId','decisionId','action','reason','expectedRevision','expectedStatus','expectedError','expectedAudit'];
+ const keys=kind==='review'?(record(body)&&body.action==='approve_overlap'?[...reviewKeys,'expectedSourceSha256','expectedMatchSha256','expectedRowsSha256','expectedPreviousPublicationId']:reviewKeys)
   :['releaseId','decisionId','expectedReviewRevision','expectedPreviousPublicationId'];
  if(!record(body)||!exactKeys(body,keys)||!supplierUuid(body.releaseId)||!supplierUuid(body.decisionId))
   throw new ActionError(400,'ACTION_INPUT_INVALID');
  if(kind==='review'){
   if(!count(body.expectedRevision)||typeof body.expectedStatus!=='string'||!['staged','validated','superseded'].includes(body.expectedStatus)
    ||!code(body.expectedError)||typeof body.expectedError==='string'&&body.expectedError.length>100||!boundedAudit(body.expectedAudit)
-   ||!(body.action==='recheck'&&body.reason==='comparison_repaired'||body.action==='reject'&&['wrong_brand_file','wrong_source_file'].includes(String(body.reason))))
+   ||!(body.action==='recheck'&&body.reason==='comparison_repaired'||body.action==='reject'&&['wrong_brand_file','wrong_source_file'].includes(String(body.reason))
+    ||body.action==='approve_overlap'&&body.reason==='cross_brand_overlap_accepted'&&body.expectedError==='CROSS_BRAND_BULK_OVERLAP'
+      &&typeof body.expectedSourceSha256==='string'&&/^[a-f0-9]{64}$/.test(body.expectedSourceSha256)
+      &&typeof body.expectedMatchSha256==='string'&&/^[a-f0-9]{64}$/.test(body.expectedMatchSha256)
+      &&typeof body.expectedRowsSha256==='string'&&/^[a-f0-9]{64}$/.test(body.expectedRowsSha256)&&nullableUuid(body.expectedPreviousPublicationId)))
    throw new ActionError(400,'ACTION_INPUT_INVALID');
  }else if(!count(body.expectedReviewRevision)||!nullableUuid(body.expectedPreviousPublicationId))throw new ActionError(400,'ACTION_INPUT_INVALID');
  return body;
@@ -51,16 +56,17 @@ export async function readSupplierReleaseActionBody(req:Request,kind:'review'|'p
 
 function safeReceipt(value:unknown,releaseId:string,decisionId:string):RecordValue{
  if(!record(value)||value.releaseId!==releaseId||value.decisionId!==decisionId||typeof value.replayed!=='boolean'
-  ||typeof value.published!=='boolean'||!['queued','running','rechecked_clear','review_required','rejected','published','failed'].includes(String(value.status)))
+  ||typeof value.published!=='boolean'||!['queued','running','rechecked_clear','overlap_approved','review_required','rejected','published','failed'].includes(String(value.status)))
   throw Error('ACTION_RECEIPT_INVALID');
  if(value.status==='published'){
   if(value.published!==true||!supplierUuid(value.publicationId)||!count(value.version)||value.version<1
    ||!count(value.reviewRevision)||!nullableUuid(value.expectedPreviousPublicationId)||typeof value.isCurrent!=='boolean')throw Error('ACTION_RECEIPT_INVALID');
  }else if(value.published!==false)throw Error('ACTION_RECEIPT_INVALID');
- if(value.action!==undefined&&!['recheck','reject','publish'].includes(String(value.action)))throw Error('ACTION_RECEIPT_INVALID');
+ if(value.action!==undefined&&!['recheck','reject','approve_overlap','publish'].includes(String(value.action)))throw Error('ACTION_RECEIPT_INVALID');
  if(value.status==='failed'&&typeof value.errorCode!=='string')throw Error('ACTION_RECEIPT_INVALID');
- if(['queued','running'].includes(String(value.status))&&!['recheck','reject','publish'].includes(String(value.action)))throw Error('ACTION_RECEIPT_INVALID');
- if(['rechecked_clear','rejected'].includes(String(value.status))&&(!count(value.reviewRevision)||!['recheck','reject'].includes(String(value.action))))throw Error('ACTION_RECEIPT_INVALID');
+ if(['queued','running'].includes(String(value.status))&&!['recheck','reject','approve_overlap','publish'].includes(String(value.action)))throw Error('ACTION_RECEIPT_INVALID');
+ if(['rechecked_clear','rejected','overlap_approved'].includes(String(value.status))&&(!count(value.reviewRevision)||!['recheck','reject','approve_overlap'].includes(String(value.action))))throw Error('ACTION_RECEIPT_INVALID');
+ if(value.status==='overlap_approved'&&value.action!=='approve_overlap')throw Error('ACTION_RECEIPT_INVALID');
  if(value.reviewRevision!==undefined&&!count(value.reviewRevision)||value.errorCode!==undefined&&!code(value.errorCode))throw Error('ACTION_RECEIPT_INVALID');
  const result:RecordValue={releaseId,decisionId,status:value.status,published:value.published,replayed:value.replayed};
  for(const key of ['action','reviewRevision','publicationId','version','expectedPreviousPublicationId','isCurrent','errorCode'])if(value[key]!==undefined)result[key]=value[key];
@@ -70,8 +76,8 @@ function safeOperation(value:unknown,releaseId:string,kind:'review'|'publish'){
  if(value===null)return null;
  if(!record(value)||!supplierUuid(value.decisionId)||!['queued','running','completed','failed'].includes(String(value.status))||!code(value.errorCode))throw Error('ACTION_EVIDENCE_INVALID');
  const receipt=value.receipt===null?null:safeReceipt(value.receipt,releaseId,value.decisionId);
- if(receipt&&(kind==='review'&&(receipt.published!==false||!['recheck','reject'].includes(String(receipt.action)))
-  ||kind==='publish'&&(['rechecked_clear','rejected'].includes(String(receipt.status))||receipt.action!==undefined&&receipt.action!=='publish')))
+ if(receipt&&(kind==='review'&&(receipt.published!==false||!['recheck','reject','approve_overlap'].includes(String(receipt.action)))
+  ||kind==='publish'&&(['rechecked_clear','overlap_approved','rejected'].includes(String(receipt.status))||receipt.action!==undefined&&receipt.action!=='publish')))
   throw Error('ACTION_EVIDENCE_INVALID');
  if(value.status==='completed'&&(!receipt||['queued','running','failed'].includes(String(receipt.status))))throw Error('ACTION_EVIDENCE_INVALID');
  if(value.status==='failed'&&typeof value.errorCode!=='string')throw Error('ACTION_EVIDENCE_INVALID');
@@ -82,6 +88,10 @@ export function safeSupplierReleaseEvidence(value:unknown,releaseId:string,calle
   ||![value.supplierId,value.brandId].every(supplierUuid)||!['supplier','brand','mode','status'].every(k=>typeof value[k]==='string'&&String(value[k]).length>0&&String(value[k]).length<=240)
   ||!['reviewRevision','totalRows','processedRows','acceptedRows','rejectedRows','warningRows','conflictRows'].every(k=>count(value[k]))
   ||!['sourceVerified','isCurrent','canReview','canPublish'].every(k=>typeof value[k]==='boolean')||!code(value.errorCode)||!boundedAudit(value.brandIdentityAudit)
+  ||!['canApproveOverlap','overlapApproved','overlapApprovalStale'].every(k=>value[k]===undefined||typeof value[k]==='boolean')
+  ||!(value.sourceSha256===undefined||value.sourceSha256===null||typeof value.sourceSha256==='string'&&/^[a-f0-9]{64}$/.test(value.sourceSha256))
+  ||!(value.overlapMatchFingerprint===undefined||value.overlapMatchFingerprint===null||typeof value.overlapMatchFingerprint==='string'&&/^[a-f0-9]{64}$/.test(value.overlapMatchFingerprint))
+  ||!(value.overlapRowsFingerprint===undefined||value.overlapRowsFingerprint===null||typeof value.overlapRowsFingerprint==='string'&&/^[a-f0-9]{64}$/.test(value.overlapRowsFingerprint))
   ||!nullableUuid(value.currentPublicationId)||!nullableUuid(value.currentReleaseId)||!(value.currentPublicationVersion===null||count(value.currentPublicationVersion)))throw Error('ACTION_EVIDENCE_INVALID');
  const publicationBlocker=value.publicationBlocker??null;
  if(publicationBlocker!==null&&(typeof publicationBlocker!=='string'||!['SOURCE_COMPATIBILITY_REQUIRED','LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'].includes(publicationBlocker))
@@ -89,6 +99,7 @@ export function safeSupplierReleaseEvidence(value:unknown,releaseId:string,calle
  const result:RecordValue={publicationBlocker};
  for(const key of ['actorId','organizationId','releaseId','supplierId','brandId','supplier','brand','mode','status','reviewRevision','errorCode','brandIdentityAudit',
   'totalRows','processedRows','acceptedRows','rejectedRows','warningRows','conflictRows','sourceVerified','currentPublicationId','currentReleaseId','currentPublicationVersion','isCurrent','canReview','canPublish'])result[key]=clone(value[key]);
+ result.sourceSha256=value.sourceSha256??null;result.canApproveOverlap=value.canApproveOverlap===true;result.overlapApproved=value.overlapApproved===true;result.overlapApprovalStale=value.overlapApprovalStale===true;result.overlapMatchFingerprint=value.overlapMatchFingerprint??null;result.overlapRowsFingerprint=value.overlapRowsFingerprint??null;
  return {...result,reviewOperation:safeOperation(value.reviewOperation,releaseId,'review'),publishOperation:safeOperation(value.publishOperation,releaseId,'publish')};
 }
 
@@ -136,8 +147,8 @@ export async function handleSupplierReleaseAction(req:Request,kind:Kind){
   if(kind==='evidence')return json(safeSupplierReleaseEvidence(data,releaseId,caller));
   const receipt=safeReceipt(data,releaseId,decisionId!);
   if(kind==='review'&&(receipt.action!==body!.action||receipt.published!==false
-    ||!['queued','running','rechecked_clear','review_required','rejected','failed'].includes(String(receipt.status))))throw Error('ACTION_RECEIPT_INVALID');
-  if(kind==='publish'&&(['rechecked_clear','rejected'].includes(String(receipt.status))
+    ||!['queued','running','rechecked_clear','overlap_approved','review_required','rejected','failed'].includes(String(receipt.status))))throw Error('ACTION_RECEIPT_INVALID');
+  if(kind==='publish'&&(['rechecked_clear','overlap_approved','rejected'].includes(String(receipt.status))
     ||receipt.action!==undefined&&receipt.action!=='publish'))throw Error('ACTION_RECEIPT_INVALID');
   if(receipt.status==='failed')return json({error:'This action failed. Refresh its evidence before deciding again.',code:receipt.errorCode||'ACTION_FAILED',outcome:'not_submitted',releaseId,decisionId},409);
   return json(receipt,['queued','running'].includes(String(receipt.status))?202:200);

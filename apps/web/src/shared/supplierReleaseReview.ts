@@ -3,6 +3,7 @@ import {SUPPLIER_PROCESSING_INTERRUPTED} from './supplierUploadProtocol';
 export type ReleaseAudit = {
   checked: boolean; reviewRequired: boolean; totalCodes: number;
   reviewThresholdPercent?: number;
+  overlapApproved?: boolean;
   historicalBrands?: ReleaseAudit['brands'];
   brands: {id: string; name: string; matches: number; percent: number; samples: string[]}[];
 };
@@ -72,7 +73,8 @@ export function parseReleaseAudit(value:unknown,brandId:string): ReleaseAudit | 
   const threshold=percentRule && (a.ratio_threshold_percent===50 || a.owner_approved_exception==='groupauto-borgwarner-20261120') && typeof a.selected_brand_name==='string'
     && borgwarnerBrands.includes(a.selected_brand_name.trim().toUpperCase()) ? 50 : 5;
   const detected=n===0 || brands.some(b=>percentRule ? b.matches*100>n*threshold : b.matches>=5000 || (b.matches>=100 && b.matches*100>=n*80));
-  return {checked:true,reviewRequired:a.review_required || detected,totalCodes:n,brands,...(percentRule ? {reviewThresholdPercent:threshold} : {}),...(historicalBrands ? {historicalBrands} : {})};
+  const overlapApproved=a.superadmin_overlap_approved===true&&a.original_review_required===true&&a.review_required===false;
+  return {checked:true,reviewRequired:a.review_required || (detected&&!overlapApproved),totalCodes:n,brands,...(overlapApproved?{overlapApproved:true}:{}),...(percentRule ? {reviewThresholdPercent:threshold} : {}),...(historicalBrands ? {historicalBrands} : {})};
 }
 export function releaseReviewState(row:ReleaseReviewRow) {
   if (row.status==='cancelled' && row.errorCode==='REVIEW_REJECTED') return 'rejected';

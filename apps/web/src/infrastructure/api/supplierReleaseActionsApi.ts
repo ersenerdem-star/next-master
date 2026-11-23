@@ -59,7 +59,7 @@ export function createSupplierReleaseActionsClient(deps:ClientDependencies) {
       try{
         const receipt=parseActionReceipt(data,action.scope.releaseId,action.command.decisionId);
         if(action.kind==='review'&&(receipt.status==='published'||receipt.action!==('action' in action.command?action.command.action:undefined)))throw new Error('ACTION_RECEIPT_INVALID');
-        if(action.kind==='publish'&&(['rechecked_clear','rejected'].includes(receipt.status)
+        if(action.kind==='publish'&&(['rechecked_clear','overlap_approved','rejected'].includes(receipt.status)
           ||['queued','running'].includes(receipt.status)&&receipt.action!=='publish'))throw new Error('ACTION_RECEIPT_INVALID');
         return receipt;
       }

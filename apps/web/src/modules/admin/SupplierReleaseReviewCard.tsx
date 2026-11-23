@@ -46,6 +46,7 @@ export function SupplierReleaseReviewCard({rows,tr,onDetails,onIssues,actionsEna
       </div> : null}
       {!row.audit?.checked && state!=='processing_interrupted' && state!=='previous_publication' ? <span>{tr?'Marka karşılaştırması henüz doğrulanmadı.':'Brand comparison has not yet been verified.'}</span> : null}
       {row.errorCode ? <strong className="error-text">{row.errorCode}</strong> : null}
+      {row.audit?.overlapApproved?<p role="status">{tr?'Marka örtüşmesi bu dosya için süper yönetici tarafından onaylandı.':'Brand overlap was approved by a super administrator for this file.'}</p>:null}
       {row.errorMessage || visibleBrands.length || row.audit?.historicalBrands?.length ? <details className="supplier-release-technical-details">
         <summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary>
         {row.errorMessage ? <span className="operations-subtle">{row.errorMessage}</span> : null}

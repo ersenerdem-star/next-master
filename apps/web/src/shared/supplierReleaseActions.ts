@@ -1,13 +1,14 @@
-export type ReviewAction = 'recheck' | 'reject';
-export type ReviewReason = 'comparison_repaired' | 'wrong_brand_file' | 'wrong_source_file';
+export type ReviewAction = 'recheck' | 'reject' | 'approve_overlap';
+export type ReviewReason = 'comparison_repaired' | 'wrong_brand_file' | 'wrong_source_file' | 'cross_brand_overlap_accepted';
 export type ReviewCommand = {
   releaseId:string; decisionId:string; action:ReviewAction; reason:ReviewReason;
   expectedRevision:number; expectedStatus:string; expectedError:string|null; expectedAudit:Record<string,unknown>|null;
+  expectedSourceSha256?:string; expectedMatchSha256?:string; expectedRowsSha256?:string; expectedPreviousPublicationId?:string|null;
 };
 export type PublishCommand = {releaseId:string; decisionId:string; expectedReviewRevision:number; expectedPreviousPublicationId:string|null};
 export type ActionKind = 'review' | 'publish';
 export type ActionReceipt = {
-  releaseId:string; decisionId:string; status:'queued'|'running'|'rechecked_clear'|'review_required'|'rejected'|'published'|'failed';
+  releaseId:string; decisionId:string; status:'queued'|'running'|'rechecked_clear'|'overlap_approved'|'review_required'|'rejected'|'published'|'failed';
   published:boolean; replayed:boolean; action?:ReviewAction|'publish'; reviewRevision?:number;
   publicationId?:string; version?:number; expectedPreviousPublicationId?:string|null; isCurrent?:boolean; errorCode?:string|null;
 };
@@ -21,6 +22,7 @@ export type ReleaseActionEvidence = {
   sourceVerified:boolean; currentPublicationId:string|null; currentReleaseId:string|null; currentPublicationVersion:number|null;
   isCurrent:boolean; canReview:boolean; canPublish:boolean; reviewOperation:ReleaseOperation|null; publishOperation:ReleaseOperation|null;
   publicationBlocker?:'SOURCE_COMPATIBILITY_REQUIRED'|'LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'|null;
+  canApproveOverlap?:boolean; overlapApproved?:boolean; overlapApprovalStale?:boolean; sourceSha256?:string|null; overlapMatchFingerprint?:string|null; overlapRowsFingerprint?:string|null;
 };
 export type ActionScope = {origin:string; actorId:string; organizationId:string; releaseId:string};
 export type DurableAction = {
@@ -48,13 +50,14 @@ export function releaseActionsTargetEnabled(config:{enabled?:string;productionEn
 export function parseActionReceipt(value:unknown, releaseId:string, decisionId:string):ActionReceipt {
   const r=record(value);
   if(!r||r.releaseId!==releaseId||r.decisionId!==decisionId||typeof r.published!=='boolean'||typeof r.replayed!=='boolean'
-    ||!['queued','running','rechecked_clear','review_required','rejected','published','failed'].includes(String(r.status)))throw new Error('ACTION_RECEIPT_INVALID');
+    ||!['queued','running','rechecked_clear','overlap_approved','review_required','rejected','published','failed'].includes(String(r.status)))throw new Error('ACTION_RECEIPT_INVALID');
   if(r.status==='published'&&(!r.published||!uuid(r.publicationId)||!count(r.version)||r.version<1||!count(r.reviewRevision)
     ||!nullableUuid(r.expectedPreviousPublicationId)||typeof r.isCurrent!=='boolean'))throw new Error('ACTION_RECEIPT_INVALID');
   if(r.status!=='published'&&r.published!==false)throw new Error('ACTION_RECEIPT_INVALID');
   if(r.reviewRevision!==undefined&&!count(r.reviewRevision)||r.errorCode!==undefined&&!code(r.errorCode))throw new Error('ACTION_RECEIPT_INVALID');
-  if(r.action!==undefined&&!['recheck','reject','publish'].includes(String(r.action)))throw new Error('ACTION_RECEIPT_INVALID');
-  if(['queued','running'].includes(String(r.status))&&!['recheck','reject','publish'].includes(String(r.action)))throw new Error('ACTION_RECEIPT_INVALID');
+  if(r.action!==undefined&&!['recheck','reject','approve_overlap','publish'].includes(String(r.action)))throw new Error('ACTION_RECEIPT_INVALID');
+  if(['queued','running'].includes(String(r.status))&&!['recheck','reject','approve_overlap','publish'].includes(String(r.action)))throw new Error('ACTION_RECEIPT_INVALID');
+  if(r.status==='overlap_approved'&&(!count(r.reviewRevision)||r.action!=='approve_overlap'))throw new Error('ACTION_RECEIPT_INVALID');
   if(['rechecked_clear','rejected'].includes(String(r.status))&&(!count(r.reviewRevision)||!['recheck','reject'].includes(String(r.action))))throw new Error('ACTION_RECEIPT_INVALID');
   if(r.status==='failed'&&typeof r.errorCode!=='string')throw new Error('ACTION_RECEIPT_INVALID');
   // Persist only the decision receipt; never copy arbitrary server fields.
@@ -83,20 +86,25 @@ export function parseReleaseActionEvidence(value:unknown,releaseId:string):Relea
     ||!code(e.errorCode)||!audit(e.brandIdentityAudit)||!nullableUuid(e.currentPublicationId)||!nullableUuid(e.currentReleaseId)
     ||!(e.currentPublicationVersion===null||count(e.currentPublicationVersion)))throw new Error('ACTION_EVIDENCE_INVALID');
   const publicationBlocker=e.publicationBlocker??null;
+  if((e.canApproveOverlap!==undefined&&typeof e.canApproveOverlap!=='boolean')||(e.overlapApproved!==undefined&&typeof e.overlapApproved!=='boolean')
+    ||(e.overlapApprovalStale!==undefined&&typeof e.overlapApprovalStale!=='boolean')
+    ||[e.sourceSha256,e.overlapMatchFingerprint,e.overlapRowsFingerprint].some(v=>v!==undefined&&v!==null&&(typeof v!=='string'||!/^[a-f0-9]{64}$/.test(v))))throw new Error('ACTION_EVIDENCE_INVALID');
+  if(e.canApproveOverlap===true&&(!e.canReview||e.errorCode!=='CROSS_BRAND_BULK_OVERLAP'||!e.sourceSha256||!e.overlapMatchFingerprint||!e.overlapRowsFingerprint))throw new Error('ACTION_EVIDENCE_INVALID');
   if(publicationBlocker!==null&&(typeof publicationBlocker!=='string'||!['SOURCE_COMPATIBILITY_REQUIRED','LEGACY_COMMERCIAL_FIELDS_UNSUPPORTED'].includes(publicationBlocker))
     ||publicationBlocker!==null&&e.canPublish!==false)throw new Error('ACTION_EVIDENCE_INVALID');
   return {...clone(e),publicationBlocker,reviewOperation:parseOperation(e.reviewOperation,releaseId),publishOperation:parseOperation(e.publishOperation,releaseId)} as ReleaseActionEvidence;
 }
 
 export function releasePublicationReady(e:ReleaseActionEvidence|null) {
-  return Boolean(e&&e.canPublish===true&&!e.publicationBlocker&&e.sourceVerified===true&&e.status==='validated'&&e.mode==='replace'
+  return Boolean(e&&e.canPublish===true&&!e.publicationBlocker&&!e.overlapApprovalStale&&e.sourceVerified===true&&e.status==='validated'&&e.mode==='replace'
     &&e.errorCode===null&&e.totalRows>0&&e.processedRows===e.totalRows&&e.acceptedRows===e.totalRows&&e.rejectedRows===0&&e.conflictRows===0
     &&e.brandIdentityAudit?.checked===true&&e.brandIdentityAudit?.review_required===false
     &&![e.reviewOperation,e.publishOperation].some(op=>op&&['queued','running'].includes(op.status)));
 }
 export function publicationConfirmationKey(e:ReleaseActionEvidence) {
   return JSON.stringify([e.actorId,e.organizationId,e.releaseId,e.supplierId,e.brandId,e.supplier,e.brand,e.mode,e.totalRows,
-    e.reviewRevision,e.status,e.errorCode,e.brandIdentityAudit,e.currentPublicationId,e.currentPublicationVersion,e.canPublish,e.sourceVerified,e.publicationBlocker??null]);
+    e.reviewRevision,e.status,e.errorCode,e.brandIdentityAudit,e.currentPublicationId,e.currentPublicationVersion,e.canPublish,e.sourceVerified,e.publicationBlocker??null,
+    e.canApproveOverlap??false,e.overlapApproved??false,e.overlapApprovalStale??false,e.sourceSha256??null,e.overlapMatchFingerprint??null,e.overlapRowsFingerprint??null]);
 }
 export function actionScope(e:ReleaseActionEvidence,origin:string):ActionScope {
   if(!['https://portal.next-master.com','https://next-master-v3-staging-20261006.netlify.app'].includes(origin))throw new Error('ACTION_SCOPE_INVALID');
@@ -108,11 +116,12 @@ function receiptKey(scope:ActionScope,kind:ActionKind) {
 function validCommand(v:unknown,kind:ActionKind,releaseId:string):v is ReviewCommand|PublishCommand {
   const r=record(v);if(!r||r.releaseId!==releaseId||!uuid(r.decisionId))return false;
   const keys=kind==='publish'?['releaseId','decisionId','expectedReviewRevision','expectedPreviousPublicationId']
-    :['releaseId','decisionId','action','reason','expectedRevision','expectedStatus','expectedError','expectedAudit'];
+    :['releaseId','decisionId','action','reason','expectedRevision','expectedStatus','expectedError','expectedAudit',...(r.action==='approve_overlap'?['expectedSourceSha256','expectedMatchSha256','expectedRowsSha256','expectedPreviousPublicationId']:[])];
   if(Object.keys(r).length!==keys.length||Object.keys(r).some(k=>!keys.includes(k)))return false;
   if(kind==='publish')return count(r.expectedReviewRevision)&&nullableUuid(r.expectedPreviousPublicationId);
   return count(r.expectedRevision)&&typeof r.expectedStatus==='string'&&r.expectedStatus.length<=80&&code(r.expectedError)&&audit(r.expectedAudit)
-    &&(r.action==='recheck'&&r.reason==='comparison_repaired'||r.action==='reject'&&['wrong_brand_file','wrong_source_file'].includes(String(r.reason)));
+    &&(r.action==='recheck'&&r.reason==='comparison_repaired'||r.action==='reject'&&['wrong_brand_file','wrong_source_file'].includes(String(r.reason))
+      ||r.action==='approve_overlap'&&r.reason==='cross_brand_overlap_accepted'&&[r.expectedSourceSha256,r.expectedMatchSha256,r.expectedRowsSha256].every(v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v))&&nullableUuid(r.expectedPreviousPublicationId));
 }
 export function readDurableAction(storage:ReceiptStorage,scope:ActionScope,kind:ActionKind):DurableAction|null {
   const raw=storage.getItem(receiptKey(scope,kind));if(raw===null)return null;
@@ -159,8 +168,10 @@ export function reconcileDurableAction(storage:ReceiptStorage,r:DurableAction,e:
   return r;
 }
 export function reviewCommand(e:ReleaseActionEvidence,reason:ReviewReason,decisionId:string):ReviewCommand {
-  return {releaseId:e.releaseId,decisionId,action:reason==='comparison_repaired'?'recheck':'reject',reason,
-    expectedRevision:e.reviewRevision,expectedStatus:e.status,expectedError:e.errorCode,expectedAudit:clone(e.brandIdentityAudit)};
+  if(reason==='cross_brand_overlap_accepted'&&(!e.canApproveOverlap||e.overlapApprovalStale||!e.sourceSha256||!e.overlapMatchFingerprint||!e.overlapRowsFingerprint||e.errorCode!=='CROSS_BRAND_BULK_OVERLAP'))throw new Error('ACTION_NOT_READY');
+  return {releaseId:e.releaseId,decisionId,action:reason==='comparison_repaired'?'recheck':reason==='cross_brand_overlap_accepted'?'approve_overlap':'reject',reason,
+    expectedRevision:e.reviewRevision,expectedStatus:e.status,expectedError:e.errorCode,expectedAudit:clone(e.brandIdentityAudit),
+    ...(reason==='cross_brand_overlap_accepted'?{expectedSourceSha256:e.sourceSha256!,expectedMatchSha256:e.overlapMatchFingerprint!,expectedRowsSha256:e.overlapRowsFingerprint!,expectedPreviousPublicationId:e.currentPublicationId}:{})};
 }
 export function publishCommand(e:ReleaseActionEvidence,decisionId:string):PublishCommand {
   return {releaseId:e.releaseId,decisionId,expectedReviewRevision:e.reviewRevision,expectedPreviousPublicationId:e.currentPublicationId};

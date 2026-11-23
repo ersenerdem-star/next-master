@@ -1,6 +1,7 @@
 import React,{useCallback,useEffect,useRef,useState} from 'react';
 import {Button} from '../../presentation/components/common/Button';
 import {supplierReleaseActionsClient,SupplierReleaseActionError} from '../../infrastructure/api/supplierReleaseActionsApi';
+import {parseReleaseAudit} from '../../shared/supplierReleaseReview';
 import {actionScope,prepareDurableAction,publicationConfirmationKey,publishCommand,readDurableAction,reconcileDurableAction,recordActionFailure,
   releasePublicationReady,reviewCommand,updateDurableAction,type ActionKind,type DurableAction,type ReceiptStorage,
   type ReleaseActionEvidence,type ReviewReason} from '../../shared/supplierReleaseActions';
@@ -20,13 +21,14 @@ export function releaseActionErrorMessage(code:string,tr:boolean) {
 
 type ViewProps={tr:boolean;evidence:ReleaseActionEvidence|null;records:Records;error:string|null;loading:boolean;busy:boolean;
   confirmed:boolean;reason:ReviewReason;onConfirm:(checked:boolean)=>void;onReason:(reason:ReviewReason)=>void;
-  onRefresh:()=>void;onReview:()=>void;onPublish:()=>void;onRetry:(kind:ActionKind)=>void;};
+  onRefresh:()=>void;onReview:()=>void;onApproveOverlap:()=>void;onPublish:()=>void;onRetry:(kind:ActionKind)=>void;};
 export function SupplierReleaseActionView(p:ViewProps) {
   const {tr,evidence:e,records}=p;
   const pending=unresolved(records.review)||unresolved(records.publish);
   const remotePending=Boolean(e&&[e.reviewOperation,e.publishOperation].some(op=>op&&['queued','running'].includes(op.status)));
   const ready=releasePublicationReady(e)&&!pending&&!remotePending&&!p.error;
   const awaitingConfirmation=ready&&!p.confirmed&&!p.busy&&!p.loading;
+  const overlap=e?parseReleaseAudit(e.brandIdentityAudit,e.brandId):null;
   return <section className="list-stack" aria-label={tr?'İnceleme ve yayın':'Review and publication'} style={{borderTop:'1px solid var(--border-color, #d8e1ee)',paddingTop:16}}>
     <div className="toolbar toolbar--wrap"><strong>{tr?'İnceleme ve yayın':'Review and publication'}</strong>
       <Button variant="secondary" disabled={p.loading||p.busy} onClick={p.onRefresh}>{tr?'Güncel kontrolü al':'Refresh evidence'}</Button></div>
@@ -38,7 +40,8 @@ export function SupplierReleaseActionView(p:ViewProps) {
       <span>{tr?'Çakışma':'Conflicts'}: {e.conflictRows.toLocaleString()} · {tr?'Reddedilen':'Rejected'}: {e.rejectedRows.toLocaleString()} · {tr?'Uyarı':'Warnings'}: {e.warningRows.toLocaleString()}</span>
       <span>{e.sourceVerified?(tr?'Dosya kaynağı doğrulandı.':'Source file verified.'):(tr?'Dosya kaynağı henüz doğrulanmadı.':'Source file has not been verified.')}</span>
       {e.publicationBlocker?<p role="status">{releaseActionErrorMessage(e.publicationBlocker,tr)}</p>:null}
-      <span>{tr?'Şu anki yayın':'Current publication'}: {e.currentPublicationVersion===null?(tr?'Önceki yayın yok':'No previous publication'):`v${e.currentPublicationVersion}`}</span>
+      {e.overlapApprovalStale?<p role="alert">{tr?'Önceki marka örtüşmesi onayı güncelliğini yitirdi. “Güncel kontrolü al” düğmesine basın, ardından “Kontrolü tamamla” ile dosyayı yeniden değerlendirin. Örtüşme devam ederse yeni sonucu inceleyip yeniden onaylayın.':'The previous brand overlap approval is stale. Select “Refresh evidence”, then “Complete checks” to reassess the file. If the overlap remains, review the new result and approve it again.'}</p>:null}
+      <span>{tr?'Bu yükleme motorundaki yayın':'Publication in this upload system'}: {e.currentPublicationVersion===null?(tr?'Önceki yayın kaydı yok; başka yöntemlerle yüklenmiş mevcut fiyatlar bulunabilir.':'No previous publication record; prices imported by other methods may still exist.'):`v${e.currentPublicationVersion}`}</span>
       {e.currentPublicationId?<details><summary>{tr?'Teknik ayrıntılar':'Technical details'}</summary><span className="operations-subtle">{e.currentPublicationId}</span></details>:null}
       {remotePending?<p role="status">{e.publishOperation&&['queued','running'].includes(e.publishOperation.status)
         ?(tr?'Fiyat yayını sürüyor. Sonuç otomatik kontrol ediliyor.':'Price publication is in progress. Its result is checked automatically.')
@@ -52,6 +55,16 @@ export function SupplierReleaseActionView(p:ViewProps) {
         <p>{tr?'Bu adım marka ve dosya doğrulamasını çalıştırır. Fiyat yayını için ayrıca onay gerekir.':'This step checks the brand and source file. Publication requires a separate confirmation.'}</p>
         <Button variant="secondary" disabled={p.busy||p.loading||pending||remotePending||Boolean(p.error)} onClick={p.onReview}>
           {p.reason==='comparison_repaired'?(tr?'Kontrolü tamamla':'Complete checks'):(tr?'Dosyayı reddet':'Reject source')}
+        </Button>
+      </div>:null}
+      {e.canApproveOverlap&&!e.overlapApprovalStale&&e.sourceSha256&&e.overlapMatchFingerprint&&e.overlapRowsFingerprint&&e.errorCode==='CROSS_BRAND_BULK_OVERLAP'?<div className="list-stack" role="group" aria-label={tr?'Marka örtüşmesi onayı':'Brand overlap approval'}>
+        <strong>{tr?'Marka örtüşmesini onayla':'Approve brand overlap'}</strong>
+        <p>{tr?`${e.supplier} / ${e.brand} dosyasında başka markalarla kod örtüşmesi bulundu. Kaynağı ve örtüşme ayrıntılarını kontrol ettiyseniz bu dosya için onay verebilirsiniz.`
+          :`The ${e.supplier} / ${e.brand} file has product codes shared with other brands. After reviewing the source and overlap details, you can approve this file.`}</p>
+        <p>{tr?'Bu onay yalnızca güncel dosya ve kontrol sonucu için geçerlidir; fiyatlar henüz yayınlanmaz.':'Approval applies only to the current file and evidence; prices will not yet be published.'}</p>
+        {overlap?.brands.filter(b=>b.matches>0).map(b=><span key={b.id}>{b.name}: {b.matches.toLocaleString(tr?'tr-TR':'en-US')} {tr?'kod':'codes'} ({b.percent}%) {b.samples.length?`· ${b.samples.join(', ')}`:''}</span>)}
+        <Button variant="secondary" disabled={p.busy||p.loading||pending||remotePending||Boolean(p.error)} onClick={p.onApproveOverlap}>
+          {tr?'Bu dosyadaki marka örtüşmesini onayla':'Approve this file’s brand overlap'}
         </Button>
       </div>:null}
       {ready?<p role="status">{tr?'Güncel sunucu kontrolü yayına hazır olduğunu doğruladı.':'The current server check confirms that this release is ready to publish.'}</p>
@@ -75,6 +88,7 @@ export function SupplierReleaseActionView(p:ViewProps) {
         :r.phase==='failed'?releaseActionErrorMessage(r.errorCode||'ACTION_FAILED',tr)
         :r.receipt?.status==='published'?(tr?`Yayın tamamlandı: v${r.receipt.version}.`:`Publication completed: v${r.receipt.version}.`)
         :r.receipt?.status==='rechecked_clear'?(tr?'Yeniden kontrol temiz. Yayın ayrı onay bekliyor.':'Recheck cleared. Publication requires a separate confirmation.')
+        :r.receipt?.status==='overlap_approved'?(tr?'Marka örtüşmesi onaylandı. Fiyat yayını için ayrı onay gerekiyor.':'Brand overlap approved. Price publication requires separate confirmation.')
         :r.receipt?.status==='rejected'?(tr?'Dosya reddedildi; yayınlanmadı.':'Source rejected; not published.')
         :(tr?'İnceleme gerekli; yayınlanmadı.':'Review required; not published.');
       return <div key={kind} role="status" className="list-stack"><strong>{label}: {status}</strong>
@@ -135,7 +149,7 @@ export function SupplierReleaseActionPanel({releaseId,tr,onChanged}:{releaseId:s
       recordActionFailure(storage(),r,{code:requestError?.code||'ACTION_OUTCOME_UNKNOWN',outcome:requestError?.outcome||'unknown'},retry);
     }
   }
-  async function act(kind:ActionKind,retry=false) {
+  async function act(kind:ActionKind,retry=false,reviewReason:ReviewReason=reason) {
     if(busyRef.current||!evidenceRef.current)return;
     busyRef.current=true;setBusy(true);setError(null);
     try {
@@ -152,7 +166,7 @@ export function SupplierReleaseActionPanel({releaseId,tr,onChanged}:{releaseId:s
         if(publicationConfirmationKey(before)!==publicationConfirmationKey(fresh))throw new Error('ACTION_EVIDENCE_STALE');
         if(kind==='publish'&&(!confirmed||!releasePublicationReady(fresh)))throw new Error('ACTION_NOT_READY');
         if(kind==='review'&&!fresh.canReview)throw new Error('ACTION_NOT_READY');
-        const command=kind==='review'?reviewCommand(fresh,reason,crypto.randomUUID()):publishCommand(fresh,crypto.randomUUID());
+        const command=kind==='review'?reviewCommand(fresh,reviewReason,crypto.randomUUID()):publishCommand(fresh,crypto.randomUUID());
         const durable=prepareDurableAction(storage(),scope,kind,command);
         await send(durable,durable.command.decisionId!==command.decisionId);
       }
@@ -163,5 +177,5 @@ export function SupplierReleaseActionPanel({releaseId,tr,onChanged}:{releaseId:s
   }
   return <SupplierReleaseActionView tr={tr} evidence={evidence} records={records} error={error} loading={loading} busy={busy}
     confirmed={confirmed} reason={reason} onConfirm={setConfirmed} onReason={setReason} onRefresh={()=>void load()}
-    onReview={()=>void act('review')} onPublish={()=>void act('publish')} onRetry={kind=>void act(kind,true)}/>;
+    onReview={()=>void act('review')} onApproveOverlap={()=>void act('review',false,'cross_brand_overlap_accepted')} onPublish={()=>void act('publish')} onRetry={kind=>void act(kind,true)}/>;
 }

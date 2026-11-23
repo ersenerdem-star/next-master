@@ -114,3 +114,10 @@ test('historical failures retain degraded readiness while exact leased admin dec
  assert.deepEqual(calls,['claim_supplier_release_action','execute_supplier_release_action']);
  assert.equal(s.snapshot().ready,false);assert.equal(s.snapshot().published,false);
 });
+
+test('explicit overlap approval receipt settles without publishing and mismatches fail closed',async()=>{
+ const approved=await consume({receiptChange:{action:'approve_overlap',status:'overlap_approved'}});
+ assert.deepEqual(approved.result,{status:'completed',decisionId:decision,releaseId:release,published:false});
+ for(const receiptChange of [{action:'reject',status:'overlap_approved'},{action:'approve_overlap',status:'published',published:true,publicationId:publication,version:1}])
+  assert.equal((await consume({receiptChange})).result.status,'pending');
+});
