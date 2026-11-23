@@ -15,6 +15,16 @@ test('Active older work remains visible even when newer batches have completed',
  const [row]=summarizeCatalogProgress([{kind:'brand',rows:[{...base,status:'queued'}, {...base,id:'new',status:'completed',next_index:100,updated_at:'2026-10-23T20:01:00Z'}, {...base,id:'old',status:'queued',updated_at:'2026-10-23T19:00:00Z'}]}]);
  assert.equal(row.id,'job1');assert.equal(row.status,'queued');assert.equal(row.activeJobs,2);
 });
+test('Completed jobs disappear without hiding reviewed, failed or paused work',()=>{
+ const rows=summarizeCatalogProgress([{kind:'brand',rows:[
+  {...base,id:'reviewed',status:'reviewed'},
+  {...base,id:'completed-newer',status:'completed',updated_at:'2026-10-24T20:00:00Z'},
+  {...base,id:'completed-only',brand:'Other',status:'completed'},
+  {...base,id:'failed',brand:'Lemforder',status:'failed'},
+  {...base,id:'paused',source:'secondary',status:'paused'},
+ ]}]);
+ assert.deepEqual(new Set(rows.map(row=>row.id)),new Set(['reviewed','failed','paused']));
+});
 test('Phase, source and brand identities stay separate',()=>{
  const rows=summarizeCatalogProgress([{kind:'brand',rows:[base,{...base,id:'other-source',source:'secondary'},{...base,id:'publish',mode:'publish'},{...base,id:'other-brand',brand:'Delphi'}]}]);
  assert.equal(rows.length,4);
@@ -23,6 +33,7 @@ test('Reads are tenant-scoped, bounded, read-only and omit manifests/codes',asyn
  const calls=[];const db={from(table){const chain={};for(const method of ['select','eq','in','not','order','limit'])chain[method]=(...args)=>{calls.push({table,method,args});return chain;};chain.then=(resolve)=>resolve({data:[],error:null});return chain;}};
  const result=await readCatalogProgress(db,'org');assert.deepEqual(result.rows,[]);assert.equal(result.truncated,false);
  for(const source of progressSources){assert.equal(calls.filter(c=>c.table===source.table&&c.method==='eq'&&c.args[0]==='organization_id'&&c.args[1]==='org').length,2);}
+ assert.equal(calls.filter(c=>c.method==='not'&&c.args[2]?.includes('completed')).length,progressSources.length);
  assert.ok(calls.filter(c=>c.method==='limit').every(c=>[201,60].includes(c.args[0])));
  assert.ok(calls.filter(c=>c.method==='select').every(c=>!c.args[0].split(',').includes('manifest')));
 });
