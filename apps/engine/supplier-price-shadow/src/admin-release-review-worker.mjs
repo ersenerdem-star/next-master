@@ -39,13 +39,14 @@ export function createAdminReleaseActionConsumer({env,fetchImpl=fetch,uuid=rando
  };
  const final=(receipt,claim)=>{
   if(receipt?.decisionId!==claim.decision_id||receipt?.releaseId!==claim.release_id
-   ||!['published','rechecked_clear','review_required','rejected','failed'].includes(receipt?.status)
+   ||!['published','rechecked_clear','overlap_approved','review_required','rejected','failed'].includes(receipt?.status)
    ||typeof receipt.replayed!=='boolean'||receipt.published!==(receipt.status==='published'))
    throw Error('SERVICE_ADMIN_ACTION_RECEIPT_UNCONFIRMED');
   if(receipt.status==='published'&&(!UUID.test(receipt.publicationId||'')||!Number.isSafeInteger(receipt.version)||receipt.version<1))
    throw Error('SERVICE_ADMIN_ACTION_RECEIPT_UNCONFIRMED');
-  if(claim.action==='review'&&(receipt.published!==false||!['recheck','reject'].includes(receipt.action))
-   ||claim.action==='publish'&&(['rechecked_clear','rejected'].includes(receipt.status)||receipt.action!==undefined&&receipt.action!=='publish'))
+  if(receipt.status==='overlap_approved'&&receipt.action!=='approve_overlap')throw Error('SERVICE_ADMIN_ACTION_RECEIPT_UNCONFIRMED');
+  if(claim.action==='review'&&(receipt.published!==false||!['recheck','reject','approve_overlap'].includes(receipt.action))
+   ||claim.action==='publish'&&(['rechecked_clear','overlap_approved','rejected'].includes(receipt.status)||receipt.action!==undefined&&receipt.action!=='publish'))
    throw Error('SERVICE_ADMIN_ACTION_RECEIPT_UNCONFIRMED');
   return {status:receipt.status==='failed'?'failed':'completed',decisionId:claim.decision_id,releaseId:claim.release_id,published:receipt.published};
  };
