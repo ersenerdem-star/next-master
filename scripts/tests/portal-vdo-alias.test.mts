@@ -13,16 +13,17 @@ const invite = (org: string, allowed: string[] = []) => ({
   access_can_view_payments: true, access_can_view_orders: true, allowed_brand_ids: allowed,
 });
 
-async function withBackend(brands: {id:string;name:string}[], run: (calls: Array<Record<string, any>>, writes: Array<Record<string, any>>) => Promise<void>) {
+async function withBackend(brands: {id:string;name:string}[], run: (calls: Array<Record<string, any>>, writes: Array<Record<string, any>>, stats: {brandReads: number}) => Promise<void>) {
   const previous = globalThis.fetch;
   const calls: Array<Record<string, any>> = [];
   const writes: Array<Record<string, any>> = [];
+  const stats = {brandReads: 0};
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     assert.equal(url.origin, service);
     let data: any = [];
     if (url.pathname.endsWith('/customers')) data = [{id:'customer',display_name:'Customer',company_name:'Customer',currency:'EUR',payment_terms:'',contract_nr:'',custom_fields:'',price_list_type:'Other',price_list_margin_percent:10}];
-    else if (url.pathname.endsWith('/brands')) data = brands;
+    else if (url.pathname.endsWith('/brands')) { stats.brandReads++; data = brands; }
     else if (/\/cloud_current_supplier_(?:commercial|quantity)_options_service$/.test(url.pathname)) {
       const body = JSON.parse(String(init?.body));
       calls.push(body);
@@ -35,7 +36,7 @@ async function withBackend(brands: {id:string;name:string}[], run: (calls: Array
     }
     return Response.json(data);
   };
-  try { await run(calls, writes); } finally { globalThis.fetch = previous; }
+  try { await run(calls, writes, stats); } finally { globalThis.fetch = previous; }
 }
 
 test('VDO shorthand uses the authorized canonical brand for search, merged uploads, pricing and submit', async () => {
@@ -85,4 +86,41 @@ test('missing or ambiguous VDO mapping fails closed even for unrestricted custom
       assert.equal(calls.length,0);
     });
   }
+});
+
+test('VDO identity and customer scope are refreshed when brands change during a session', async () => {
+  const brands = [target, continental];
+  await withBackend(brands, async (calls, writes, stats) => {
+    const originalCustomer = invite('vdo-alias-fresh',['target']);
+    const rows = [{code:'001234',brand:'VdO',qty:2}];
+    assert.equal((await searchPortalCatalog(service,'key',originalCustomer,'001234','VDO')).items[0].sell_price,11);
+    const beforeContinental = stats.brandReads;
+    await searchPortalCatalog(service,'key',invite('vdo-alias-fresh',['continental']),'001234','Continental');
+    await searchPortalCatalog(service,'key',invite('vdo-alias-fresh',['continental']),'001234','Continental');
+    assert.equal(stats.brandReads,beforeContinental, 'other brand requests keep the existing cache');
+
+    brands.push({id:'standalone',name:'VDO'});
+    await assert.rejects(searchPortalCatalog(service,'key',originalCustomer,'001234','VDO'),/outside this portal scope/);
+    await assert.rejects(preparePortalOrderLines(service,'key',originalCustomer,rows),/outside this portal scope/);
+    await assert.rejects(preparePortalOrderLines(service,'key',originalCustomer,rows,{savedSuppliers:[{id:'supplier',name:'GroupAuto'}]}),/outside this portal scope/);
+    await assert.rejects(submitPortalSalesOrder(service,'key',originalCustomer,{mode:'confirm',rows}),/outside this portal scope/);
+    assert.equal(writes.length,0);
+
+    const newCustomer = invite('vdo-alias-fresh',['standalone']);
+    assert.equal((await searchPortalCatalog(service,'key',newCustomer,'001234','VDO')).items[0].sell_price,55);
+    const prepared = await preparePortalOrderLines(service,'key',newCustomer,rows);
+    assert.deepEqual([prepared.lines[0].brand,prepared.lines[0].requestedCode,prepared.lines[0].sell_price],['VDO','001234',55]);
+    await submitPortalSalesOrder(service,'key',newCustomer,{mode:'confirm',rows});
+    assert.equal(writes[0].lines[0].brand,'VDO');
+
+    brands.push({id:'standalone-2',name:'vdo'});
+    await assert.rejects(searchPortalCatalog(service,'key',newCustomer,'001234','VDO'),/Brand not found/);
+    await assert.rejects(preparePortalOrderLines(service,'key',newCustomer,rows),/not found or ambiguous/);
+    brands.splice(0,brands.length,continental);
+    await assert.rejects(preparePortalOrderLines(service,'key',invite('vdo-alias-fresh'),rows),/not found or ambiguous/);
+    brands.push(target,{id:'target-2',name:'VDO / Continental'});
+    await assert.rejects(searchPortalCatalog(service,'key',invite('vdo-alias-fresh'),'001234','VDO'),/Brand not found/);
+    await assert.rejects(preparePortalOrderLines(service,'key',invite('vdo-alias-fresh'),rows),/not found or ambiguous/);
+    assert.ok(calls.some(call => call.input_brand === 'VDO' && call.input_quantity === 2));
+  });
 });

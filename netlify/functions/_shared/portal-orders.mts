@@ -1197,7 +1197,7 @@ export async function resolvePortalPriceListExportContext(
 ): Promise<PortalPriceListExportContext> {
   // Export entitlement and pricing must reflect a customer-card edit immediately.
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite, "fresh");
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id, isVdoShorthand(brand));
   const allowedBrandIds = portalAllowedBrandIds(invite);
   const brandId = brandMap.byName.get(String(brand || "").trim().toLowerCase()) || "";
   const brandName = brandMap.byId.get(brandId) || "";
@@ -1222,9 +1222,15 @@ export async function resolvePortalPriceListExportContext(
   };
 }
 
-async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, organizationId: string) {
+function isVdoShorthand(brand: unknown) {
+  return String(brand || "").trim().toLowerCase() === "vdo";
+}
+
+type PortalBrandMap = { byId: Map<string, string>; byName: Map<string, string> };
+
+async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, organizationId: string, fresh = false) {
   const cached = portalBrandMapCache.get(organizationId);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (!fresh && cached && cached.expiresAt > Date.now()) {
     return cached.value;
   }
   const brands = await fetchAll<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "brands", {
@@ -1329,7 +1335,7 @@ export async function searchPortalCatalog(
   if (invite.party_type !== "customer" || !invite.access_can_view_orders) {
     throw new Error("This portal cannot search items");
   }
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id, isVdoShorthand(brand));
   const search = String(query || "").trim();
   const normalizedSearch = normalizePartCode(search);
   const searchField = normalizePortalSearchField(requestedSearchField);
@@ -1658,11 +1664,11 @@ async function fetchCPriceMap(
   organizationId: string,
   cPriceListIds: string[],
   rows: Array<{ brand: string; product_code: string }>,
+  brandMap: PortalBrandMap,
   timeoutMs?: number,
 ) {
   const map = new Map<string, number>();
   if (!cPriceListIds.length || !rows.length) return map;
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, organizationId);
   const brandIds = [...new Set(rows.map((row) => brandMap.byName.get(row.brand.trim().toLowerCase()) || "").filter(Boolean))];
   const normalizedCodes = [...new Set(rows.map((row) => normalizePartCode(row.product_code)).filter(Boolean))];
   if (!brandIds.length || !normalizedCodes.length) return map;
@@ -2057,7 +2063,7 @@ export async function buildPortalPriceListRows(
   rows: PortalPriceListRow[];
 }> {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id, isVdoShorthand(brand));
   const allowedBrandIds = portalAllowedBrandIds(invite);
   const brandId = brandMap.byName.get(String(brand || "").trim().toLowerCase()) || "";
   const brandName = brandMap.byId.get(brandId) || "";
@@ -2243,8 +2249,8 @@ async function resolvePortalCatalogSupplierData(
   context: CustomerPricingContext,
   row: PortalOrderInputRow,
   codeToResolve: string,
+  brandMap: PortalBrandMap,
 ) {
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, context.organizationId);
   const brandId = brandMap.byName.get(row.brand.trim().toLowerCase()) || "";
   const normalizedCode = normalizePartCode(codeToResolve);
   if (!brandId || !normalizedCode) {
@@ -2327,11 +2333,11 @@ async function findPortalCodeReferenceMatch(
   organizationId: string,
   brand: string,
   code: string,
+  brandMap: PortalBrandMap,
 ) {
   const normalizedCode = normalizePartCode(code);
   if (!brand.trim() || !normalizedCode) return null;
 
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, organizationId);
   const brandId = brandMap.byName.get(brand.trim().toLowerCase());
   if (!brandId) return null;
 
@@ -2407,6 +2413,7 @@ async function resolvePreparedLine(
   serviceRoleKey: string,
   row: PortalOrderInputRow,
   context: CustomerPricingContext,
+  brandMap: PortalBrandMap,
   savedSupplier?: SavedQuantitySupplier,
 ): Promise<PreparedPortalLine> {
   const referenceMatch = await findPortalCodeReferenceMatch(
@@ -2415,6 +2422,7 @@ async function resolvePreparedLine(
     context.organizationId,
     row.brand,
     row.code,
+    brandMap,
   );
   const codeToResolve = referenceMatch?.new_code || row.code;
   const { catalogMatch, supplierOptions } = await resolvePortalCatalogSupplierData(
@@ -2423,6 +2431,7 @@ async function resolvePreparedLine(
     context,
     row,
     codeToResolve,
+    brandMap,
   );
   const supplierIndex = savedSupplier
     ? supplierOptions.findIndex(option => savedSupplier.id
@@ -2501,9 +2510,9 @@ export async function preparePortalOrderLines(
   { includeSuggestions = false, savedSuppliers }: { includeSuggestions?: boolean; savedSuppliers?: Array<SavedQuantitySupplier | undefined> } = {},
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id, rows.some((row) => isVdoShorthand(row.brand)));
   const canonicalRows = rows.map((row) => {
-    if (String(row.brand || "").trim().toLowerCase() !== "vdo") return row;
+    if (!isVdoShorthand(row.brand)) return row;
     const brandId = brandMap.byName.get("vdo");
     const brand = brandId && brandMap.byId.get(brandId);
     if (!brand) throw new Error("Brand not found or ambiguous for portal order: VDO");
@@ -2516,7 +2525,7 @@ export async function preparePortalOrderLines(
   for (let index = 0; index < mergedRows.length; index += 10) {
     const chunk = mergedRows.slice(index, index + 10);
     const resolvedChunk = await Promise.all(chunk.map((row, offset) =>
-      resolvePreparedLine(supabaseUrl, serviceRoleKey, row, context, savedSuppliers?.[index + offset])));
+      resolvePreparedLine(supabaseUrl, serviceRoleKey, row, context, brandMap, savedSuppliers?.[index + offset])));
     prepared.push(...resolvedChunk);
   }
 
@@ -2530,6 +2539,7 @@ export async function preparePortalOrderLines(
         brand: row.brand,
         product_code: row.resolvedCode,
       })),
+      brandMap,
     );
     prepared.forEach((line) => {
       const value = cPriceMap.get(`${line.brand.trim().toLowerCase()}::${normalizePartCode(line.resolvedCode)}`);
