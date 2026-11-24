@@ -1234,12 +1234,22 @@ async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, orga
   }, PORTAL_SEARCH_REST_TIMEOUT_MS);
   const byId = new Map<string, string>();
   const byName = new Map<string, string>();
+  const exactVdoIds = new Set<string>();
+  const vdoContinentalIds = new Set<string>();
   for (const row of brands) {
     const id = String(row.id || "");
     const name = String(row.name || "").trim();
     if (!id || !name) continue;
     byId.set(id, name);
     byName.set(name.toLowerCase(), id);
+    if (name.toLowerCase() === "vdo") exactVdoIds.add(id);
+    if (/^vdo\s*\/\s*continental$/i.test(name)) vdoContinentalIds.add(id);
+  }
+  // A real VDO brand always takes precedence. Only provide the shorthand
+  // when it resolves unambiguously within this organization.
+  if (exactVdoIds.size > 1) byName.delete("vdo");
+  else if (exactVdoIds.size === 0 && vdoContinentalIds.size === 1) {
+    byName.set("vdo", [...vdoContinentalIds][0]);
   }
   const value = { byId, byName };
   portalBrandMapCache.set(organizationId, {
@@ -2492,8 +2502,15 @@ export async function preparePortalOrderLines(
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
   const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id);
-  assertPortalRowsWithinBrandScope(invite, brandMap, rows);
-  const mergedRows = savedSuppliers ? rows : mergeInputRows(rows);
+  const canonicalRows = rows.map((row) => {
+    if (String(row.brand || "").trim().toLowerCase() !== "vdo") return row;
+    const brandId = brandMap.byName.get("vdo");
+    const brand = brandId && brandMap.byId.get(brandId);
+    if (!brand) throw new Error("Brand not found or ambiguous for portal order: VDO");
+    return { ...row, brand };
+  });
+  assertPortalRowsWithinBrandScope(invite, brandMap, canonicalRows);
+  const mergedRows = savedSuppliers ? canonicalRows : mergeInputRows(canonicalRows);
   const prepared: PreparedPortalLine[] = [];
 
   for (let index = 0; index < mergedRows.length; index += 10) {
