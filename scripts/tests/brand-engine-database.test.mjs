@@ -5,8 +5,8 @@ create function auth.role()returns text language sql as $$select current_setting
 create function current_profile_org_id()returns uuid language sql as $$select null::uuid$$;create function current_profile_role()returns text language sql as $$select 'superadmin'$$;
 create function normalize_part_code(text)returns text language sql immutable as $$select upper(regexp_replace($1,'[^a-zA-Z0-9]','','g'))$$;
 create table organizations(id uuid primary key);create table profiles(id uuid,organization_id uuid,role text,is_active boolean);create table brands(id uuid primary key,organization_id uuid,name text);
-create table catalog_external_sources(id uuid default gen_random_uuid(),organization_id uuid,source_key text,is_active boolean,license_posture text,credential_boundary text,rate_limit_posture text,metadata jsonb);
-create table catalog_products(id uuid primary key default gen_random_uuid(),organization_id uuid,brand_id uuid,product_code text,normalized_code text generated always as(normalize_part_code(product_code))stored,description text,description_tr text,weight_kg numeric,ean text,origin text,hs_code text,oem_no text,vehicle text,vehicle_model text,market_segment text,dimensions jsonb,updated_at timestamptz default now());
+create table catalog_external_sources(id uuid default gen_random_uuid(),organization_id uuid,source_key text,is_active boolean,license_posture text,credential_boundary text,rate_limit_posture text,metadata jsonb,display_name text,source_owner text,source_type text,base_url text,robots_posture text,unique(organization_id,source_key));
+create table catalog_products(id uuid primary key default gen_random_uuid(),organization_id uuid,brand_id uuid,product_code text,normalized_code text generated always as(normalize_part_code(product_code))stored,description text,description_tr text,weight_kg numeric,ean text,origin text,hs_code text,oem_no text,vehicle text,vehicle_model text,market_segment text,dimensions jsonb,image_url text,lifecycle_status text,updated_at timestamptz default now());
 insert into organizations values('${org}');insert into profiles values('${actor}','${org}','superadmin',true);insert into brands values('${brand}','${org}','Denso');
 insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata)values('${org}','denso_official_v1',true,'internal_review_required','none','bounded','{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Denso"],"allowed_evidence_hosts":["www.denso-am.eu"],"approval_actor":"owner","publication_approval_reference":"request"}');
 insert into catalog_products(organization_id,brand_id,product_code,origin,hs_code)values('${org}','${brand}','DCRI100360','TR','001234');`);
@@ -38,3 +38,51 @@ test('transient source retry retains the immutable row and is gated by persisted
  // Scheduler waits for retry_after before rescheduling. Row ownership/cursor is unchanged.
  const resumed=await rpc(db,'schedule_catalog_brand_job',[org,j.id,false]);assert.equal(resumed.next_index,0);assert.equal(resumed.retry_attempts,1);
 }finally{await db.close();}});
+
+test('Monroe applies only reviewed gross weight and a missing official image, with safe replay and conflict guards', async () => {
+  const db=await setup();
+  const officialImage='https://digital-assets.tecalliance.services/images/800/'+'a'.repeat(40)+'.jpg';
+  try {
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261125073144_register_monroe_catalog_engine.sql',import.meta.url),'utf8'));
+    await db.exec(`
+      update brands set name='Monroe';
+      insert into catalog_external_sources(organization_id,source_key,is_active,license_posture,credential_boundary,rate_limit_posture,metadata)
+      values('${org}','tecalliance_monroe',true,'internal_review_required','none','bounded',
+        '{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Monroe"],"allowed_evidence_hosts":["web.tecalliance.net"],"approval_actor":"owner","publication_approval_reference":"request"}');
+      update catalog_products set product_code='10024', lifecycle_status='active';
+    `);
+    for (const scenario of ['apply','preserve','changed','ean','invalid','forbidden']) {
+      await db.exec(`update catalog_products set image_url=${scenario==='preserve'?"'https://manual.invalid/current'":"null"},weight_kg=null,ean=null`);
+      const before=(await db.query('select to_jsonb(p) v from catalog_products p')).rows[0].v;
+      const j=await rpc(db,'start_catalog_brand_job',[org,actor,['10024'],'Monroe',crypto.randomUUID(),'tecalliance_monroe']);
+      const claim=await rpc(db,'claim_catalog_brand_job',[org,j.id]);
+      const observation={brand:'Monroe',sourceKey:'tecalliance_monroe',code:'10024',
+        sourceUrl:'https://web.tecalliance.net/tae/en/home',fingerprint:'receipt',before,
+        fields:scenario==='forbidden'?{origin:'IT'}:{weight_kg:3.3},sourceFields:{ean:'4000000000001'},imageCandidate:scenario==='invalid'?'https://spareto.com/image.jpg':officialImage,
+        secondary:{fields:{origin:'IT',hs_code:'870880'}},lifecycle:{evidence:{discontinued:{source_status:'production discontinued'}}}};
+      await rpc(db,'checkpoint_catalog_brand_job',[org,j.id,claim.lease_token,0,observation,{},'reviewed',null,true,null]);
+      await rpc(db,'schedule_catalog_brand_job',[org,j.id,true]);
+      const publish=await rpc(db,'claim_catalog_brand_job',[org,j.id]);
+      const args=[org,j.id,publish.lease_token,0];
+      if(scenario==='changed')await db.exec("update catalog_products set image_url='https://manual.invalid/new'");
+      if(scenario==='ean')await db.exec("update catalog_products set ean='4000000000002'");
+      if(scenario==='forbidden'){
+        await assert.rejects(rpc(db,'apply_catalog_monroe_job_item',args),/outside scope/);
+        continue;
+      }
+      const result=await rpc(db,'apply_catalog_monroe_job_item',args);
+      const expected={apply:'applied',preserve:'existing_value_preserved',changed:'changed_since_review',ean:'ean_identity_conflict',invalid:'invalid_source_image'};
+      assert.equal(result.fields.image_url,expected[scenario]);
+      assert.equal(result.fields.weight_kg,scenario==='ean'?'ean_identity_conflict':'applied');
+      assert.deepEqual(await rpc(db,'apply_catalog_monroe_job_item',args),result);
+      const product=(await db.query('select image_url,origin,hs_code,lifecycle_status from catalog_products')).rows[0];
+      assert.deepEqual(product,{image_url:{apply:officialImage,preserve:'https://manual.invalid/current',changed:'https://manual.invalid/new'}[scenario]??null,origin:'TR',hs_code:'001234',lifecycle_status:'active'});
+      await rpc(db,'checkpoint_catalog_brand_job',[org,j.id,publish.lease_token,0,observation,result,'completed',null,true,null]);
+    }
+    assert.equal((await db.query(
+      "select has_function_privilege('anon','public.apply_catalog_monroe_job_item(uuid,uuid,uuid,integer)','execute') allowed"
+    )).rows[0].allowed,false);
+  } finally {
+    await db.close();
+  }
+});

@@ -1,3 +1,4 @@
+import {MONROE_TECALLIANCE_SOURCE,MONROE_TECALLIANCE_URL} from './tecalliance-sync.mts';
 import {wilminkSupportDefinition} from './wilmink-sources.mjs';
 import {normalizeBrandKey} from './brand-standardization.mts';
 import {resolveTecAllianceBrandEntry} from './tecalliance-brand-registry.mts';
@@ -20,6 +21,9 @@ export function brandEngineDefinition(brand:string){
  if(['glyco','goetze','nural'].includes(key)){const canonical=key==='glyco'?'Glyco':key==='goetze'?'Goetze':'Nural',support=wilminkSupportDefinition(canonical,`wilmink_${key}_support_v1`);return {...support,sourceUrl:support.listingAvailable?`https://www.wilminkengineparts.com/en/brands/${key}`:'https://www.wilminkengineparts.com/en/search-results'};}
  if(isSchaefflerBrand(brand))return {brand,family:SCHAEFFLER_ENGINE.family,engineName:SCHAEFFLER_ENGINE.name,sourceKey:SCHAEFFLER_ENGINE.sourceKey,sourceUrl:SCHAEFFLER_ENGINE.sourceUrl,reader:true,workflow:'brand',access:'server_access_required'};
  if(['sachs','boge','trw','lemforder','lemfoerder','wabco','zf'].includes(key))return {brand,family:'zf',sourceKey:'zf_group_official_v2',sourceUrl:'https://aftermarket.zf.com/en/aftermarket-portal/',reader:true,workflow:'zf'};
+ if(key==='monroe')return {brand,family:'monroe',engineName:'Monroe · TecAlliance',sourceKey:MONROE_TECALLIANCE_SOURCE,
+  sourceUrl:MONROE_TECALLIANCE_URL,reader:true,workflow:'brand',
+  secondarySources:[{sourceKey:'spareto_secondary_exact_v1',label:'Spareto',url:'https://spareto.com/'}]};
  if(key==='elring')return {brand,family:'elring',sourceKey:'tecalliance_elring',sourceUrl:'https://web.tecalliance.net/elring/en/home',reader:true,workflow:'elring'};
  if(key==='knorrbremse')return {brand,family:'knorr_bremse',sourceKey:'knorr_bremse_aftermarket',sourceUrl:'https://mytruckservices.knorr-bremse.com/',reader:true,workflow:'brand'};
  if(key==='denso')return {brand,family:'denso',sourceKey:'denso_official_v1',sourceUrl:'https://www.denso-am.eu/catalog/pv',reader:true,workflow:'brand'};

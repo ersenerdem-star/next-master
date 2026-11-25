@@ -91,3 +91,27 @@ test('Knorr recorded source collision is sealed and never published',async()=>{
  f.db.from=table=>{if(table!=='catalog_product_source_records')return original(table);const q={select(){return q},eq(){return q},limit(){return q},then(resolve){resolve({data:[{source_key:'knorr_bremse_aftermarket',source_product_id:'K031740N-00',payload_fingerprint:'a'.repeat(64)}]})}};return q};
  const r=await runBrandJob({db:f.db,organizationId:org,jobId,delayMs:0,providerFactory:()=>({fetch:async()=>({code:'K031740N00',sourceUrl:'https://mytruckservices.knorr-bremse.com/p/K031740N00',fields:{description:'Brake'}})})});assert.equal(r.status,'reviewed');assert.equal(f.saves[0].input_observation.recordedOwnership.status,'collision');
 });
+
+test('Monroe verifies lifecycle direction and only an explicit production stop, while staging indicated weight and official images', async () => {
+  const {mapMonroeCatalogArticle}=await import('../../netlify/functions/_shared/catalog/tecalliance-sync.mts');
+  const image='https://digital-assets.tecalliance.services/images/800/'+'f'.repeat(40)+'.jpg';
+  const article={articleNumber:'10024',dataSupplierId:37,mfrName:'MONROE',
+    articleCriteria:[{criteriaId:212,criteriaDescription:'Weight [kg]',criteriaUnitDescription:'kg',formattedValue:'3.3'}],
+    articleLogisticsCriteria:[{criteriaId:3869,rawValue:'87088035'}],
+    images:[{typeKey:1,assetSource:'article',sortNumber:1,imageURL800:'https://foreign.invalid/img.jpg'},
+      {typeKey:1,assetSource:'article',sortNumber:2,imageURL800:image}],
+    replacesArticles:{values:[{articleNumber:'10023',mfrName:'MONROE'}]},
+    replacedByArticles:[{articleNumber:'10025',mfrName:'MONROE'},{articleNumber:'10026',mfrName:'Other'}],
+    misc:{articleStatusDescription:'Normal'}};
+  const review=mapMonroeCatalogArticle(article,'10024');
+  assert.equal(review.imageCandidate,image);
+  assert.deepEqual(review.sourceLogistics,{reportedWeightKg:3.3,combinedNomenclature:'87088035'});
+  assert.equal(review.fields.weight_kg,null);
+  assert.equal(review.lifecycle.checks.discontinued,'no_explicit_signal');
+  assert.deepEqual(review.lifecycle.evidence.replacement.relations.map(({old_code,new_code})=>[old_code,new_code]),[['10023','10024'],['10024','10025']]);
+  const stopped=mapMonroeCatalogArticle({...article,misc:{articleStatusDescription:'Production discontinued'},
+    articleLogisticsCriteria:[...article.articleLogisticsCriteria,{criteriaId:3870,criteriaDescription:'Gross Weight [g]',rawValue:'3550'}]},'10024');
+  assert.equal(stopped.lifecycle.checks.discontinued,'found');
+  assert.equal(stopped.fields.weight_kg,3.55);
+  assert.throws(()=>mapMonroeCatalogArticle({...article,dataSupplierId:10},'10024'),/IDENTITY_INVALID/);
+});

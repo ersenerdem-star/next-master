@@ -1,3 +1,4 @@
+import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 import {officialGrossWeightKg} from './official-weight.mjs';
 import {tecLifecycle} from './mira-lifecycle.mts';
 import {
@@ -61,6 +62,7 @@ type SupplierSeedRow = {
 };
 
 type TecAllianceApiCriteria = {
+  criteriaId?: number;
   criteriaDescription?: string;
   criteriaAbbrDescription?: string;
   criteriaUnitDescription?: string;
@@ -75,6 +77,9 @@ type TecAllianceApiGenericArticle = {
 };
 
 type TecAllianceApiImage = {
+  typeKey?: number;
+  assetSource?: string;
+  sortNumber?: number;
   imageURL50?: string;
   imageURL100?: string;
   imageURL200?: string;
@@ -116,6 +121,8 @@ type TecAllianceApiArticle = {
   articleCriteria?: TecAllianceApiCriteria[];
   articleLogisticsCriteria?: TecAllianceApiCriteria[];
   images?: TecAllianceApiImage[];
+  replacesArticles?: unknown;
+  replacedByArticles?: unknown;
 };
 
 type TecAllianceArticleSearchResponse = {
@@ -665,7 +672,7 @@ async function requestTecAllianceArticles(
     page: number;
     perPage: number;
     requestTimeoutMs: number;
-    searchMatchType: "prefix" | "prefix_or_suffix";
+    searchMatchType: "prefix" | "prefix_or_suffix" | "exact";
   },
   config: TecAllianceSyncConfig,
 ) {
@@ -677,7 +684,7 @@ async function requestTecAllianceArticles(
       lang: "en",
       searchQuery: input.searchQuery,
       searchMatchType: input.searchMatchType,
-      searchType: 10,
+      searchType: input.searchMatchType === "exact" ? 0 : 10,
       page: input.page,
       perPage: input.perPage,
       sort: [
@@ -727,6 +734,62 @@ export async function fetchTecAllianceSupplierCatalogFields(brandName:string,pro
   const detail=resolveTecAllianceArticle(matches[0],null,brandName);
   return {code:exact(productCode),sourceUrl:'https://web.tecalliance.net',lifecycle:tecLifecycle(matches[0]),fields:{description:detail.description,ean:detail.ean,oem_no:detail.oem_no,
     vehicle_model:detail.vehicle_model,weight_kg:officialGrossWeightKg([...(matches[0].articleCriteria||[]),...(matches[0].logisticsCriteria||[])])}};
+}
+
+export const MONROE_TECALLIANCE_SOURCE = 'tecalliance_monroe';
+export const MONROE_TECALLIANCE_URL = 'https://web.tecalliance.net/tae/en/home';
+const MONROE_IMAGE_URL = /^https:\/\/digital-assets\.tecalliance\.services\/images\/(?:200|400|800|1600)\/[a-f0-9]{40}\.(?:jpe?g|png|webp)$/i;
+
+export function mapMonroeCatalogArticle(article: TecAllianceApiArticle, productCode: string) {
+  if (!exactCatalogCode(productCode) || exactCatalogCode(article.articleNumber) !== exactCatalogCode(productCode) ||
+      Number(article.dataSupplierId ?? article.mfrId) !== 37 || article.mfrName?.trim().toUpperCase() !== 'MONROE') {
+    throw Error('OFFICIAL_OBSERVATION_IDENTITY_INVALID');
+  }
+  const detail = resolveTecAllianceArticle(article, null, 'Monroe');
+  const criteria = [...(article.articleCriteria ?? []), ...(article.articleLogisticsCriteria ?? [])];
+  const grossWeight = officialGrossWeightKg(criteria);
+  const reportedWeights = [...new Set(criteria.filter(row => row.criteriaId === 212 && row.criteriaUnitDescription === 'kg')
+    .map(row => String(row.formattedValue ?? row.rawValue ?? '').trim().replace(',', '.'))
+    .filter(value => /^\d+(?:\.\d+)?$/.test(value))
+    .map(Number).filter(value => value > 0 && value <= 100000))];
+  const customsCodes = [...new Set((article.articleLogisticsCriteria ?? [])
+    .filter(row => row.criteriaId === 3869 && /^\d{8}$/.test(row.rawValue ?? ''))
+    .map(row => row.rawValue!))];
+  const pictures = (article.images ?? []).filter(image => image.typeKey === 1 && image.assetSource === 'article')
+    .sort((left, right) => (left.sortNumber ?? Infinity) - (right.sortNumber ?? Infinity));
+  const imageCandidate = pictures.map(image => extractTecAllianceImageUrl([image])).find(url => MONROE_IMAGE_URL.test(url));
+  const unpackRelations = (relations: unknown) =>
+    relations && typeof relations === 'object' && !Array.isArray(relations) && 'values' in relations ? relations.values : relations;
+  return {
+    code: exactCatalogCode(productCode),
+    sourceUrl: MONROE_TECALLIANCE_URL,
+    fields: { weight_kg: grossWeight, ean: detail.ean || null },
+    sourceStatus: article.misc?.articleStatusDescription ?? null,
+    lifecycle: tecLifecycle({
+      ...article,
+      mfrId: article.mfrId ?? article.dataSupplierId,
+      replacesArticles: unpackRelations(article.replacesArticles),
+      replacedByArticles: unpackRelations(article.replacedByArticles),
+    }),
+    imageCandidate: imageCandidate ?? null,
+    sourceLogistics: {
+      reportedWeightKg: reportedWeights.length === 1 ? reportedWeights[0] : null,
+      combinedNomenclature: customsCodes.length === 1 ? customsCodes[0] : null,
+    },
+  };
+}
+
+export async function fetchMonroeCatalogFields(productCode: string) {
+  const result = await requestTecAllianceArticles({
+    searchQuery: productCode, page: 1, perPage: 10, requestTimeoutMs: 12000, searchMatchType: 'exact',
+  }, { providerLabel: 'Monroe', providerId: 2143, dataSupplierId: 37, manufacturerNames: ['MONROE'] });
+  const matches = (result.articles ?? []).filter(article =>
+    exactCatalogCode(article.articleNumber) === exactCatalogCode(productCode) && Number(article.dataSupplierId ?? article.mfrId) === 37 &&
+    article.mfrName?.trim().toUpperCase() === 'MONROE');
+  if (matches.length !== 1 || (result.totalMatchingArticles ?? 0) > 10) {
+    throw Error(matches.length ? 'OFFICIAL_EXACT_MATCH_AMBIGUOUS' : 'OFFICIAL_EXACT_MATCH_NOT_FOUND');
+  }
+  return mapMonroeCatalogArticle(matches[0], productCode);
 }
 
 // Same conservative field boundary for manufacturer-hosted TecDoc responses.
