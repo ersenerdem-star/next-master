@@ -9,6 +9,10 @@ begin
    or s.missing_price_count <> 1 or s.quantity <> 6 or s.amount <> 24
  then raise exception 'summary mismatch: %', row_to_json(s); end if;
 
+ select count(*) into n from public.reporting_sales_orders_brand_summary('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') where brand='SKF' and currency='USD' and amount=1002;
+ if n <> 1 then raise exception 'currency groups or USD total wrong'; end if;
+ select count(*) into n from public.reporting_sales_orders_brand_summary('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa') where brand='BOSCH' and currency='USD';
+ if n <> 0 then raise exception 'currency groups combined'; end if;
  select count(*) into n from public.reporting_sales_orders_brand_details('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',null,null,null,null,null,0,500);
  if n <> 500 then raise exception 'first page expected 500, got %', n; end if;
 select count(*) into n from public.reporting_sales_orders_brand_details('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',null,null,null,null,null,500,500);
