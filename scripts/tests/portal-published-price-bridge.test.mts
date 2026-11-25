@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildPortalPriceListRows, preparePortalOrderLines, resolvePortalPriceListExportContext, searchPortalCatalog, submitPortalSalesOrder } from "../../netlify/functions/_shared/portal-orders.mts";
+import { parseOrderImportFile } from '../../apps/web/src/shared/orderImport.ts';
+import { File } from 'node:buffer';
 
 test("portal keeps published SKUs separate and prices exact order/search requests", async () => {
   const originalFetch = globalThis.fetch;
@@ -47,11 +49,9 @@ test("portal keeps published SKUs separate and prices exact order/search request
     access_can_view_payments: true, access_can_view_orders: true, allowed_brand_ids: [],
   };
   try {
-    const prepared = await preparePortalOrderLines("https://supabase.example.invalid", "service-key", invite, [
-      { code: "61/1", brand: "Clevite", qty: 1 },
-      { code: "611", brand: "Clevite", qty: 2 },
-      { code: "61-1", brand: "Clevite", qty: 1 },
-    ]);
+    const file = new File(['Part_No,Brand,Qty\n61/1,Clevite,1\n611,Clevite,2\n61-1,Clevite,1\n'], 'parts.csv');
+    const rows = await parseOrderImportFile(file as unknown as globalThis.File);
+    const prepared = await preparePortalOrderLines("https://supabase.example.invalid", "service-key", invite, rows);
     assert.equal(prepared.lines.length, 3);
     assert.deepEqual(prepared.lines.map((line) => line.requestedCode), ["61/1", "611", "61-1"]);
     assert.deepEqual(prepared.lines.map((line) => line.buy_price), [8.34, 405.72, null]);

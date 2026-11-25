@@ -18,3 +18,13 @@ test('invalid or fractional quantities fail instead of becoming one',async()=>{
     await assert.rejects(()=>parseOrderImportFile(file as unknown as globalThis.File),/Invalid quantity for P550428/);
   }
 });
+test('CSV and Excel preserve original manufacturer codes and punctuation',async()=>{
+  const values=[['Part_No','Brand','Qty'],['II16355/1110','Knorr',1],['105-03366','KS',1],['750.330','Elring',1],['00000123','Bosch',1],['10503366','KS',1],['  aBc 12-3  ','Bosch',1]];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(values),'order');
+  const excel=new File([XLSX.write(wb,{type:'buffer',bookType:'xlsx'})],'order.xlsx');
+  const csv=new File([values.map(row=>row.join(',')).join('\n')],'order.csv');
+  for(const file of [excel,csv]) {
+    const rows=await parseOrderImportFile(file as unknown as globalThis.File);
+    assert.deepEqual(rows.map(row=>row.code),['II16355/1110','105-03366','750.330','00000123','10503366','aBc 12-3']);
+  }
+});

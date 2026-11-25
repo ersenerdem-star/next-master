@@ -1,12 +1,10 @@
-import { isWahlerBrand } from "../../../../../shared/wahler-price-tiers.mjs";
-import { normalizePartCode } from '../../domain/shared/normalize';
 import type { PortalPreparedLine } from '../../infrastructure/api/portalOrderApi';
 
 function identity(line: PortalPreparedLine) {
   return JSON.stringify([
-    isWahlerBrand(line.brand)
-      ? String(line.requestedCode || line.resolvedCode || '').trim().toUpperCase().replace(/\s+/g,'')
-      : normalizePartCode(String(line.requestedCode || line.resolvedCode || '')),
+    // Compact search keys are not proof that punctuation identifies the same
+    // product. Match the backend's conservative exact SKU rule for all brands.
+    String(line.requestedCode || line.resolvedCode || '').trim().toUpperCase().replace(/\s+/g,''),
     String(line.brand || '').toLowerCase(),
     String(line.market_segment || '').toLowerCase(),
   ]);

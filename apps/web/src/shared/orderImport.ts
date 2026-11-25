@@ -8,10 +8,11 @@ type ImportedOrderRow = {
 };
 
 function normalizeOrderCode(value: unknown) {
-  return String(value ?? "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "")
-    .trim();
+  // The uploaded manufacturer code is an identifier, not a search key.
+  // Its punctuation and leading zeros can distinguish products and must
+  // reach the pricing service unchanged.
+  const code = String(value ?? "").trim();
+  return /[\p{L}\p{N}]/u.test(code) ? code : "";
 }
 
 function normalizeHeader(value: string) {
