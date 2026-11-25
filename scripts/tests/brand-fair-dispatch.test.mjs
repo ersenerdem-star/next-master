@@ -5,7 +5,7 @@ const target={portal:'https://portal.next-master.com',key:'test-only-key'},job={
 test('a selected job is signed for its exact organization and leaves claiming to the worker',async()=>{
  const calls=[];const db={rpc:async(name,args)=>{calls.push([name,args]);return {data:job};}};
  const result=await dispatchCatalogBrand({db,target,send:async(url,options)=>{assert.equal(url,target.portal+'/api/catalog-brand-worker-v2-background');const body=JSON.parse(options.body);assert.deepEqual(body,{jobId:job.id,organizationId:job.organization_id});requireBrandDispatch(new Request(url,options),target.key,job.id,job.organization_id);assert.equal(options.redirect,'error');return new Response(null,{status:202});}});
- assert.equal(result.jobId,job.id);assert.deepEqual(calls,[['admit_catalog_wilmink_application',{}],['admit_catalog_knorr_application',{}],['admit_catalog_monroe_image_application',{}],['next_catalog_brand_dispatch',{}]]);
+ assert.equal(result.jobId,job.id);assert.deepEqual(calls,[['admit_catalog_wilmink_application',{}],['admit_catalog_knorr_application',{}],['admit_catalog_monroe_image_application',{}],['admit_catalog_monroe_fitment_application',{}],['next_catalog_brand_dispatch',{}]]);
 });
 test('a paused job resumes its existing cursor without enabling publication',async()=>{
  const calls=[];await dispatchCatalogBrand({db:{rpc:async(name,args)=>{calls.push([name,args]);return {data:{...job,status:'paused'}};}},target,send:async()=>new Response(null,{status:202})});
@@ -15,7 +15,7 @@ test('a busy organization or an empty queue causes no admission or network call'
  const result=await dispatchCatalogBrand({db:{rpc:async()=>({data:null})},target,send:async()=>{throw Error('must not send');}});assert.equal(result.status,'idle');
 });
 test('database and HTTP dispatch failures are reported without fabricating a successful run',async()=>{
- await assert.rejects(dispatchCatalogBrand({db:{rpc:async(name)=>['admit_catalog_wilmink_application','admit_catalog_knorr_application','admit_catalog_monroe_image_application'].includes(name)?{data:null}:{error:{message:'unavailable'}}},target,send:async()=>{throw Error('must not send');}}),/SELECTION_FAILED/);
+ await assert.rejects(dispatchCatalogBrand({db:{rpc:async(name)=>['admit_catalog_wilmink_application','admit_catalog_knorr_application','admit_catalog_monroe_image_application','admit_catalog_monroe_fitment_application'].includes(name)?{data:null}:{error:{message:'unavailable'}}},target,send:async()=>{throw Error('must not send');}}),/SELECTION_FAILED/);
  await assert.rejects(dispatchCatalogBrand({db:{rpc:async()=>({data:job})},target,send:async()=>new Response(null,{status:403})}),/HTTP_403/);
 });
 test('completed work chains exactly one signed selection; a duplicate, pause or failure never self-retries',async()=>{

@@ -1,3 +1,4 @@
+import {collectCompleteVehicles} from './tecalliance-vehicle-fitment.mjs';
 import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 import {officialGrossWeightKg} from './official-weight.mjs';
 import {tecLifecycle} from './mira-lifecycle.mts';
@@ -779,7 +780,7 @@ export function mapMonroeCatalogArticle(article: TecAllianceApiArticle, productC
   };
 }
 
-export async function fetchMonroeCatalogFields(productCode: string) {
+export async function fetchMonroeCatalogFields(productCode: string, { fitment = false, vehicle = true } = {}) {
   const result = await requestTecAllianceArticles({
     searchQuery: productCode, page: 1, perPage: 10, requestTimeoutMs: 12000, searchMatchType: 'exact',
   }, { providerLabel: 'Monroe', providerId: 2143, dataSupplierId: 37, manufacturerNames: ['MONROE'] });
@@ -789,7 +790,40 @@ export async function fetchMonroeCatalogFields(productCode: string) {
   if (matches.length !== 1 || (result.totalMatchingArticles ?? 0) > 10) {
     throw Error(matches.length ? 'OFFICIAL_EXACT_MATCH_AMBIGUOUS' : 'OFFICIAL_EXACT_MATCH_NOT_FOUND');
   }
-  return mapMonroeCatalogArticle(matches[0], productCode);
+  const article = matches[0];
+  const official = mapMonroeCatalogArticle(article, productCode);
+  if (!fitment) return official;
+
+  const fields = {
+    ean: official.fields.ean,
+    oem_no: extractTecAllianceOemNumbers(article.oemNumbers ?? []) || null,
+    vehicle: null as string | null,
+    vehicle_model: null as string | null,
+  };
+  let fitmentEvidence: Record<string, unknown> = {status:'not_requested'};
+  if (vehicle) {
+    let requests = 0;
+    const call = async (method: string, values: Record<string, unknown>) => {
+      if (++requests > 24) throw Error('FITMENT_REQUEST_BOUND');
+      await new Promise(resolve => setTimeout(resolve,1100));
+      const response = await fetchTecAllianceJson<Record<string, unknown>>(TECALLIANCE_API_URL,
+        {[method]:{provider:2143,articleCountry:'GB',lang:'en',...values}},12000);
+      return {response};
+    };
+    try {
+      const detail = await collectCompleteVehicles(article, {call,manufacturer:'MONROE',supplierId:37,maxTargets:600});
+      const printable = (value: string) => value.length <= 12000 ? value || null : null;
+      fields.vehicle = printable([...new Set(detail.vehicles.map((row: any) => row.manuDesc))].sort().join('; '));
+      fields.vehicle_model = printable([...new Set(detail.vehicles.map((row: any) => row.manuDesc+' '+row.modelDesc))].sort().join('; '));
+      fitmentEvidence = {status:detail.vehicles.length?'verified':'no_vehicle_links',scope:'GB_vehicle_makes_models',
+        targets:detail.vehicles.length,fingerprint:detail.evidence_manifest_sha256};
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      if (!/^FITMENT_[A-Z_]+$/.test(message)) throw error;
+      fitmentEvidence = {status:'requires_review',reason:message};
+    }
+  }
+  return {...official,fields,imageCandidate:null,fitmentEvidence};
 }
 
 // Same conservative field boundary for manufacturer-hosted TecDoc responses.

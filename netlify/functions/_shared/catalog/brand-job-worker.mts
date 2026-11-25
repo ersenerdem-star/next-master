@@ -24,6 +24,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
+ const monroeFitment=monroe&&job.manifest.monroe_policy==='monroe-fitment-fill.v1';
  const monroeImageOnly=monroe&&job.manifest.monroe_policy==='monroe-image-fill.v1';
  const knorrAutomatic=def.family==='knorr_bremse'&&job.manifest.automatic_application?.policy==='knorr-official-missing-only.v1'&&Boolean(job.manifest.discovery_job);
  const automatic=def.authority==='distributor'&&job.manifest.automatic_application?.policy==='wilmink-missing-only.v1'&&Boolean(job.manifest.discovery_job);
@@ -36,6 +37,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{
  if(job.manifest.source_key!==def.sourceKey)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');
  if(source.error||brand.error||!provider)throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');assertBrandEngineSource(source.data,job.manifest.brand,{publish:job.mode==='publish',sourceKey:def.sourceKey});
+ if(monroeFitment&&source.data.metadata?.monroe_background_fitment_only!==true)throw Error('MONROE_AUTOMATIC_FITMENT_REVOKED');
  if(monroeImageOnly&&source.data.metadata?.monroe_background_image_only!==true)throw Error('MONROE_AUTOMATIC_APPLICATION_REVOKED');
  if(knorrAutomatic&&(source.data.metadata?.automatic_apply!==true||source.data.metadata?.automatic_application_policy!=='knorr-official-missing-only.v1'))throw Error('KNORR_AUTOMATIC_APPLICATION_REVOKED');
  if(automatic&&source.data.metadata?.automatic_apply!==true)throw Error('WILMINK_AUTOMATIC_APPLICATION_REVOKED');
@@ -52,16 +54,22 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const missingKnorr=def.family==='knorr_bremse'&&rows.length===0&&(current.data||[]).length===0;
  if(rows.length!==1&&!missingKnorr){const reason='CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS';observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:{},fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:reason}),observedAt:new Date().toISOString(),unavailable:reason};}else{
  await new Promise(r=>setTimeout(r,delayMs));
- try{const raw=await provider.fetch(item.product_code),safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
+ try{const raw=monroeFitment
+  ?await provider.fetch(item.product_code,{fitment:true,vehicle:!rows[0].vehicle?.trim()||!rows[0].vehicle_model?.trim()})
+  :await provider.fetch(item.product_code),safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const before=rows[0]||{};
  const plan=planSupplierCatalogEnrichment({existing:before,incoming:safe.fields,phase:'official'});
+ if(monroeFitment){
+  for(const field of ['oem_no','vehicle','vehicle_model'])if(before[field]?.trim())delete plan.patch[field];
+ }
  if(monroeImageOnly)delete plan.patch.weight_kg;
  if(monroe)delete plan.patch.ean; // EAN checks identity; it is outside Monroe's write scope.
  observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before,missingCatalogProduct:missingKnorr,fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,...(def.family==='knorr_bremse'?{identity:raw.identity}:{}),lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing,...(def.authority==='distributor'?{authority:'distributor',sourceSku:raw.sourceSku,technicalAttributes:raw.technicalAttributes,imageCandidate:raw.imageCandidate}:{})};
  if(monroe){
   observation.imageCandidate=raw.imageCandidate;
   observation.sourceLogistics=raw.sourceLogistics;
-  observation.fingerprint=createHash('sha256').update(JSON.stringify([safe.evidence.fingerprint,raw.imageCandidate,raw.sourceLogistics])).digest('hex');
+  if(monroeFitment)observation.fitmentEvidence=raw.fitmentEvidence;
+  observation.fingerprint=createHash('sha256').update(JSON.stringify([safe.evidence.fingerprint,raw.imageCandidate,raw.sourceLogistics,raw.fitmentEvidence])).digest('hex');
  }
  if(def.family==='knorr_bremse'&&!missingKnorr){
   const records=await db.from('catalog_product_source_records').select('source_key,source_product_id,payload_fingerprint').eq('organization_id',organizationId).eq('catalog_product_id',rows[0].id).eq('source_key','knorr_bremse_aftermarket').limit(1001);
@@ -83,7 +91,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
    }
   }
  }
- if(monroe&&!plan.issues.some(issue=>issue.code==='EAN_IDENTITY_CONFLICT')){
+ if(monroe&&!monroeFitment&&!plan.issues.some(issue=>issue.code==='EAN_IDENTITY_CONFLICT')){
   try{
    const secondarySource=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId)
     .eq('source_key','spareto_secondary_exact_v1').maybeSingle();
@@ -137,7 +145,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  }
  const pause=index+1<job.total_items&&Date.now()-started>maxMs;await save(job.mode==='publish'?'completed':'reviewed',true,pause?'paused':null);
  if(pause)return {claimed:true,status:'paused'};
- }catch(e:any){const message=String(e.message||'BRAND_SOURCE_FAILED').slice(0,350);const retry=/HTTP[_ ]?(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;try{await save('failed',false,retry?'paused':'failed',message);}catch{}return {claimed:true,status:retry?'paused':'failed',error:message};}
+ }catch(e:any){const message=String(e.message||'BRAND_SOURCE_FAILED').slice(0,350);const retry=/(?:HTTP[_ ]?|TecAlliance request failed )(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;try{await save('failed',false,retry?'paused':'failed',message);}catch{}return {claimed:true,status:retry?'paused':'failed',error:message};}
  }
  return {claimed:true,status:job.mode==='publish'?'completed':'reviewed'};
 }

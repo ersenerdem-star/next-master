@@ -131,3 +131,55 @@ test('Monroe background admission requires explicit scope and seals every non-im
     await db.close();
   }
 });
+
+test('Monroe fitment publication fills only blank reviewed fields and keeps concurrent edits', async () => {
+  const db=await setup();
+  const migration=(name)=>readFileSync(new URL('../../supabase/migrations/'+name+'.sql',import.meta.url),'utf8');
+  try {
+    for(const name of ['20261125073144_register_monroe_catalog_engine','20261125083514_monroe_background_image_review',
+      '20261125125253_monroe_official_fitment_oem_completion'])await db.exec(migration(name));
+    await db.exec(`
+      update brands set name='Monroe';
+      update catalog_external_sources set source_key='tecalliance_monroe', metadata=
+       '{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Monroe"],"allowed_evidence_hosts":["web.tecalliance.net"],"approval_actor":"owner","publication_approval_reference":"request","monroe_background_fitment_only":true}';
+      update catalog_products set product_code='10024', lifecycle_status='active', image_url='https://manual.invalid/photo';
+    `);
+    async function stage(fields, evidence) {
+      const before=(await db.query('select to_jsonb(p) v from catalog_products p')).rows[0].v;
+      const job=await rpc(db,'start_catalog_brand_job',[org,actor,['10024'],'Monroe',crypto.randomUUID(),'tecalliance_monroe']);
+      await db.query("update catalog_brand_jobs set manifest=manifest||'{\"monroe_policy\":\"monroe-fitment-fill.v1\"}'::jsonb where id=$1",[job.id]);
+      const claim=await rpc(db,'claim_catalog_brand_job',[org,job.id]);
+      const observation={brand:'Monroe',sourceKey:'tecalliance_monroe',code:'10024',
+        sourceUrl:'https://web.tecalliance.net/tae/en/home',before,fields,fitmentEvidence:evidence};
+      await rpc(db,'checkpoint_catalog_brand_job',[org,job.id,claim.lease_token,0,observation,{},'reviewed',null,true,null]);
+      return {job,observation};
+    }
+
+    const evidence={status:'verified',fingerprint:'a'.repeat(64)};
+    const first=await stage({oem_no:'0046412045',vehicle:'FIAT',vehicle_model:'FIAT CINQUECENTO'},evidence);
+    const admitted=await rpc(db,'admit_catalog_monroe_fitment_application',[]);
+    assert.equal(admitted.id,first.job.id);
+    await db.exec("update catalog_products set vehicle_model='Manual model'");
+    const active=await rpc(db,'claim_catalog_brand_job',[org,first.job.id]);
+    const result=await rpc(db,'apply_catalog_monroe_job_item',[org,first.job.id,active.lease_token,0]);
+    assert.deepEqual(result.changes,{oem_no:'0046412045',vehicle:'FIAT'});
+    assert.equal(result.fields.vehicle_model,'changed_since_review');
+    assert.deepEqual((await db.query('select origin,hs_code,image_url,lifecycle_status,vehicle_model from catalog_products')).rows[0],
+      {origin:'TR',hs_code:'001234',image_url:'https://manual.invalid/photo',lifecycle_status:'active',vehicle_model:'Manual model'});
+    await rpc(db,'checkpoint_catalog_brand_job',[org,first.job.id,active.lease_token,0,first.observation,result,'completed',null,true,null]);
+
+    const forbidden=await stage({oem_no:'OTHER'},evidence);
+    await rpc(db,'schedule_catalog_brand_job',[org,forbidden.job.id,true]);
+    const claim=await rpc(db,'claim_catalog_brand_job',[org,forbidden.job.id]);
+    await assert.rejects(rpc(db,'apply_catalog_monroe_job_item',[org,forbidden.job.id,claim.lease_token,0]),/automatic fitment scope/);
+    await db.query("update catalog_brand_jobs set status='failed' where id=$1",[forbidden.job.id]);
+
+    await db.exec('update catalog_products set vehicle_model=null');
+    const unverified=await stage({vehicle_model:'Unconfirmed model'},{status:'requires_review'});
+    await rpc(db,'schedule_catalog_brand_job',[org,unverified.job.id,true]);
+    const second=await rpc(db,'claim_catalog_brand_job',[org,unverified.job.id]);
+    await assert.rejects(rpc(db,'apply_catalog_monroe_job_item',[org,unverified.job.id,second.lease_token,0]),/automatic fitment scope/);
+  } finally {
+    await db.close();
+  }
+});
