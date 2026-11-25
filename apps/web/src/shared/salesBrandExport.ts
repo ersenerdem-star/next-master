@@ -1,5 +1,15 @@
 import type { SalesBrandDetail, SalesBrandSummary } from "../infrastructure/api/salesBrandReportApi";
 
+// A brand may survive in saved orders after it disappears from the catalog.
+export function mergeSalesBrandNames(catalog: string[], historical: string[]): string[] {
+  const names = new Map<string, string>();
+  for (const name of [...catalog, ...historical]) {
+    const value = name.trim();
+    if (value && !names.has(value.toLowerCase())) names.set(value.toLowerCase(), value);
+  }
+  return [...names.values()].sort((a, b) => a.localeCompare(b));
+}
+
 const summaryKey = (r: SalesBrandSummary) => JSON.stringify([r.brand, r.currency]);
 const canonical = (rows: SalesBrandSummary[]) => rows.map((r) => [summaryKey(r), Number(r.order_count), Number(r.line_count), Number(r.detail_count), r.content_hash, Number(r.missing_price_count), Number(r.missing_quantity_count), r.quantity == null ? null : Number(r.quantity), r.amount == null ? null : Number(r.amount)]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
 export function expectedSalesBrandRows(summary: SalesBrandSummary[]) {

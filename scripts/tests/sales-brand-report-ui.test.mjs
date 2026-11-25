@@ -1,11 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as XLSX from 'xlsx';
-import { collectSalesBrandExport, verifySalesBrandExport } from '../../apps/web/src/shared/salesBrandExport.ts';
+import { collectSalesBrandExport, verifySalesBrandExport, mergeSalesBrandNames } from '../../apps/web/src/shared/salesBrandExport.ts';
 import { buildWorkbookBytes } from '../../apps/web/src/shared/xlsxCore.ts';
 
 const row = (n) => ({ order_id:`id-${n}`, order_no:`SO-${n}`, order_date:'2026-11-25',customer_id:null,customer_name:'Customer',status:'draft',brand:'Bosch',requested_code:'000123',product_code:'000456',description:'Part',quantity:1,unit_price:2,amount:2,currency:'EUR',line_index:1 });
 const summary = (n) => [{ brand:'Bosch',currency:'EUR',order_count:n,line_count:n,detail_count:n,content_hash:"digest",missing_price_count:0,missing_quantity_count:0,quantity:n,amount:n*2 }];
+
+test('brand choices include historical names and do not duplicate case variants', () => {
+  assert.deepEqual(mergeSalesBrandNames(['Bosch','Mann'], ['BOSCH','Legacy brand','  ', 'legacy brand']), ['Bosch','Legacy brand','Mann']);
+});
 
 test('fetches all filtered rows across page boundary before returning', async () => {
   const all = Array.from({length:501}, (_, i) => row(i));
