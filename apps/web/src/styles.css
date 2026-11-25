@@ -13636,3 +13636,9 @@ body {
 .supplier-operation__link { color:#176dc4; font-weight:700; padding:10px 0; }
 #supplier-price-browse { scroll-margin-top:100px; }
 @media (max-width: 900px) { .supplier-operations { grid-template-columns:1fr; } }
+.portal-excel-price-preview { margin: 1rem 0; padding: 1rem; border: 1px solid #d9e4f1; border-radius: 12px; background: #f8fbff; }
+.portal-excel-price-preview__heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.portal-excel-price-preview p { margin: .35rem 0; }
+.portal-excel-price-preview__scroll { overflow-x: auto; }
+.portal-excel-price-preview table { width: 100%; border-collapse: collapse; text-align: left; }
+.portal-excel-price-preview th, .portal-excel-price-preview td { padding: .6rem; border-bottom: 1px solid #e1eaf3; }

@@ -53,6 +53,11 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
       hostname: getPortalRequestHostname(req),
     });
+    // A price preview remains bound to the customer that opened it, even if
+    // another browser tab replaces the shared session cookie in the meantime.
+    if (body?.expectedInviteId && String(body.expectedInviteId) !== invite.id) {
+      return json({ error: "Your portal account changed. Reload the page and try again." }, 409);
+    }
     const prepared = await prepareCustomerPortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,

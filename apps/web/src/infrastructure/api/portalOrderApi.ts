@@ -144,6 +144,7 @@ export async function savePortalOrderQuantities(credentials: PortalCredentials, 
 
 type PortalRequestOptions = {
   signal?: AbortSignal;
+  expectedInviteId?: string;
 };
 
 // Large customer price lists are generated from a paged server-side rollup.
@@ -220,6 +221,7 @@ export async function preparePortalOrderLines(credentials: PortalCredentials, ro
   const data = await postPortalOrderJson("/api/portal-order-prepare", {
     ...credentials,
     rows,
+    ...(options.expectedInviteId ? { expectedInviteId: options.expectedInviteId } : {}),
   }, options);
   return {
     lines: data.lines || [],

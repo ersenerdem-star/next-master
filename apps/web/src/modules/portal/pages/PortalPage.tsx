@@ -65,6 +65,7 @@ import { fetchCatalogProductMedia } from "../../../infrastructure/api/catalogMed
 import type { ProductMediaItem } from "../../../presentation/components/common/ProductVisual";
 import { parseOrderImportFile } from "../../../shared/orderImport";
 import { CustomerDeskHome } from "../components/CustomerDeskHome";
+import { PortalExcelPricePreview } from "../components/PortalExcelPricePreview";
 import { PortalSearchResults } from "../components/PortalSearchResults";
 import { isPortalSnapshotForEmail } from "../portalSessionIdentity";
 
@@ -3998,6 +3999,7 @@ export function PortalPage() {
                   {portalDraftDiscontinuedCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={"discontinued item(s) detected in this sales order. Review before submission."}/></div>
               ) : null}
 
+              <PortalExcelPricePreview key={`${activeSnapshot.invite.id}:${activeSnapshot.customer?.id || ""}`} inviteId={activeSnapshot.invite.id} credentials={credentials} currency={portalOrderCurrency} fallbackBrand={orderSearchBrand} online={isOnline} />
               <PortalSearchResults
                   initialSearchField={homeSearchField}
                   results={catalogResults}

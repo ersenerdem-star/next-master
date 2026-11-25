@@ -209,6 +209,18 @@ test("actual customer prepare handler uses the safe projection rather than inter
   });
 });
 
+test("preview request fails closed if the browser session changes customers", async () => {
+  await fixture(async (state) => {
+    const handler = loadHandler("prepare");
+    const mismatch = await handler(new Request("https://portal.example.invalid/api/portal-order-prepare", { method: "POST", body: JSON.stringify({ rows: [row(1)], expectedInviteId: "different-invite" }) }), {});
+    assert.equal(mismatch.status, 409);
+    assert.match((await mismatch.json()).error, /account changed/);
+    assert.deepEqual(state.writes, []);
+    const matched = await handler(new Request("https://portal.example.invalid/api/portal-order-prepare", { method: "POST", body: JSON.stringify({ rows: [row(1)], expectedInviteId: invite.id }) }), {});
+    assert.equal(matched.status, 200);
+  });
+});
+
 test("actual Netlify submission handler rejects a crafted out-of-rule request before any order mutation", async () => {
   await fixture(async (state) => {
     const handler = loadHandler("submit");
