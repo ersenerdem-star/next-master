@@ -86,3 +86,48 @@ test('Monroe applies only reviewed gross weight and a missing official image, wi
     await db.close();
   }
 });
+
+test('Monroe background admission requires explicit scope and seals every non-image field', async () => {
+  const db=await setup();
+  const migration=(name)=>readFileSync(new URL('../../supabase/migrations/'+name+'.sql',import.meta.url),'utf8');
+  const image='https://digital-assets.tecalliance.services/images/800/'+'d'.repeat(40)+'.jpg';
+  try {
+    await db.exec(migration('20261125073144_register_monroe_catalog_engine'));
+    await db.exec(migration('20261125083514_monroe_background_image_review'));
+    await db.exec(`
+      update brands set name='Monroe';
+      update catalog_external_sources set source_key='tecalliance_monroe', metadata=
+       '{"brand_engine_read_allowed":true,"brand_engine_enrichment_allowed":true,"allowed_brands":["Monroe"],"allowed_evidence_hosts":["web.tecalliance.net"],"approval_actor":"owner","publication_approval_reference":"request","monroe_background_image_only":true}';
+      update catalog_products set product_code='10024', lifecycle_status='active';
+    `);
+    async function stage(fields, policy) {
+      const before=(await db.query('select to_jsonb(p) v from catalog_products p')).rows[0].v;
+      const job=await rpc(db,'start_catalog_brand_job',[org,actor,['10024'],'Monroe',crypto.randomUUID(),'tecalliance_monroe']);
+      if(policy)await db.query("update catalog_brand_jobs set manifest=manifest||'{\"monroe_policy\":\"monroe-image-fill.v1\"}'::jsonb where id=$1",[job.id]);
+      const claim=await rpc(db,'claim_catalog_brand_job',[org,job.id]);
+      const observation={brand:'Monroe',sourceKey:'tecalliance_monroe',code:'10024',
+        sourceUrl:'https://web.tecalliance.net/tae/en/home',before,fields,imageCandidate:image,
+        sourceFields:{weight_kg:3.3},secondary:{reportedFields:{hs_code:'870880',origin:'PL'}},
+        lifecycle:{checks:{discontinued:'found'}}};
+      await rpc(db,'checkpoint_catalog_brand_job',[org,job.id,claim.lease_token,0,observation,{},'reviewed',null,true,null]);
+      return job.id;
+    }
+    await stage({},false);
+    const forbidden=await stage({weight_kg:3.3},true);
+    assert.equal(await rpc(db,'admit_catalog_monroe_image_application',[]),null);
+    await rpc(db,'schedule_catalog_brand_job',[org,forbidden,true]);
+    const invalid=await rpc(db,'claim_catalog_brand_job',[org,forbidden]);
+    await assert.rejects(rpc(db,'apply_catalog_monroe_job_item',[org,forbidden,invalid.lease_token,0]),/automatic image-only scope/);
+    await db.query("update catalog_brand_jobs set status='failed' where id=$1",[forbidden]);
+    const eligible=await stage({},true);
+    const admission=await rpc(db,'admit_catalog_monroe_image_application',[]);
+    assert.equal(admission.id,eligible);
+    const publish=await rpc(db,'claim_catalog_brand_job',[org,eligible]);
+    const result=await rpc(db,'apply_catalog_monroe_job_item',[org,eligible,publish.lease_token,0]);
+    assert.deepEqual(result.changes,{image_url:image});
+    assert.deepEqual((await db.query('select weight_kg,origin,hs_code,lifecycle_status from catalog_products')).rows[0],
+      {weight_kg:null,origin:'TR',hs_code:'001234',lifecycle_status:'active'});
+  } finally {
+    await db.close();
+  }
+});

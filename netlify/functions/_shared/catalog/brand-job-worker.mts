@@ -24,6 +24,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
+ const monroeImageOnly=monroe&&job.manifest.monroe_policy==='monroe-image-fill.v1';
  const knorrAutomatic=def.family==='knorr_bremse'&&job.manifest.automatic_application?.policy==='knorr-official-missing-only.v1'&&Boolean(job.manifest.discovery_job);
  const automatic=def.authority==='distributor'&&job.manifest.automatic_application?.policy==='wilmink-missing-only.v1'&&Boolean(job.manifest.discovery_job);
  const brand=await db.from('brands').select('id').eq('organization_id',organizationId).eq('name',job.manifest.brand).single();
@@ -35,6 +36,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{
  if(job.manifest.source_key!==def.sourceKey)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');
  if(source.error||brand.error||!provider)throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');assertBrandEngineSource(source.data,job.manifest.brand,{publish:job.mode==='publish',sourceKey:def.sourceKey});
+ if(monroeImageOnly&&source.data.metadata?.monroe_background_image_only!==true)throw Error('MONROE_AUTOMATIC_APPLICATION_REVOKED');
  if(knorrAutomatic&&(source.data.metadata?.automatic_apply!==true||source.data.metadata?.automatic_application_policy!=='knorr-official-missing-only.v1'))throw Error('KNORR_AUTOMATIC_APPLICATION_REVOKED');
  if(automatic&&source.data.metadata?.automatic_apply!==true)throw Error('WILMINK_AUTOMATIC_APPLICATION_REVOKED');
  await rpc('heartbeat_catalog_brand_job',scope);
@@ -53,6 +55,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{const raw=await provider.fetch(item.product_code),safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const before=rows[0]||{};
  const plan=planSupplierCatalogEnrichment({existing:before,incoming:safe.fields,phase:'official'});
+ if(monroeImageOnly)delete plan.patch.weight_kg;
  if(monroe)delete plan.patch.ean; // EAN checks identity; it is outside Monroe's write scope.
  observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before,missingCatalogProduct:missingKnorr,fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,...(def.family==='knorr_bremse'?{identity:raw.identity}:{}),lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing,...(def.authority==='distributor'?{authority:'distributor',sourceSku:raw.sourceSku,technicalAttributes:raw.technicalAttributes,imageCandidate:raw.imageCandidate}:{})};
  if(monroe){
@@ -94,7 +97,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
    }
    const code=exactCatalogCode(item.product_code);
    const indexed=await db.from('catalog_product_source_records').select('source_url').eq('organization_id',organizationId)
-    .eq('catalog_product_id',before.id).eq('source_key',helper.source_key).order('retrieved_at',{ascending:false}).limit(1).maybeSingle();
+    .eq('catalog_product_id',before.id).in('source_key',[helper.source_key,'spareto_monroe_sitemap_v1']).order('retrieved_at',{ascending:false}).limit(1).maybeSingle();
    if(indexed.error)throw indexed.error;
    const sourceUrl=indexed.data?.source_url??source.data.metadata?.secondary_product_urls?.[code];
    if(!sourceUrl)throw Error('SPARETO_PRODUCT_URL_NOT_INDEXED');

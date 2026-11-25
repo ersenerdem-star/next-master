@@ -11,6 +11,8 @@ export async function dispatchCatalogBrand({db,target,send=fetch,now=Date.now}:a
  if(admitted.error)throw Error('BRAND_DISPATCH_ADMISSION_FAILED');
  const knorr=await db.rpc('admit_catalog_knorr_application',{});
  if(knorr.error)throw Error('KNORR_DISPATCH_ADMISSION_FAILED');
+ const monroe=await db.rpc('admit_catalog_monroe_image_application',{});
+ if(monroe.error)throw Error('MONROE_DISPATCH_ADMISSION_FAILED');
  const selected=await db.rpc('next_catalog_brand_dispatch',{});
  if(selected.error)throw Error('BRAND_DISPATCH_SELECTION_FAILED');
  const job=selected.data;if(!job)return {status:'idle'};
