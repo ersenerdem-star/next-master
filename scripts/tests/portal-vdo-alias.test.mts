@@ -124,3 +124,23 @@ test('VDO identity and customer scope are refreshed when brands change during a 
     assert.ok(calls.some(call => call.input_brand === 'VDO' && call.input_quantity === 2));
   });
 });
+
+test('Excel alias confirmation is revalidated against current permitted brand identities', async () => {
+  const brands = [{id:'kkk',name:'KKK'},{id:'bw',name:'BorgWarner (KKK)'},{id:'mb',name:'Mercedes-Benz'}];
+  await withBackend(brands, async (calls) => {
+    const customer = invite('excel-choice',['kkk','bw','mb']);
+    const chosen = {code:'001234',brand:'BorgWarner (KKK)',qty:1,source_brand:'KKK',brand_choice_confirmed:true};
+    const result = await preparePortalOrderLines(service,'key',customer,[chosen]);
+    assert.equal(result.lines[0].brand,'BorgWarner (KKK)');
+    await assert.rejects(preparePortalOrderLines(service,'key',customer,[{...chosen,brand_choice_confirmed:false}]),/Brand choices changed/);
+    await assert.rejects(preparePortalOrderLines(service,'key',invite('excel-choice',['kkk']),[chosen]),/Brand choices changed|outside this portal scope/);
+    const auto = {code:'001234',brand:'Mercedes-Benz',qty:1,source_brand:'Mercedes',brand_choice_confirmed:false};
+    await preparePortalOrderLines(service,'key',customer,[auto]);
+    brands.push({id:'new-mercedes',name:'Mercedes'});
+    await assert.rejects(preparePortalOrderLines(service,'key',invite('excel-choice'),[auto]),/Brand choices changed/);
+    await assert.rejects(preparePortalOrderLines(service,'key',customer,[auto]),/Brand choices changed/);
+    brands.push({id:'second-mb',name:'mercedes-benz'});
+    await assert.rejects(preparePortalOrderLines(service,'key',invite('excel-choice'),[auto]),/ambiguous/);
+    assert.ok(calls.every(call=>call.input_code==='001234'));
+  });
+});

@@ -33,6 +33,8 @@ export type PortalOrderInputRow = {
   code: string;
   brand: string;
   qty: number;
+  source_brand?: string;
+  brand_choice_confirmed?: boolean;
   market_segment?: string | null;
 };
 
@@ -145,6 +147,7 @@ export async function savePortalOrderQuantities(credentials: PortalCredentials, 
 type PortalRequestOptions = {
   signal?: AbortSignal;
   expectedInviteId?: string;
+  expectedCustomerId?: string;
 };
 
 // Large customer price lists are generated from a paged server-side rollup.
@@ -222,6 +225,7 @@ export async function preparePortalOrderLines(credentials: PortalCredentials, ro
     ...credentials,
     rows,
     ...(options.expectedInviteId ? { expectedInviteId: options.expectedInviteId } : {}),
+    ...(options.expectedCustomerId ? { expectedCustomerId: options.expectedCustomerId } : {}),
   }, options);
   return {
     lines: data.lines || [],

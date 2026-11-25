@@ -9,6 +9,7 @@ import { roundMoney, multiplyMoney, sumMoney, marginPercent as orderMarginPercen
 import { normalizeOrderQuantity } from "../../../apps/web/src/domain/shared/orderQuantityRules.ts";
 import { readSupplierCommercialTerms, type SupplierCommercialTerms } from "../../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
 import { deriveCustomerPriceListSettings, parseEmbeddedCustomerMeta } from "./pricing/customer-pricing-context.mts";
+import { planExcelBrandResolution } from "../../../apps/web/src/modules/portal/excelBrandResolution.ts";
 
 export type PortalInviteRow = {
   id: string;
@@ -122,6 +123,8 @@ type PortalOrderInputRow = {
   code: string;
   brand: string;
   qty: number;
+  source_brand?: string;
+  brand_choice_confirmed?: boolean;
 };
 
 type PreparedPortalLine = {
@@ -238,7 +241,7 @@ type PortalLookupCacheEntry<T> = {
   expiresAt: number;
 };
 
-const portalBrandMapCache = new Map<string, PortalLookupCacheEntry<{ byId: Map<string, string>; byName: Map<string, string> }>>();
+const portalBrandMapCache = new Map<string, PortalLookupCacheEntry<PortalBrandMap>>();
 const portalCustomerContextCache = new Map<string, PortalLookupCacheEntry<CustomerPricingContext>>();
 const portalPriceListCache = new Map<
   string,
@@ -1226,7 +1229,7 @@ function isVdoShorthand(brand: unknown) {
   return String(brand || "").trim().toLowerCase() === "vdo";
 }
 
-type PortalBrandMap = { byId: Map<string, string>; byName: Map<string, string> };
+type PortalBrandMap = { byId: Map<string, string>; byName: Map<string, string>; duplicates: Set<string> };
 
 async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, organizationId: string, fresh = false) {
   const cached = portalBrandMapCache.get(organizationId);
@@ -1240,6 +1243,7 @@ async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, orga
   }, PORTAL_SEARCH_REST_TIMEOUT_MS);
   const byId = new Map<string, string>();
   const byName = new Map<string, string>();
+  const duplicates = new Set<string>();
   const exactVdoIds = new Set<string>();
   const vdoContinentalIds = new Set<string>();
   for (const row of brands) {
@@ -1247,17 +1251,20 @@ async function resolveBrandMap(supabaseUrl: string, serviceRoleKey: string, orga
     const name = String(row.name || "").trim();
     if (!id || !name) continue;
     byId.set(id, name);
-    byName.set(name.toLowerCase(), id);
+    const normalizedName = name.toLowerCase();
+    if (byName.has(normalizedName) && byName.get(normalizedName) !== id) duplicates.add(normalizedName);
+    byName.set(normalizedName, id);
     if (name.toLowerCase() === "vdo") exactVdoIds.add(id);
     if (/^vdo\s*\/\s*continental$/i.test(name)) vdoContinentalIds.add(id);
   }
+  for (const name of duplicates) byName.delete(name);
   // A real VDO brand always takes precedence. Only provide the shorthand
   // when it resolves unambiguously within this organization.
   if (exactVdoIds.size > 1) byName.delete("vdo");
   else if (exactVdoIds.size === 0 && vdoContinentalIds.size === 1) {
     byName.set("vdo", [...vdoContinentalIds][0]);
   }
-  const value = { byId, byName };
+  const value = { byId, byName, duplicates };
   portalBrandMapCache.set(organizationId, {
     value,
     expiresAt: Date.now() + PORTAL_LOOKUP_CACHE_TTL_MS,
@@ -2510,7 +2517,24 @@ export async function preparePortalOrderLines(
   { includeSuggestions = false, savedSuppliers }: { includeSuggestions?: boolean; savedSuppliers?: Array<SavedQuantitySupplier | undefined> } = {},
 ) {
   const context = await resolvePortalCustomer(supabaseUrl, serviceRoleKey, invite);
-  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id, rows.some((row) => isVdoShorthand(row.brand)));
+  const brandMap = await resolveBrandMap(supabaseUrl, serviceRoleKey, invite.organization_id, true);
+  for (const row of rows) {
+    if (brandMap.duplicates.has(String(row.brand || '').trim().toLowerCase())) throw new Error('Brand not found or ambiguous. Contact your portal administrator.');
+  }
+  const allowed = new Set(portalAllowedBrandIds(invite));
+  const permittedNames = [...brandMap.byId.entries()].filter(([id]) => !allowed.size || allowed.has(id)).map(([, name]) => name);
+  for (const row of rows) {
+    if (typeof row.source_brand !== 'string') continue;
+    // A hidden second identity must not turn an ambiguous short name into an
+    // automatic match merely because the other identity is outside scope.
+    const globalPlan = planExcelBrandResolution([{...row, brand: row.source_brand}], [...brandMap.byId.values()]);
+    if (globalPlan.choices.length && row.brand_choice_confirmed !== true) throw new Error('Brand choices changed. Choose the full permitted brand and review the file again.');
+    const plan = planExcelBrandResolution([{...row, brand: row.source_brand}], permittedNames);
+    const issue = plan.choices[0];
+    if (issue) {
+      if (row.brand_choice_confirmed !== true || !issue.options.includes(row.brand)) throw new Error('Brand choices changed. Review the file again.');
+    } else if (plan.resolved[0].brand !== row.brand) throw new Error('Brand choices changed. Review the file again.');
+  }
   const canonicalRows = rows.map((row) => {
     if (!isVdoShorthand(row.brand)) return row;
     const brandId = brandMap.byName.get("vdo");

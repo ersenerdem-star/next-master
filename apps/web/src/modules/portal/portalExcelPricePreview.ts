@@ -11,7 +11,7 @@ export async function priceExcelPreview(
   const lines: PortalPreparedLine[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
-    const brand = row.brand.trim().toLowerCase().replace(/^vdo\s*\/\s*continental$/, "vdo");
+    const brand = row.brand.trim().toLowerCase();
     if (!brand) throw new Error("Brand is required on every row.");
     const key = `${brand}::${row.code.trim().toUpperCase().replace(/\s+/g, "")}`;
     if (seen.has(key)) throw new Error(`Duplicate part and brand: ${row.code} / ${row.brand}. Combine the quantities before checking.`);

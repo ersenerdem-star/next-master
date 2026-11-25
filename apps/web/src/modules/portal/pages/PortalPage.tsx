@@ -66,6 +66,7 @@ import type { ProductMediaItem } from "../../../presentation/components/common/P
 import { parseOrderImportFile } from "../../../shared/orderImport";
 import { CustomerDeskHome } from "../components/CustomerDeskHome";
 import { PortalExcelPricePreview } from "../components/PortalExcelPricePreview";
+import { useExcelBrandResolution } from "../components/useExcelBrandResolution";
 import { PortalSearchResults } from "../components/PortalSearchResults";
 import { isPortalSnapshotForEmail } from "../portalSessionIdentity";
 
@@ -610,6 +611,7 @@ export function PortalPage() {
     };
   });
   const [snapshot, setSnapshot] = useState<PortalSnapshot | null>(null);
+  const excelBrands = useExcelBrandResolution(credentials, snapshot?.invite.id || '', snapshot?.customer?.id || '', locale);
   const [restoringSession, setRestoringSession] = useState(() =>
     Boolean(
       storedSessionEmail &&
@@ -656,6 +658,8 @@ export function PortalPage() {
   );
   const [portalDraftLines, setPortalDraftLines] = useState<PortalPreparedLine[]>([]);
   const [portalOrderId, setPortalOrderId] = useState("");
+  const portalImportContextRef = useRef({ inviteId: '', customerId: '', orderId: '' });
+  portalImportContextRef.current = { inviteId: snapshot?.invite.id || '', customerId: snapshot?.customer?.id || '', orderId: portalOrderId };
   const [portalSalesOrderNo, setPortalSalesOrderNo] = useState("");
   const [portalDeliveryTerm, setPortalDeliveryTerm] = useState("");
   const [portalPaymentTerms, setPortalPaymentTerms] = useState("");
@@ -2034,7 +2038,7 @@ export function PortalPage() {
     }
   }
 
-  async function appendPortalRows(rows: Array<{ code: string; brand: string; qty: number; market_segment?: string | null }>, statusText: string) {
+  async function appendPortalRows(rows: Array<{ code: string; brand: string; qty: number; market_segment?: string | null; source_brand?: string; brand_choice_confirmed?: boolean }>, statusText: string, expectedTarget?: { inviteId: string; customerId: string; orderId: string }) {
     if (!rows.length) return [] as PortalPreparedLine[];
     try {
       setPreparingPortalOrder(true);
@@ -2054,7 +2058,7 @@ export function PortalPage() {
                 ? `Uploading and pricing lines ${processed + 1}-${processed + chunk.length} of ${rows.length}.`
                 : "Fetching live price and item details.",
           });
-          const prepared = await preparePortalOrderLinesApi(credentials, chunk);
+          const prepared = await preparePortalOrderLinesApi(credentials, chunk, { expectedInviteId: snapshot?.invite.id, expectedCustomerId: snapshot?.customer?.id });
           preparedLines = mergePortalPreparedLines(preparedLines, prepared.lines);
           latestPricingProfile = prepared.pricingProfile || latestPricingProfile;
           processed += chunk.length;
@@ -2066,6 +2070,10 @@ export function PortalPage() {
 
       if (failedChunkMessage) {
         throw new Error(failedChunkMessage);
+      }
+
+      if (expectedTarget && (portalImportContextRef.current.inviteId !== expectedTarget.inviteId || portalImportContextRef.current.customerId !== expectedTarget.customerId || portalImportContextRef.current.orderId !== expectedTarget.orderId)) {
+        throw new Error('The account or target order changed. Re-upload the file.');
       }
 
       setPortalDraftLines((current) => mergePortalPreparedLines(current, preparedLines));
@@ -2229,14 +2237,19 @@ export function PortalPage() {
       if (resetInputRef.current) resetInputRef.current.value = "";
       return;
     }
+    const expectedTarget = { ...portalImportContextRef.current };
     try {
       const importedRows = await parseOrderImportFile(file, orderSearchBrand);
       if (!importedRows.length) {
         throw new Error("No part rows found in upload.");
       }
+      const resolvedRows = await excelBrands.resolve(importedRows);
+      if (!resolvedRows) return;
+      if (portalImportContextRef.current.inviteId !== expectedTarget.inviteId || portalImportContextRef.current.customerId !== expectedTarget.customerId || portalImportContextRef.current.orderId !== expectedTarget.orderId) throw new Error('The account or target order changed. Re-upload the file.');
       const prepared = await appendPortalRows(
-        importedRows,
+        resolvedRows,
         `{count} imported line priced for ${portalSalesOrderNo || "New sales order"}.`,
+        expectedTarget,
       );
       if (prepared[0]) focusPortalDraftLines(prepared[0].lineId);
     } catch (caught) {
@@ -3494,6 +3507,7 @@ export function PortalPage() {
       >
     <div className="portal-shell portal-shell--workspace">
       {feedbackOverlay}
+      {excelBrands.dialog}
       <div className="portal-header">
         <div className="portal-brand">
           <NextMasterLogo theme="light" />
@@ -3999,7 +4013,7 @@ export function PortalPage() {
                   {portalDraftDiscontinuedCount.toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} <InterfaceText text={"discontinued item(s) detected in this sales order. Review before submission."}/></div>
               ) : null}
 
-              <PortalExcelPricePreview key={`${activeSnapshot.invite.id}:${activeSnapshot.customer?.id || ""}`} inviteId={activeSnapshot.invite.id} credentials={credentials} currency={portalOrderCurrency} fallbackBrand={orderSearchBrand} online={isOnline} />
+              <PortalExcelPricePreview key={`${activeSnapshot.invite.id}:${activeSnapshot.customer?.id || ""}`} inviteId={activeSnapshot.invite.id} customerId={activeSnapshot.customer?.id || ""} credentials={credentials} currency={portalOrderCurrency} fallbackBrand={orderSearchBrand} online={isOnline} />
               <PortalSearchResults
                   initialSearchField={homeSearchField}
                   results={catalogResults}

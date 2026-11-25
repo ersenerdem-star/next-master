@@ -39,7 +39,8 @@ test("prices sequential batches of at most 200 and stops on failure", async () =
 test("duplicate aliases, missing brands, currency changes and cancelled requests fail safely", async () => {
   const controller = new AbortController();
   const never = async () => { throw new Error("should not call prepare"); };
-  await assert.rejects(() => priceExcelPreview([{ code: "0123", brand: "VDO", qty: 1 }, { code: "0123", brand: "VDO/Continental", qty: 2 }], never, controller.signal, () => {}), /Duplicate/);
+  await assert.rejects(() => priceExcelPreview([{ code: "0123", brand: "VDO/Continental", qty: 1 }, { code: "0123", brand: "vdo/continental", qty: 2 }], never, controller.signal, () => {}), /Duplicate/);
+  await priceExcelPreview([{ code: "0123", brand: "VDO", qty: 1 }, { code: "0123", brand: "VDO/Continental", qty: 2 }], async () => ({lines: []}), controller.signal, () => {});
   await assert.rejects(() => priceExcelPreview([{ code: "0123", brand: "", qty: 1 }], never, controller.signal, () => {}), /Brand is required/);
   const rows = Array.from({ length: 201 }, (_, i) => ({ code: `P${i}`, brand: "VDO", qty: 1 }));
   let calls = 0;

@@ -13642,3 +13642,13 @@ body {
 .portal-excel-price-preview__scroll { overflow-x: auto; }
 .portal-excel-price-preview table { width: 100%; border-collapse: collapse; text-align: left; }
 .portal-excel-price-preview th, .portal-excel-price-preview td { padding: .6rem; border-bottom: 1px solid #e1eaf3; }
+.portal-brand-choice-backdrop { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: rgba(5, 20, 38, .68); padding: 20px; }
+.portal-brand-choice { background: white; color: #172943; border-radius: 14px; padding: 24px; width: min(760px, 100%); max-height: 85vh; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 45px rgba(0,0,0,.25); }
+.portal-brand-choice h2, .portal-brand-choice p { margin: 0; }
+.portal-brand-choice__rows { overflow: auto; display: grid; gap: 10px; }
+.portal-brand-choice__bulk { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px; background: #edf5fd; border-radius: 8px; }
+.portal-brand-choice__rows label { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 12px; padding: 10px; border: 1px solid #d6e1ed; border-radius: 8px; }
+.portal-brand-choice__rows select { padding: 8px; width: 100%; }
+.portal-brand-choice__actions { display: flex; justify-content: flex-end; gap: 10px; }
+.portal-brand-choice__actions button { padding: 10px 16px; }
+@media (max-width: 600px) { .portal-brand-choice__rows label { grid-template-columns: 1fr; } }

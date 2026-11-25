@@ -58,6 +58,9 @@ export default async (req: Request, _context: Context) => {
     if (body?.expectedInviteId && String(body.expectedInviteId) !== invite.id) {
       return json({ error: "Your portal account changed. Reload the page and try again." }, 409);
     }
+    if (body?.expectedCustomerId && String(body.expectedCustomerId) !== invite.customer_id) {
+      return json({ error: "Your portal account changed. Reload the page and try again." }, 409);
+    }
     const prepared = await prepareCustomerPortalOrderLines(supabaseUrl, serviceRoleKey, invite, rows);
     await writePortalAuditEvent(req, supabaseUrl, serviceRoleKey, {
       organizationId: invite.organization_id,

@@ -216,6 +216,9 @@ test("preview request fails closed if the browser session changes customers", as
     assert.equal(mismatch.status, 409);
     assert.match((await mismatch.json()).error, /account changed/);
     assert.deepEqual(state.writes, []);
+    const customerMismatch = await handler(new Request("https://portal.example.invalid/api/portal-order-prepare", { method: "POST", body: JSON.stringify({ rows: [row(1)], expectedInviteId: invite.id, expectedCustomerId: "different-customer" }) }), {});
+    assert.equal(customerMismatch.status, 409);
+    assert.deepEqual(state.writes, []);
     const matched = await handler(new Request("https://portal.example.invalid/api/portal-order-prepare", { method: "POST", body: JSON.stringify({ rows: [row(1)], expectedInviteId: invite.id }) }), {});
     assert.equal(matched.status, 200);
   });

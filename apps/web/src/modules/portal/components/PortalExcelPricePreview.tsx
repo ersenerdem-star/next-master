@@ -5,12 +5,14 @@ import { Button } from "../../../presentation/components/common/Button";
 import { parseOrderImportFile } from "../../../shared/orderImport";
 import type { PortalCredentials } from "../../../types/portalSession";
 import { priceExcelPreview } from "../portalExcelPricePreview";
+import { useExcelBrandResolution } from "./useExcelBrandResolution";
 
-type Props = { inviteId: string; credentials: PortalCredentials; currency: string; fallbackBrand: string; online: boolean };
+type Props = { inviteId: string; customerId: string; credentials: PortalCredentials; currency: string; fallbackBrand: string; online: boolean };
 
-export function PortalExcelPricePreview({ inviteId, credentials, currency, fallbackBrand, online }: Props) {
+export function PortalExcelPricePreview({ inviteId, customerId, credentials, currency, fallbackBrand, online }: Props) {
   const { locale } = useI18n();
   const tr = locale === "tr";
+  const excelBrands = useExcelBrandResolution(credentials, inviteId, customerId, locale);
   const input = useRef<HTMLInputElement>(null);
   const activeRequest = useRef<AbortController | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,8 +38,10 @@ export function PortalExcelPricePreview({ inviteId, credentials, currency, fallb
       if (!online) throw new Error(tr ? "Fiyat sorgulamak için internete bağlanın." : "Connect to the internet to look up prices.");
       const rows = await parseOrderImportFile(file, fallbackBrand);
       if (controller.signal.aborted) return;
-      const result = await priceExcelPreview(rows,
-        (chunk, signal) => preparePortalOrderLines(credentials, chunk, { signal, expectedInviteId: inviteId }), controller.signal,
+      const resolvedRows = await excelBrands.resolve(rows);
+      if (!resolvedRows || controller.signal.aborted) return;
+      const result = await priceExcelPreview(resolvedRows,
+        (chunk, signal) => preparePortalOrderLines(credentials, chunk, { signal, expectedInviteId: inviteId, expectedCustomerId: customerId }), controller.signal,
         (processed, total) => setProgress(tr ? `${processed} / ${total} satır sorgulandı.` : `${processed} / ${total} rows checked.`));
       if (!controller.signal.aborted) { setLines(result.lines); setResultCurrency(result.currency); }
     } catch (caught) {
@@ -52,6 +56,7 @@ export function PortalExcelPricePreview({ inviteId, credentials, currency, fallb
   }
 
   return <section className="portal-excel-price-preview" aria-label={tr ? "Excel ile fiyat sorgula" : "Check prices with Excel"}>
+    {excelBrands.dialog}
     <input ref={input} type="file" hidden accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm" onChange={(event) => { const file = event.target.files?.[0]; if (file) void inspect(file); }} />
     <div className="portal-excel-price-preview__heading">
       <div><strong>{tr ? "Excel ile fiyat sorgula" : "Check prices with Excel"}</strong><p>{tr ? "Dosyadaki ürünleri ve size özel fiyatları önizleyin. Sipariş oluşturulmaz veya değiştirilmez." : "Preview products and your prices. No order is created or changed."}</p></div>
