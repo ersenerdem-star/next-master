@@ -32,6 +32,7 @@ import { useI18n } from "../../i18n/I18nProvider";
 import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
 import { sumMoney } from "../../../../../shared/order-money.mjs";
 import { buildXlsxBlobAsync, downloadBlob } from "../../shared/xlsx";
+import { SalesBrandReport } from "./SalesBrandReport";
 
 type CoreReportKey =
   | "supplierBalance"
@@ -282,10 +283,11 @@ const reports: ReportDefinition[] = [
 ];
 
 export function CoreReportsPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [activeReport, setActiveReport] = useState<CoreReportKey>("supplierBalance");
+  const [showSalesBrandReport, setShowSalesBrandReport] = useState(false);
   const [organizationId, setOrganizationId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -319,7 +321,7 @@ export function CoreReportsPage() {
       ].map((item) => ({ value: item.value, label: r("core.fields.limitRows", { count: item.count }) })),
     [t],
   );
-  const reportOptions = useMemo(() => reports.map((report) => ({ value: report.key, label: r(report.labelKey) })), [t]);
+  const reportOptions = useMemo(() => [...reports.map((report) => ({ value: report.key, label: r(report.labelKey) })), { value: "salesBrand", label: locale === "tr" ? "Marka Bazında Satış Siparişleri" : "Sales Orders by Brand" }], [t, locale]);
   const translatedColumns = useMemo(
     () => activeDefinition.columns.map((column) => ({ ...column, header: r(column.headerKey) })),
     [activeDefinition, t],
@@ -466,6 +468,8 @@ export function CoreReportsPage() {
     }
   }
 
+  if (showSalesBrandReport) return <SalesBrandReport organizationId={organizationId} brands={brands} onBack={() => setShowSalesBrandReport(false)} />;
+
   return (
     <div className="page-stack">
       <section className="section-card">
@@ -475,7 +479,7 @@ export function CoreReportsPage() {
             <p>{activeReportLabel}</p>
           </div>
           <div className="toolbar toolbar--wrap">
-            <Select label={r("core.fields.report")} value={activeReport} options={reportOptions} onChange={(value) => setActiveReport(value as CoreReportKey)} />
+            <Select label={r("core.fields.report")} value={activeReport} options={reportOptions} onChange={(value) => value === "salesBrand" ? setShowSalesBrandReport(true) : setActiveReport(value as CoreReportKey)} />
             <Input label={r("core.fields.organizationId")} value={organizationId} onChange={setOrganizationId} disabled />
             <Input label={r("core.fields.startDate")} type="date" value={startDate} onChange={setStartDate} />
             <Input label={r("core.fields.endDate")} type="date" value={endDate} onChange={setEndDate} />
