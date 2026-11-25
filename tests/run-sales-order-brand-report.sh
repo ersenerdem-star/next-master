@@ -10,6 +10,6 @@ until docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
   [ "$attempt" -lt 30 ] || { echo "PostgreSQL did not start" >&2; exit 1; }
   sleep 1
 done
-for file in tests/sql/sales_order_brand_report_setup.sql supabase/migrations/20261125131544_sales_order_brand_report.sql tests/sql/sales_order_brand_report.sql; do
+for file in tests/sql/sales_order_brand_report_setup.sql supabase/migrations/20261125131544_sales_order_brand_report.sql supabase/migrations/20261125132022_sales_order_brand_case_normalization.sql tests/sql/sales_order_brand_report.sql tests/sql/sales_order_brand_report_case.sql; do
   docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < "$file"
 done
