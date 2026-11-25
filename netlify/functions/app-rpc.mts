@@ -16,6 +16,9 @@ const ALLOWED_RPCS = new Set([
   "reporting_customer_balance_by_brand_product",
   "reporting_supplier_balance_by_brand_product",
   "reporting_sales_margin_report",
+  "reporting_sales_orders_brand_summary",
+  "reporting_sales_orders_brand_details",
+  "reporting_sales_orders_brand_customers",
   "confirm_sales_order_with_purchases_atomic",
   "admin_list_org_users",
   "admin_list_org_users_with_access",
@@ -1243,6 +1246,13 @@ export default async (req: Request, context: Context) => {
       // Forward the real caller JWT, NEVER service-role authority. DB rechecks
       // live profile, session, department/permissions and assigned customers.
       args.p_organization_id = caller.organizationId;
+    }
+
+    if (["reporting_sales_orders_brand_summary", "reporting_sales_orders_brand_details", "reporting_sales_orders_brand_customers"].includes(name)) {
+      if (args.input_org && String(args.input_org) !== caller.organizationId) {
+        return json({ error: "Report organization is not authorized." }, 403);
+      }
+      args.input_org = caller.organizationId;
     }
 
     if (SUPERADMIN_RPCS.has(name) && !isSuperadminRole(caller.role)) {
