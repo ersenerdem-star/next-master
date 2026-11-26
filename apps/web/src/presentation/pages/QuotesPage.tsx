@@ -2925,6 +2925,14 @@ export function QuotesPage({
   }
 
   async function handleImportQuoteFile(file: File) {
+    // A saved order is an existing commercial document. File imports are
+    // permitted only while composing a new order; saved orders remain editable
+    // through the individual add-line action.
+    if (workbenchModeRef.current !== "new" || selectedLocalSalesOrderId || externalSelectedSalesOrderId) {
+      actionFeedback.fail(locale === "tr" ? "Kaydedilmiş siparişe dosya yüklenemez. Ürünleri tek tek ekleyebilirsiniz." : "Files cannot be imported into a saved order. Add products individually.");
+      if (importRef.current) importRef.current.value = "";
+      return;
+    }
     if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) {
       actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca dosyayı yükleyin." : "Wait for the current operation before importing a file.");
       if (importRef.current) importRef.current.value = "";
@@ -3809,19 +3817,25 @@ export function QuotesPage({
               type="file"
               accept=".csv,.tsv,.txt"
               hidden
+              disabled={workbenchMode !== "new" || Boolean(selectedLocalSalesOrderId) || Boolean(externalSelectedSalesOrderId)}
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) void handleImportQuoteFile(file);
               }}
             />
             <Button variant="secondary" onClick={() => {
+              if (workbenchModeRef.current !== "new" || selectedLocalSalesOrderId || externalSelectedSalesOrderId) {
+                actionFeedback.fail(locale === "tr" ? "Kaydedilmiş siparişe dosya yüklenemez. Ürünleri tek tek ekleyebilirsiniz." : "Files cannot be imported into a saved order. Add products individually.");
+                return;
+              }
               if (resyncingCatalogRef.current || resolvingLineRef.current || importingLinesRef.current || catalogTransferInFlightRef.current) {
                 actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca dosyayı yükleyin." : "Wait for the current operation before importing a file.");
                 return;
               }
               importRef.current?.click();
-            }} disabled={resyncingCatalog || resolvingLine || catalogTransferRunning} busy={importingLines} busyLabel={t("sales.orders.importing")}>
+            }} disabled={workbenchMode !== "new" || Boolean(selectedLocalSalesOrderId) || Boolean(externalSelectedSalesOrderId) || resyncingCatalog || resolvingLine || catalogTransferRunning} busy={importingLines} busyLabel={t("sales.orders.importing")}>
               <InterfaceText text={"Import CSV"}/></Button>
+            {workbenchMode !== "new" ? <span className="info-text">{locale === "tr" ? "Kaydedilmiş siparişe ürünleri tek tek ekleyebilirsiniz." : "Add products individually to a saved order."}</span> : null}
             <Button variant="secondary" onClick={downloadQuoteTemplate}>
               <InterfaceText text={"Sample Template"}/></Button>
             <Button variant="secondary" onClick={handleExportQuoteXlsx} busy={exportingXlsx} busyLabel="Preparing Excel...">
@@ -4170,7 +4184,17 @@ export function QuotesPage({
                     <Button onClick={() => void handleResolveQuoteLine()} disabled={resyncingCatalog || importingLines || catalogTransferRunning} busy={resolvingLine} busyLabel={t("sales.orders.resolving")}>
                       {t("sales.orders.addNewRow")}
                     </Button>
-                    <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel={t("sales.orders.importing")}>
+                    <Button variant="secondary" onClick={() => {
+                      if (workbenchModeRef.current !== "new" || selectedLocalSalesOrderId || externalSelectedSalesOrderId) {
+                        actionFeedback.fail(locale === "tr" ? "Kaydedilmiş siparişe dosya yüklenemez. Ürünleri tek tek ekleyebilirsiniz." : "Files cannot be imported into a saved order. Add products individually.");
+                        return;
+                      }
+                      if (resyncingCatalogRef.current || resolvingLineRef.current || importingLinesRef.current || catalogTransferInFlightRef.current) {
+                        actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca dosyayı yükleyin." : "Wait for the current operation before importing a file.");
+                        return;
+                      }
+                      importRef.current?.click();
+                    }} disabled={workbenchMode !== "new" || Boolean(selectedLocalSalesOrderId) || Boolean(externalSelectedSalesOrderId) || resyncingCatalog || resolvingLine || catalogTransferRunning} busy={importingLines} busyLabel={t("sales.orders.importing")}>
                       {t("sales.orders.addItemsInBulk")}
                     </Button>
                   </div>

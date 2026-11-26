@@ -213,6 +213,39 @@ const unpricedLine = () => ({...line('0012'),buy_price:100,sell_price:110,manual
   selectedSupplierKey:'Synthetic supplier-0'});
 const customerlessCache = (lines:any[]=[unpricedLine()]) => ({...draftCache(),customerName:'',customerSelection:'',quoteBuilderLines:lines});
 
+test('saved sales order blocks file import from both controls and accepts manual add',async()=>{
+  const oldLine={...unpricedLine(),requestedCode:'OLD',resolvedCode:'OLD',sell_price:73.5};
+  const order=fullOrder('historic',[oldLine]);
+  const view=await fixture({cache:existingCache(order,[oldLine]),orders:[order]});
+  try {
+    assert.equal(view.buttons('Import CSV')[0].props.disabled,true);
+    assert.equal(view.buttons('sales.orders.addItemsInBulk')[0].props.disabled,true);
+    assert.match(view.text(),/Add products individually to a saved order/);
+    await view.startImport(); // Also guards a stale native file-picker result.
+    assert.equal(view.calls.filter(c=>c.name==='batchResolveQuoteImportRows').length,0);
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail'&&/Files cannot be imported into a saved order/i.test(e.text)));
+    assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].sell_price,73.5);
+    await view.fillNewLine();
+    assert.equal(view.buttons('sales.orders.addNewRow')[0].props.disabled,false);
+    await view.click('sales.orders.addNewRow');
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,1);
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'0012',brand:'Synthetic',buy_price:100,sell_price:110},supplierOptions:[]});
+    assert.equal(view.lineRows().length,2); assert.equal(view.lineRows()[1].resolvedCode,'OLD');
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
+test('file import remains available for an unsaved new order',async()=>{
+  const view=await fixture({cache:customerlessCache([])});
+  try {
+    assert.equal(view.buttons('Import CSV')[0].props.disabled,false);
+    await view.startImport();
+    assert.equal(view.calls.filter(c=>c.name==='batchResolveQuoteImportRows').length,1);
+    await view.resolve(view.importRequest,[{...unpricedLine(),sell_price:null}]);
+    assert.equal(view.lineRows().length,1);
+  } finally {await view.close()}
+});
+
 test('real sales editor waits for an actual customer, then computes the chosen customer list',async()=>{
   const view=await fixture({cache:customerlessCache()});
   try {
