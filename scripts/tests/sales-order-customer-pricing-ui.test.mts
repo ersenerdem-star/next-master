@@ -87,13 +87,14 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   const storage = new Map<string, string>([['next-master-sales-order-workspace', JSON.stringify(cache)]]);
   const store = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) };
   const timers = new Map<number, () => void>(); let timerId = 0;
-  const confirms: string[] = []; let confirmResponse=false;
+  const confirms: string[] = [], prompts: string[] = []; let confirmResponse=false;
+  const session = new Map<string,string>();
   const browser = Object.assign(new EventTarget(), {
-    localStorage: store, sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    localStorage: store, sessionStorage: { getItem: (key:string) => session.get(key) ?? null, setItem: (key:string,value:string) => session.set(key,value), removeItem: (key:string) => session.delete(key) },
     setTimeout(callback: () => void) { const id = ++timerId; timers.set(id, callback); return id; },
     clearTimeout(id: number) { timers.delete(id); },
     confirm(text: string) { confirms.push(text); return confirmResponse; },
-    prompt() { throw Error('Unexpected prompt'); },
+    prompt(text:string) { prompts.push(text); return null; },
   });
   globals.window = browser; globals.document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   globals.HTMLElement = class {};
@@ -145,7 +146,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   await act(async () => { renderer = create(createElement(QuotesPage, { appRole: 'superadmin', selectedSalesOrderId })); });
   let unmounted = false;
   return {
-    renderer, calls, saved, feedbackEvents, confirms, firstDetail, importRequest, resyncRequest,
+    renderer, calls, saved, feedbackEvents, confirms, prompts, firstDetail, importRequest, resyncRequest,
     text: () => content(renderer.root),
     buttons: (label: string) => renderer.root.findAllByType('button').filter(button => content(button) === label),
     lineRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.wrapClassName === 'sales-lines-table').flatMap(node => node.props.rows),
@@ -170,6 +171,11 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
     async externalOrder(id: string) {
       await act(async()=>renderer.update(createElement(QuotesPage,{appRole:'superadmin',selectedSalesOrderId:id})));
     },
+    async queueCatalogHandoff() {
+      session.set('next-master:pending-catalog-sales-item',JSON.stringify({product_code:'HANDOFF',brand:'Synthetic'}));
+      await act(async()=>renderer.update(createElement(QuotesPage,{appRole:'superadmin',selectedSalesOrderId,onSelectedSalesOrderChange:()=>{}})));
+    },
+    handoffPending: () => session.has('next-master:pending-catalog-sales-item'),
     async startImport() {
       const input=renderer.root.findAllByType('input').find(node=>node.props.type==='file' && String(node.props.accept||'').includes('.csv'));
       assert.ok(input,'import file input missing');
@@ -337,6 +343,21 @@ test('in-flight catalog sync holds navigation and never writes its result to the
     assert.equal(view.saved[0].lines[0].resolvedCode,'OLD');
     assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].resolvedCode,'NEXT');
     assert.equal(view.lineRows()[0].sell_price,45);
+  } finally {await view.close()}
+});
+
+test('catalog item handoff waits for in-flight sync and resumes afterwards',async()=>{
+  const oldLine={...unpricedLine(),requestedCode:'OLD',resolvedCode:'OLD',sell_price:73.5};
+  const old=fullOrder('old',[oldLine]); const view=await fixture({cache:existingCache(old,[oldLine]),orders:[old]});
+  try {
+    await view.click('sales.orders.resyncFromCatalog');
+    await view.queueCatalogHandoff();
+    assert.equal(view.prompts.length,0,'the catalog handoff must not interrupt the current sync');
+    assert.equal(view.handoffPending(),true);
+    await view.resolve(view.resyncRequest,{lines:[{...oldLine,description:'Refreshed'}],preservedOtherPrices:false});
+    assert.equal(view.saved.length,1); assert.equal(view.saved[0].id,'old');
+    assert.equal(view.prompts.length,1,'the handoff should resume when synchronization completes');
+    assert.equal(view.handoffPending(),false);
   } finally {await view.close()}
 });
 
