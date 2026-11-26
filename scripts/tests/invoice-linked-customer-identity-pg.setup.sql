@@ -15,6 +15,7 @@ create table public.customers (
 create table public.sales_orders (
   id text primary key,
   organization_id uuid not null,
+  sales_order_no text not null default '',
   customer_id uuid references public.customers(id) on delete set null,
   customer_name text not null default '',
   customer_type text not null default 'A',

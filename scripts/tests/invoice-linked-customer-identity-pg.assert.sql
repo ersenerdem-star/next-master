@@ -186,7 +186,18 @@ begin
 
   -- Existing RPC omits customer_id in its ON CONFLICT update. Rebinding must
   -- still follow the new linked order rather than retaining the old UUID.
-  v_result := public.save_invoice_atomic('{"id":"invoice-single","sales_order_id":"b-1","customer_name":"Customer B","currency":"EUR"}'::jsonb);
+  -- Creation with an existing id must never silently overwrite that invoice.
+  v_failed := false;
+  begin
+    perform public.save_invoice_atomic('{"id":"invoice-single","sales_order_id":"b-1","customer_name":"Customer B","currency":"EUR"}'::jsonb);
+  exception when unique_violation then
+    v_failed := sqlerrm = 'INVOICE_NUMBER_ALREADY_USED';
+  end;
+  if not v_failed then raise exception 'duplicate invoice creation was accepted'; end if;
+  if (select customer_id from public.invoices where id='invoice-single') <> 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid then
+    raise exception 'duplicate invoice creation changed the old invoice';
+  end if;
+  v_result := public.save_invoice_atomic('{"id":"invoice-single","sales_order_id":"b-1","customer_name":"Customer B","currency":"EUR"}'::jsonb, 'invoice-single');
   if v_result #>> '{invoice,customer_id}' <> 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' then
     raise exception 'RPC invoice update retained stale customer identity';
   end if;

@@ -27,4 +27,6 @@ docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_ST
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
   < "$repo_root/supabase/migrations/20261013140023_invoice_linked_customer_identity.sql"
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
+  < "$repo_root/supabase/migrations/20261126124446_document_number_guard.sql"
+docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
   < "$repo_root/scripts/tests/invoice-linked-customer-identity-pg.assert.sql"
