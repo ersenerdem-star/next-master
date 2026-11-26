@@ -872,6 +872,8 @@ export function QuotesPage({
   const [selectedLocalSalesOrderIds, setSelectedLocalSalesOrderIds] = useState<string[]>([]);
   const [salesOrderActionsOpen, setSalesOrderActionsOpen] = useState(false);
   const [workbenchMode, setWorkbenchMode] = useState<"existing" | "new">(initialWorkspaceCache?.workbenchMode || "existing");
+  const workbenchModeRef = useRef(workbenchMode);
+  workbenchModeRef.current = workbenchMode;
   const [salesOrderSourceSnapshot, setSalesOrderSourceSnapshot] = useState(initialWorkspaceCache?.salesOrderSourceSnapshot || "");
   const [selectedQuoteId, setSelectedQuoteId] = useState(externalSelectedQuoteId || initialCachedQuoteId);
   const [detail, setDetail] = useState<QuoteDetail>({ quote: null, lines: [] });
@@ -907,9 +909,11 @@ export function QuotesPage({
     importOperationRef.current++;
     resolveOperationRef.current++;
     resyncOperationRef.current++;
+    resyncingCatalogRef.current = false;
     setImportingLines(false);
     setResolvingLine(false);
     setResyncingCatalog(false);
+    setLoadingDetail(false);
     if (importRef.current) importRef.current.value = "";
     return salesOrderLoadGenerationRef.current;
   }
@@ -921,6 +925,7 @@ export function QuotesPage({
   const confirmationAttemptRef = useRef<{ fingerprint: string; order: LocalSalesOrder; decisionId: string } | null>(null);
   const [showProductConflictReview, setShowProductConflictReview] = useState(false);
   const [resyncingCatalog, setResyncingCatalog] = useState(false);
+  const resyncingCatalogRef = useRef(false);
   const [resyncOnlyFillBlanks, setResyncOnlyFillBlanks] = useState(true);
   const [resyncKeepPrices, setResyncKeepPrices] = useState(true);
   const [invoicePromptOpen, setInvoicePromptOpen] = useState(false);
@@ -1245,6 +1250,7 @@ export function QuotesPage({
 
   useEffect(() => {
     let cancelled = false;
+    const startingResyncOperation = resyncOperationRef.current;
 
     async function run() {
       setLoadingQuotes(true);
@@ -1254,6 +1260,8 @@ export function QuotesPage({
         if (cancelled) return;
         setQuotes(result);
         setSelectedQuoteId((current) => {
+          if (resyncingCatalogRef.current || startingResyncOperation !== resyncOperationRef.current ||
+              (workbenchModeRef.current === "new" && !externalSelectedQuoteId)) return current;
           if (externalSelectedQuoteId && result.some((quote) => quote.quote_id === externalSelectedQuoteId)) {
             return externalSelectedQuoteId;
           }
@@ -1340,8 +1348,13 @@ export function QuotesPage({
 
   useEffect(() => {
     let cancelled = false;
+    const workspaceGeneration = salesOrderLoadGenerationRef.current;
+    const startingResyncOperation = resyncOperationRef.current;
+    const isCurrent = () => !cancelled && !resyncingCatalogRef.current &&
+      isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current) && startingResyncOperation === resyncOperationRef.current;
 
     async function run() {
+      if (resyncingCatalogRef.current || (workbenchModeRef.current === "new" && !externalSelectedQuoteId)) return;
       if (salesOrdersView !== "detail" || selectedLocalSalesOrderId) {
         setLoadingDetail(false);
         return;
@@ -1411,7 +1424,7 @@ export function QuotesPage({
             product_code: line.product_code || "",
           }),
         }));
-        if (!cancelled) {
+        if (isCurrent()) {
           setDetail({
             quote: result.quote,
             lines: enrichedLines,
@@ -1439,12 +1452,12 @@ export function QuotesPage({
           setBuilderStatus(t("sales.orders.linesLoadedInWorkbench", { count: enrichedLines.length.toLocaleString("en-US") }));
         }
       } catch (caught) {
-        if (!cancelled) {
+        if (isCurrent()) {
           setDetail({ quote: null, lines: [] });
           setError(caught instanceof Error ? caught.message : t("sales.orders.quoteDetailRequestFailed"));
         }
       } finally {
-        if (!cancelled) setLoadingDetail(false);
+        if (isCurrent()) setLoadingDetail(false);
       }
     }
 
@@ -1952,6 +1965,8 @@ export function QuotesPage({
         throw new Error(locale === "tr" ? "Bu taslağın bekleyen fiyatları için önce müşteriyi seçin." : "Select a customer before refreshing this draft's pending prices.");
       }
       assertWahlerQuantityPricesReady();
+      resyncingCatalogRef.current = true;
+      setLoadingDetail(false);
       setResyncingCatalog(true);
       actionFeedback.begin(t("sales.orders.resyncingOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const { lines: syncedLines, preservedOtherPrices } = await resyncSalesOrderWithCodeReferenceFallback(quoteBuilderLines, {
@@ -2023,7 +2038,10 @@ export function QuotesPage({
       if (!isCurrent()) return;
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
     } finally {
-      if (operation === resyncOperationRef.current) setResyncingCatalog(false);
+      if (operation === resyncOperationRef.current) {
+        resyncingCatalogRef.current = false;
+        setResyncingCatalog(false);
+      }
     }
   }
 
