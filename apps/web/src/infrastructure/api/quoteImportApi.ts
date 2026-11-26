@@ -6,6 +6,7 @@ import { canonicalizeBrandName, canonicalizePriceBrandName, canonicalizePricePro
 import type { QuoteBuilderLine, QuoteSupplierOption } from "../../types/quoteBuilder";
 import { fetchCodeReferenceMatchesForRows } from "./codeReferencesApi";
 import { callAppRpc } from "./appRpcApi";
+import { currentSupplierQuantity } from "../../shared/currentSupplierPriceSync.mjs";
 import { getCurrentOrgId } from "./organizationApi";
 import { supabaseClient } from "./supabaseClient";
 
@@ -54,7 +55,7 @@ function exactSku(value: string) {
   return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
 }
 
-async function fetchCurrentSupplierPriceBatch(rows: Array<{ code: string; brand: string }>) {
+async function fetchCurrentSupplierPriceBatch(rows: Array<{ code: string; brand: string; quantity?: number }>) {
   const resolved: CurrentSupplierPriceBatchRow[] = [];
   for (const batch of chunk(rows, 25)) {
     const result = await callAppRpc<CurrentSupplierPriceBatchRow[]>("cloud_current_supplier_price_options_batch", {
@@ -108,11 +109,12 @@ async function resolveQuoteImportRowsOnce(input: {
   customerType: "A" | "B" | "C" | "Other";
   marginA: number;
   marginB: number;
+  calculateSellPrice?: boolean;
 }): Promise<QuoteBuilderLine[]> {
   const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
     .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
   if (!rows.length) return [];
-  if (input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
+  if (input.calculateSellPrice !== false && input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
   const organizationId = await getCurrentOrgId();
 
   const referenceMatches = await fetchCodeReferenceMatchesForRows(rows);
@@ -156,7 +158,7 @@ async function resolveQuoteImportRowsOnce(input: {
   });
 
   const scopedRows = baseRows.filter((row) => row.brandId);
-  const scopedPrices = await fetchCurrentSupplierPriceBatch(scopedRows.map((row) => ({ code: row.lookupCode, brand: row.brand })));
+  const scopedPrices = await fetchCurrentSupplierPriceBatch(scopedRows.map((row) => ({ code: row.lookupCode, brand: row.brand, quantity: currentSupplierQuantity(row.brand, row.qty) })));
   const pricesByRawRow = new Map<(typeof baseRows)[number], CurrentSupplierPriceBatchRow>();
   scopedRows.forEach((row, index) => pricesByRawRow.set(row, scopedPrices[index]));
 
@@ -183,7 +185,7 @@ async function resolveQuoteImportRowsOnce(input: {
     row.brandId && exactSku(row.targetCode) !== exactSku(row.lookupCode));
   if (redirectedPublishedRows.length) {
     const redirectedPrices = await fetchCurrentSupplierPriceBatch(
-      redirectedPublishedRows.map((row) => ({ code: row.targetCode, brand: row.brand })),
+      redirectedPublishedRows.map((row) => ({ code: row.targetCode, brand: row.brand, quantity: currentSupplierQuantity(row.brand, row.qty) })),
     );
     redirectedPublishedRows.forEach((row, index) => {
       if (row.publishedPrice?.has_published_scope && !redirectedPrices[index].has_published_scope) {
@@ -293,7 +295,7 @@ async function resolveQuoteImportRowsOnce(input: {
         buy_price: item.buy_price == null ? null : Number(item.buy_price),
         price_date: item.price_date || item.valid_from || null,
         sell_price:
-          input.customerType === "B"
+          input.calculateSellPrice === false ? null : input.customerType === "B"
             ? markupMoney(item.buy_price ?? 0, input.marginB)
             : markupMoney(item.buy_price ?? 0, input.marginA),
         notes: item.notes || null,
@@ -399,11 +401,12 @@ export async function batchResolveQuoteImportRows(input: {
   customerType: "A" | "B" | "C" | "Other";
   marginA: number;
   marginB: number;
+  calculateSellPrice?: boolean;
 }): Promise<QuoteBuilderLine[]> {
   const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
     .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
   if (!rows.length) return [];
-  if (input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
+  if (input.calculateSellPrice !== false && input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
 
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {

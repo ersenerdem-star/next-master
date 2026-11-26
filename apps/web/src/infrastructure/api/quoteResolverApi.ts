@@ -6,6 +6,7 @@ import { callAppRpc } from "./appRpcApi";
 import { supabaseClient } from "./supabaseClient";
 
 import { readSupplierCommercialTerms } from "../../domain/shared/supplierCommercialTerms";
+import { batchResolveQuoteImportRows } from "./quoteImportApi";
 
 function exactSku(value: string | null | undefined) {
   return String(value || "").trim().replace(/\s+/g, "").toUpperCase();
@@ -78,11 +79,37 @@ export async function resolveQuoteLine(input: {
   marginB: number;
   includeSupplierOptions?: boolean;
   quantity?: number;
+  calculateSellPrice?: boolean;
 }): Promise<{ resolved: QuoteResolveResult; supplierOptions: QuoteSupplierOption[] }> {
   // Preserve the supplier's SKU punctuation. `61/1` and `611` can carry
   // different prices even though the legacy loose lookup maps both to `611`.
   const brand = canonicalizePriceBrandName(input.brand || "",input.code);
   const code = canonicalizePriceProductCode(input.code, brand);
+  if (input.calculateSellPrice === false) {
+    // Use the buy-only batch reader: the legacy resolver RPC calculates a
+    // default sales price even when the caller does not yet have a customer.
+    const [line] = await batchResolveQuoteImportRows({
+      rows: [{ code, brand, qty: input.quantity || 1 }], customerType: input.customerType,
+      marginA: input.marginA, marginB: input.marginB, calculateSellPrice: false,
+    });
+    if (!line) throw new Error("Supplier price lookup returned no result.");
+    if (line.found && exactSku(line.resolvedCode) !== exactSku(code)) {
+      throw new Error(`Supplier price lookup returned a different product code for ${brand} ${code}.`);
+    }
+    return {
+      resolved: {
+        found: line.found, product_code: line.resolvedCode || code, brand: line.brand || brand,
+        description: line.description || null, oem_no: line.oem_no || null, hs_code: line.hs_code || null,
+        origin: line.origin || null, weight_kg: line.weight_kg, supplier_name: line.supplier_name || null,
+        supplier_id: line.supplierOptions[0]?.supplier_id ?? null, buy_price: line.buy_price,
+        sell_price: null, price_date: line.price_date || null, notes: line.notes || null,
+        lifecycle_status: line.lifecycle_status, lifecycle_note: line.lifecycle_note,
+        lifecycle_warning: line.lifecycle_warning, moq: line.moq, order_multiple: line.order_multiple,
+        stock_qty: line.stock_qty, valid_to: line.valid_to,
+      },
+      supplierOptions: input.includeSupplierOptions === false ? [] : line.supplierOptions,
+    };
+  }
   const rpcCustomerType = input.customerType === "Other" ? "A" : input.customerType;
   const supplierRpcCustomerType = input.customerType === "B" ? "B" : "A";
 

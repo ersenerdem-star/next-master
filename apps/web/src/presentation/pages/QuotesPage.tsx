@@ -37,6 +37,7 @@ import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
+import { applySalesOrderCustomerPricing, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
 import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
 import { resyncSalesOrderWithCodeReferenceFallback, salesOrderResyncPriceSummary } from "../../shared/salesOrderCatalogSync";
@@ -936,6 +937,8 @@ export function QuotesPage({
     return customers.find((customer) => customer.id === customerLabel) ||
       (customerLabel ? findCustomerByNameInList(customers, customerLabel) : null);
   }, [customers, customerSelection, manualCustomerName]);
+  // A typed name is not an authoritative account/price profile.
+  const hasCustomerPricingProfile = Boolean(selectedCustomerProfile?.id && customerSelection === selectedCustomerProfile.id);
   const resolvedCustomerName = useMemo(() => {
     if (customerSelection === "__manual__") return manualCustomerName.trim();
     return (
@@ -945,25 +948,32 @@ export function QuotesPage({
       customerName.trim()
     );
   }, [customerName, customerSelection, manualCustomerName, selectedCustomerProfile]);
-  const shouldUseCPricePricing = shouldUseCPriceForCustomer(customerType);
-
   const customerMarginOverride = selectedCustomerProfile?.price_list_margin_percent ?? null;
+  const effectiveCustomerType = hasCustomerPricingProfile ? selectedCustomerProfile?.price_list_type || customerType : customerType;
+  const shouldUseCPricePricing = shouldUseCPriceForCustomer(effectiveCustomerType);
   const effectiveMarginA =
-    (customerType === "A" || customerType === "Other") && customerMarginOverride != null ? customerMarginOverride : marginA;
-  const effectiveMarginB = customerType === "B" && customerMarginOverride != null ? customerMarginOverride : marginB;
-  const wahlerPricingScope = JSON.stringify([customerType, effectiveMarginA, effectiveMarginB, selectedCustomerProfile?.id, currency]);
+    (effectiveCustomerType === "A" || effectiveCustomerType === "Other") && customerMarginOverride != null ? customerMarginOverride : marginA;
+  const effectiveMarginB = effectiveCustomerType === "B" && customerMarginOverride != null ? customerMarginOverride : marginB;
+  const wahlerPricingScope = JSON.stringify([effectiveCustomerType, effectiveMarginA, effectiveMarginB, hasCustomerPricingProfile, selectedCustomerProfile?.id, currency]);
   const wahlerPricingScopeRef = useRef(wahlerPricingScope);
   wahlerPricingScopeRef.current = wahlerPricingScope;
   const accountMarginActive = customerType !== "C" && customerMarginOverride != null && Number.isFinite(customerMarginOverride);
   const customerPricingIssue =
-    customerType === "C" || selectedCustomerProfile?.price_list_type === "C"
+    hasCustomerPricingProfile && effectiveCustomerType === "C"
       ? t("sales.orders.legacyPricingRequiresAccountUpdate")
-      : (customerType === "Other" || selectedCustomerProfile?.price_list_type === "Other") &&
+      : hasCustomerPricingProfile && effectiveCustomerType === "Other" &&
           (customerMarginOverride == null || !Number.isFinite(customerMarginOverride))
         ? t("sales.orders.otherMarginRequiresAccount")
-        : customerMarginOverride != null && !Number.isFinite(customerMarginOverride)
+        : hasCustomerPricingProfile && customerMarginOverride != null && !Number.isFinite(customerMarginOverride)
           ? t("sales.orders.invalidAccountMargin")
           : "";
+  const customerPricingContext: SalesOrderPricingContext = {
+    workbenchMode, hasCustomerProfile: hasCustomerPricingProfile,
+    customerType: effectiveCustomerType,
+    marginA: effectiveMarginA, marginB: effectiveMarginB, pricingBlocked: Boolean(customerPricingIssue),
+  };
+  const customerPricingContextRef = useRef(customerPricingContext);
+  customerPricingContextRef.current = customerPricingContext;
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
 
   useEffect(() => {
@@ -1153,7 +1163,8 @@ export function QuotesPage({
           lifecycle_note: pendingItem.lifecycle_note ?? line.lifecycle_note,
           codeChangeWarning: line.codeChangeWarning || pendingItem.replacement_warning || "",
         };
-        setQuoteBuilderLines((current) => mergeCatalogLineIntoSalesDraft(current, enrichedLine));
+        setQuoteBuilderLines((current) => mergeCatalogLineIntoSalesDraft(current,
+          applySalesOrderCustomerPricing([enrichedLine], { ...customerPricingContextRef.current, workbenchMode: "new" })[0]));
         setBuilderStatus(t("sales.orders.addedFromCatalog", { productCode: pendingItem.product_code }));
         actionFeedback.succeed(t("sales.orders.addedToWorkbench", { productCode: pendingItem.product_code }));
       } catch (caught) {
@@ -1434,6 +1445,7 @@ export function QuotesPage({
     () => quoteBuilderLines.filter((line) => line.lifecycle_status === "discontinued").length,
     [quoteBuilderLines],
   );
+  const hasPendingSalesPrices = quoteBuilderLines.some((line) => line.customer_pricing_pending && !line.manual_sell_price);
   const productConflictLines = useMemo(
     () => quoteBuilderLines.filter((line) => line.has_product_conflict),
     [quoteBuilderLines],
@@ -1441,45 +1453,9 @@ export function QuotesPage({
   const effectiveWorkbenchColumnVisibility = DEFAULT_QUOTE_WORKBENCH_COLUMNS;
 
   useEffect(() => {
-    // A saved order is a historical commercial document. Repricing it merely
-    // by opening the editor creates a false dirty state and blocks navigation.
-    if (workbenchMode === "existing") return;
-    setQuoteBuilderLines((current) =>
-      current.map((line) => {
-        const selected =
-          line.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === line.selectedSupplierKey) ||
-          line.supplierOptions[0] ||
-          null;
-        const buyPrice = selected?.buy_price ?? line.buy_price;
-        if (buyPrice == null) return line;
-        if (shouldUseCPricePricing) {
-          const marginPercent = effectiveMarginA;
-          const fallbackSellPrice =
-            customerType === "C"
-              ? line.sell_price
-              : markupMoney(buyPrice, marginPercent);
-          return {
-            ...line,
-            supplier_name: line.supplier_name || selected?.supplier_name || "",
-            buy_price: buyPrice,
-            sell_price: line.manual_sell_price ? line.sell_price : line.c_sell_price ?? fallbackSellPrice,
-            price_date: line.price_date || selected?.price_date || "",
-            notes: line.notes || selected?.notes || "",
-          };
-        }
-
-        const marginPercent = customerType === "B" ? effectiveMarginB : effectiveMarginA;
-        return {
-          ...line,
-          supplier_name: line.supplier_name || selected?.supplier_name || "",
-          buy_price: buyPrice,
-          sell_price: line.manual_sell_price ? line.sell_price : markupMoney(buyPrice, marginPercent),
-          price_date: line.price_date || selected?.price_date || "",
-          notes: line.notes || selected?.notes || "",
-        };
-      }),
-    );
-  }, [workbenchMode, customerType, shouldUseCPricePricing, effectiveMarginA, effectiveMarginB]);
+    setQuoteBuilderLines((current) => applySalesOrderCustomerPricing(current, customerPricingContextRef.current));
+  }, [workbenchMode, hasCustomerPricingProfile, customerType, selectedCustomerProfile?.id,
+    selectedCustomerProfile?.price_list_type, customerPricingIssue, effectiveMarginA, effectiveMarginB, quoteBuilderLines]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1488,6 +1464,7 @@ export function QuotesPage({
       // Do not silently reprice stored sales orders. Existing order prices only
       // change through an explicit line edit or a deliberate synchronization.
       if (workbenchMode === "existing") return;
+      if (!hasCustomerPricingProfile) return;
       if (!shouldUseCPricePricing || !quoteBuilderLines.length) return;
 
       const cPriceMap = await fetchCPriceMapForRows(
@@ -1527,6 +1504,7 @@ export function QuotesPage({
     };
   }, [
     workbenchMode,
+    hasCustomerPricingProfile,
     customerType,
     effectiveMarginA,
     effectiveMarginB,
@@ -1941,17 +1919,21 @@ export function QuotesPage({
     }
     try {
       if (customerPricingIssue) throw new Error(customerPricingIssue);
+      if (!hasCustomerPricingProfile && workbenchMode === "existing" && quoteBuilderLines.some((line) => line.customer_pricing_pending)) {
+        throw new Error(locale === "tr" ? "Bu taslağın bekleyen fiyatları için önce müşteriyi seçin." : "Select a customer before refreshing this draft's pending prices.");
+      }
       assertWahlerQuantityPricesReady();
       setResyncingCatalog(true);
       actionFeedback.begin(t("sales.orders.resyncingOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       const { lines: syncedLines, preservedOtherPrices } = await resyncSalesOrderWithCodeReferenceFallback(quoteBuilderLines, {
-        customerType,
+        customerType: workbenchMode === "new" && hasCustomerPricingProfile ? effectiveCustomerType : customerType,
         marginA: effectiveMarginA,
         marginB: effectiveMarginB,
         currency,
         onlyFillBlanks: resyncOnlyFillBlanks,
         keepPrices: resyncKeepPrices,
         hydrateMissingPricesIfKeepingPrices: true,
+        calculateSellPrice: workbenchMode !== "new" || hasCustomerPricingProfile,
       });
       if (selectedLocalSalesOrderId) {
         const order = buildLocalSalesOrder({
@@ -1985,7 +1967,7 @@ export function QuotesPage({
         setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
         await refreshLocalSalesOrders(saved.id);
       } else {
-        setQuoteBuilderLines(syncedLines);
+        setQuoteBuilderLines(applySalesOrderCustomerPricing(syncedLines, customerPricingContextRef.current));
       }
 
       const summary = salesOrderResyncPriceSummary(quoteBuilderLines, syncedLines);
@@ -2018,12 +2000,12 @@ export function QuotesPage({
       id: selectedLocalSalesOrderId || undefined,
       sales_order_no: quoteNo.trim() || `SO-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${Date.now().toString().slice(-4)}`,
       customer_name: resolvedCustomerName,
-      customer_id: selectedCustomerProfile?.id ?? null,
+      customer_id: customerSelection === "__manual__" ? null : selectedCustomerProfile?.id ?? null,
       seller_company: sellerCompany.trim(),
       purchase_company: buyerInfo.trim(),
       quote_date: quoteDate,
       currency,
-      customer_type: customerType,
+      customer_type: workbenchMode === "new" && hasCustomerPricingProfile ? effectiveCustomerType : customerType,
       shipping_cost: Number(String(shippingCost || "0").replace(",", ".")) || 0,
       discount_amount: Number(String(discountAmount || "0").replace(",", ".")) || 0,
       supplier_mode: supplierMode,
@@ -2182,8 +2164,9 @@ export function QuotesPage({
             : option.supplier_name === row.supplier_name)
           : 0;
         const option = priced.supplierOptions[optionIndex];
+        const deferPrice = !customerPricingContextRef.current.hasCustomerProfile && (customerPricingContextRef.current.workbenchMode === "new" || row.customer_pricing_pending);
         if (wahlerPricingScopeRef.current !== wahlerPricingScope || !priced.found || confirmationSku(priced.resolvedCode) !== confirmationSku(code) || !isWahlerBrand(priced.brand)
-            || option?.buy_price == null || option.sell_price == null
+            || option?.buy_price == null || (!deferPrice && option.sell_price == null)
             || normalizeOrderQuantity(adjustment.corrected, option).corrected !== adjustment.corrected) {
           throw new Error("Wahler quantity price could not be verified.");
         }
@@ -2203,7 +2186,8 @@ export function QuotesPage({
             supplierOptions: priced.supplierOptions,
             selectedSupplierKey: `${option.supplier_name}-${optionIndex}`,
             buy_price: option.buy_price,
-            sell_price: item.manual_sell_price ? item.sell_price : priced.c_sell_price ?? option.sell_price,
+            sell_price: item.manual_sell_price ? item.sell_price : deferPrice ? null : priced.c_sell_price ?? option.sell_price,
+            customer_pricing_pending: deferPrice && !item.manual_sell_price ? true : item.customer_pricing_pending,
             c_sell_price: priced.c_sell_price,
             price_date: option.price_date || "",
           };
@@ -2273,10 +2257,12 @@ export function QuotesPage({
         buy_price: selected.buy_price ?? null,
         sell_price: item.manual_sell_price
           ? item.sell_price
+          : !hasCustomerPricingProfile && (workbenchMode === "new" || item.customer_pricing_pending)
+            ? null
           : shouldUseCPricePricing
             ? item.c_sell_price ?? item.sell_price
             : selected.buy_price != null
-              ? markupMoney(selected.buy_price, customerType === "B" ? effectiveMarginB : effectiveMarginA)
+              ? markupMoney(selected.buy_price, (workbenchMode === "new" || item.customer_pricing_pending ? effectiveCustomerType : customerType) === "B" ? effectiveMarginB : effectiveMarginA)
               : selected.sell_price ?? null,
         price_date: selected.price_date || "",
         notes: selected.notes || "",
@@ -2429,10 +2415,12 @@ export function QuotesPage({
                       sell_price:
                         item.manual_sell_price
                           ? item.sell_price
+                          : !hasCustomerPricingProfile && (workbenchMode === "new" || item.customer_pricing_pending)
+                          ? null
                           : shouldUseCPricePricing
                           ? item.c_sell_price ?? item.sell_price
                           : selected.buy_price != null
-                            ? markupMoney(selected.buy_price, customerType === "B" ? effectiveMarginB : effectiveMarginA)
+                            ? markupMoney(selected.buy_price, (workbenchMode === "new" || item.customer_pricing_pending ? effectiveCustomerType : customerType) === "B" ? effectiveMarginB : effectiveMarginA)
                             : selected.sell_price ?? null,
                       price_date: selected.price_date || "",
                       notes: selected.notes || "",
@@ -2445,7 +2433,7 @@ export function QuotesPage({
                 const optionKey = `${option.supplier_name}-${index}`;
                 return (
                   <option key={optionKey} value={optionKey}>
-                    {option.supplier_name} | {t("sales.orders.buy")} {option.buy_price ?? "-"} | {t("sales.orders.sell")} {option.sell_price ?? "-"}{option.applied_min_quantity ? ` · ${option.applied_min_quantity}+` : ""}
+                    {option.supplier_name} | {t("sales.orders.buy")} {option.buy_price ?? "-"} | {t("sales.orders.sell")} {!hasCustomerPricingProfile && (workbenchMode === "new" || row.customer_pricing_pending) ? "-" : option.sell_price ?? "-"}{option.applied_min_quantity ? ` · ${option.applied_min_quantity}+` : ""}
                   </option>
                 );
               })}
@@ -2469,7 +2457,7 @@ export function QuotesPage({
       header: pdfView ? t("sales.orders.unitPrice") : t("sales.orders.sell"),
       render: (row: QuoteBuilderLine) =>
         pdfView ? (
-          formatMoney(row.sell_price, currency)
+          row.sell_price == null ? "—" : formatMoney(row.sell_price, currency)
         ) : (
           <input
             className="inline-edit-input"
@@ -2495,13 +2483,13 @@ export function QuotesPage({
           />
         ),
     });
-    columns.push({ key: "sellTotal", header: t("sales.orders.lineTotal"), render: (row: QuoteBuilderLine) => formatMoney(roundMoney(toNumber(row.sell_price) * row.qty), currency) });
+    columns.push({ key: "sellTotal", header: t("sales.orders.lineTotal"), render: (row: QuoteBuilderLine) => row.sell_price == null ? "—" : formatMoney(roundMoney(toNumber(row.sell_price) * row.qty), currency) });
 
     if (!pdfView && effectiveWorkbenchColumnVisibility.profit) {
       columns.push({
         key: "profit",
         header: t("sales.orders.profit"),
-        render: (row: QuoteBuilderLine) => formatMoney(roundMoney((toNumber(row.sell_price) - toNumber(row.buy_price)) * row.qty), currency),
+        render: (row: QuoteBuilderLine) => row.sell_price == null ? "—" : formatMoney(roundMoney((toNumber(row.sell_price) - toNumber(row.buy_price)) * row.qty), currency),
       });
     }
     if (!pdfView && effectiveWorkbenchColumnVisibility.margin) {
@@ -2532,7 +2520,7 @@ export function QuotesPage({
     });
 
     return columns;
-  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t, locale, wahlerQuantityEdits, shouldUseCPricePricing, wahlerPricingScope, savingDraft, confirmingOrder, resyncingCatalog]);
+  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t, locale, wahlerQuantityEdits, shouldUseCPricePricing, wahlerPricingScope, savingDraft, confirmingOrder, resyncingCatalog, hasCustomerPricingProfile, workbenchMode]);
 
   const attentionColumns = useMemo(
     () => [
@@ -2577,9 +2565,9 @@ export function QuotesPage({
           </div>
         ),
       },
-      { key: "sell", header: t("sales.orders.sell"), render: (row: QuoteBuilderLine) => formatMoney(row.sell_price, currency) },
+      { key: "sell", header: t("sales.orders.sell"), render: (row: QuoteBuilderLine) => row.sell_price == null ? "—" : formatMoney(row.sell_price, currency) },
     ],
-    [currency, t, customerType, effectiveMarginA, effectiveMarginB, shouldUseCPricePricing],
+    [currency, t, customerType, effectiveMarginA, effectiveMarginB, shouldUseCPricePricing, hasCustomerPricingProfile, workbenchMode],
   );
 
   async function buildBuilderLine(
@@ -2590,7 +2578,7 @@ export function QuotesPage({
       includeSupplierOptions?: boolean;
     },
   ) {
-    if (customerPricingIssue) throw new Error(customerPricingIssue);
+    if (customerPricingContextRef.current.pricingBlocked) throw new Error(customerPricingIssue);
     const candidateReferenceMatch = options?.referenceMatch ?? (await findCodeReferenceMatch({ code: input.code, brand: input.brand || "" }));
     const referenceMatch = candidateReferenceMatch
       && confirmationSku(candidateReferenceMatch.old_code) === confirmationSku(input.code)
@@ -2599,15 +2587,16 @@ export function QuotesPage({
     const { resolved, supplierOptions } = await resolveQuoteLine({
       code: codeToResolve,
       brand: input.brand || "",
-      customerType,
-      marginA: effectiveMarginA,
-      marginB: effectiveMarginB,
+      customerType: customerPricingContextRef.current.customerType,
+      marginA: customerPricingContextRef.current.marginA,
+      marginB: customerPricingContextRef.current.marginB,
       includeSupplierOptions: options?.includeSupplierOptions,
       quantity: input.qty,
+      calculateSellPrice: customerPricingContextRef.current.hasCustomerProfile && !customerPricingContextRef.current.pricingBlocked,
     });
 
     let cSellPrice: number | null = null;
-    if (shouldUseCPricePricing) {
+    if (shouldUseCPricePricing && customerPricingContextRef.current.hasCustomerProfile) {
       const cPriceMap =
         options?.cPriceMap ||
         (await fetchCPriceMapForRows([
@@ -2659,6 +2648,7 @@ export function QuotesPage({
         : resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null,
       c_sell_price: cSellPrice,
       manual_sell_price: false,
+      customer_pricing_pending: !customerPricingContextRef.current.hasCustomerProfile,
       price_date: resolved.price_date || effectiveSupplierOptions[0]?.price_date || "",
       notes: resolved.notes || effectiveSupplierOptions[0]?.notes || "",
       found: resolved.found === true,
@@ -2700,7 +2690,7 @@ export function QuotesPage({
     rows: QuoteImportRow[],
     onChunkResolved?: (resolvedLines: QuoteBuilderLine[], detail: { processedRows: number; totalRows: number }) => void,
   ) {
-    if (customerPricingIssue) throw new Error(customerPricingIssue);
+    if (customerPricingContextRef.current.pricingBlocked) throw new Error(customerPricingIssue);
     const batches = chunkRows(rows, SALES_ORDER_IMPORT_CHUNK_SIZE);
     const allLines: QuoteBuilderLine[] = [];
     let processedRows = 0;
@@ -2708,9 +2698,10 @@ export function QuotesPage({
     for (const batch of batches) {
       const resolvedLines = await batchResolveQuoteImportRows({
         rows: batch,
-        customerType,
-        marginA: effectiveMarginA,
-        marginB: effectiveMarginB,
+        customerType: customerPricingContextRef.current.customerType,
+        marginA: customerPricingContextRef.current.marginA,
+        marginB: customerPricingContextRef.current.marginB,
+        calculateSellPrice: customerPricingContextRef.current.hasCustomerProfile && !customerPricingContextRef.current.pricingBlocked,
       });
       processedRows += batch.length;
       allLines.push(...resolvedLines);
@@ -2815,7 +2806,7 @@ export function QuotesPage({
       setResolvingLine(true);
       actionFeedback.begin(t("sales.orders.resolvingQuoteLineFor", { code }));
       const line = await buildBuilderLine({ code, brand, qty });
-      setQuoteBuilderLines((current) => [line, ...current]);
+      setQuoteBuilderLines((current) => [applySalesOrderCustomerPricing([line], { ...customerPricingContextRef.current, workbenchMode: "new" })[0], ...current]);
       setBuilderStatus(
         line.found
           ? line.lifecycle_status === "discontinued"
@@ -2882,18 +2873,22 @@ export function QuotesPage({
       let importedDiscontinuedCount = 0;
       const hydratedLines = await buildImportLines(canonicalRows, (resolvedLines, progress) => {
         importedDiscontinuedCount += resolvedLines.filter((line) => line.lifecycle_status === "discontinued").length;
-        setQuoteBuilderLines((current) => [...current, ...resolvedLines]);
+        setQuoteBuilderLines((current) => [...current, ...applySalesOrderCustomerPricing(resolvedLines, { ...customerPricingContextRef.current, workbenchMode: "new" })]);
         setBuilderStatus(t("sales.orders.importProgress", { processed: progress.processedRows.toLocaleString("en-US"), total: progress.totalRows.toLocaleString("en-US") }));
       });
       setBuilderStatus(
-        importedDiscontinuedCount
+        !customerPricingContextRef.current.hasCustomerProfile
+          ? locale === "tr" ? `${hydratedLines.length} satır yüklendi. Satış fiyatları müşteri seçildiğinde hesaplanır.` : `${hydratedLines.length} lines loaded. Sales prices are calculated after selecting a customer.`
+          : importedDiscontinuedCount
           ? t("sales.orders.importPricingReadyWithDiscontinued", {
               count: hydratedLines.length.toLocaleString("en-US"),
               discontinuedCount: importedDiscontinuedCount.toLocaleString("en-US"),
             })
           : t("sales.orders.importPricingReady", { count: hydratedLines.length.toLocaleString("en-US") }),
       );
-      actionFeedback.succeed(t("sales.orders.importedLinesWithPricing", { count: hydratedLines.length.toLocaleString("en-US") }));
+      actionFeedback.succeed(!customerPricingContextRef.current.hasCustomerProfile
+        ? locale === "tr" ? `${hydratedLines.length} satır yüklendi. Satış fiyatları için müşteri seçin.` : `${hydratedLines.length} lines loaded. Select a customer for sales prices.`
+        : t("sales.orders.importedLinesWithPricing", { count: hydratedLines.length.toLocaleString("en-US") }));
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : t("sales.orders.salesOrderImportFailed");
       setBuilderStatus(message);
@@ -2905,6 +2900,10 @@ export function QuotesPage({
   }
 
   async function handleExportQuoteXlsx() {
+    if (hasPendingSalesPrices) {
+      actionFeedback.fail(locale === "tr" ? "Excel oluşturmadan önce bekleyen satış fiyatlarını tamamlayın." : "Complete pending sales prices before exporting.");
+      return;
+    }
     setExportingXlsx(true);
     try {
       actionFeedback.begin("Checking Sales Order totals and preparing Excel...");
@@ -2950,6 +2949,10 @@ export function QuotesPage({
   }
 
   function handlePrintDraftPdf() {
+    if (hasPendingSalesPrices) {
+      actionFeedback.fail(locale === "tr" ? "PDF oluşturmadan önce bekleyen satış fiyatlarını tamamlayın." : "Complete pending sales prices before printing.");
+      return;
+    }
     if (!quoteBuilderLines.length) {
       actionFeedback.fail("Add quote lines first.");
       return;
@@ -3412,7 +3415,7 @@ export function QuotesPage({
       assertWahlerQuantityPricesReady();
       setConfirmingOrder(true);
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
-      await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, customerType, effectiveMarginA, effectiveMarginB, currency, selectedLocalSalesOrderId || undefined, selectedCustomerProfile?.id ?? null, resolvedCustomerName);
+      await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, workbenchMode === "new" && hasCustomerPricingProfile ? effectiveCustomerType : customerType, effectiveMarginA, effectiveMarginB, currency, selectedLocalSalesOrderId || undefined, selectedCustomerProfile?.id ?? null, resolvedCustomerName);
       const order = buildSalesOrderPayload("confirmed");
       const { salesOrder: saved, purchaseOrders } = await confirmOrderForCapability<{ salesOrder: LocalSalesOrder; purchaseOrders: LocalPurchaseOrder[] }>(commercialUpgradeEnabled(), {
         legacy: async () => {
@@ -3754,7 +3757,7 @@ export function QuotesPage({
                     <div className="invoice-customer-field">
                       <Select
                         label={t("sales.orders.customer")}
-                        value={customerSelection === "__manual__" ? customerSelection : selectedCustomerProfile?.id || customerSelection}
+                        value={customerSelection === "__manual__" ? customerSelection : hasPendingSalesPrices && !hasCustomerPricingProfile ? "" : selectedCustomerProfile?.id || customerSelection}
                         options={customerOptions}
                         onChange={(value) => {
                           setCustomerSelection(value);
@@ -3774,6 +3777,7 @@ export function QuotesPage({
                       />
                     </div>
                     {accountMarginActive ? <span className="mark-badge mark-badge--accent">{t("sales.orders.customMarginActive", { margin: customerMarginOverride ?? 0 })}</span> : null}
+                    {hasPendingSalesPrices && !hasCustomerPricingProfile ? <div className="info-text" role="status">{locale === "tr" ? "Satış fiyatlarını hesaplamak için kayıtlı müşteri seçin." : "Select a registered customer to calculate sales prices."}</div> : null}
                     <Select
                       label={t("sales.orders.currency")}
                       value={currency}
@@ -3877,7 +3881,8 @@ export function QuotesPage({
                       </label>
                       <Select
                         label={t("sales.orders.customerType")}
-                        value={customerType}
+                        value={workbenchMode === "new" && hasCustomerPricingProfile ? effectiveCustomerType : customerType}
+                        disabled={workbenchMode === "new" && hasCustomerPricingProfile}
                         options={[
                           { value: "A", label: t("sales.orders.aPriceList") },
                           { value: "B", label: t("sales.orders.bPriceList") },
@@ -4066,7 +4071,7 @@ export function QuotesPage({
                 <div className="quote-summary-card">
                   <div className="quote-summary-row">
                     <span>{t("sales.orders.subTotal")}</span>
-                    <strong>{formatMoney(draftTotals.subtotal, currency)}</strong>
+                    <strong>{hasPendingSalesPrices ? "—" : formatMoney(draftTotals.subtotal, currency)}</strong>
                   </div>
                   <div className="quote-summary-row">
                     <span>{t("sales.orders.discount")}</span>
@@ -4082,7 +4087,7 @@ export function QuotesPage({
                   </div>
                   <div className="quote-summary-row quote-summary-row--total">
                     <span>{t("sales.orders.totalAmount")}</span>
-                    <strong>{formatMoney(draftTotals.totalAmount, currency)}</strong>
+                    <strong>{hasPendingSalesPrices ? "—" : formatMoney(draftTotals.totalAmount, currency)}</strong>
                   </div>
 
                   <div className="quote-summary-internal">
@@ -4092,11 +4097,11 @@ export function QuotesPage({
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.profit")}</span>
-                      <strong>{formatMoney(draftTotals.profit, currency)}</strong>
+                      <strong>{hasPendingSalesPrices ? "—" : formatMoney(draftTotals.profit, currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.marginPercent")}</span>
-                      <strong>{draftTotals.margin}%</strong>
+                      <strong>{hasPendingSalesPrices ? "—" : `${draftTotals.margin}%`}</strong>
                     </div>
                   </div>
                 </div>

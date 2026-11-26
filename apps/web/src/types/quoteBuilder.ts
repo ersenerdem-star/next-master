@@ -68,6 +68,8 @@ export type QuoteBuilderLine = {
   sell_price: number | null;
   c_sell_price: number | null;
   manual_sell_price?: boolean;
+  /** This new line was saved before a customer price profile was selected. */
+  customer_pricing_pending?: boolean;
   price_date: string;
   notes: string;
   found: boolean;

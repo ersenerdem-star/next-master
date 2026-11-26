@@ -25,6 +25,7 @@ export type SalesOrderCatalogSyncOptions = {
   onlyFillBlanks?: boolean;
   keepPrices?: boolean;
   hydrateMissingPricesIfKeepingPrices?: boolean;
+  calculateSellPrice?: boolean;
 };
 
 export type InvoiceCatalogSyncOptions = {
@@ -263,7 +264,7 @@ export async function resyncSalesOrderLinesFromCatalog(
   const refreshesCurrentPrice = !keepPrices
     || replacementIndexes.size > 0
     || (options.hydrateMissingPricesIfKeepingPrices && patchedLines.some((line) => !Number.isFinite(Number(line.buy_price)) || Number(line.buy_price) <= 0));
-  if (refreshesCurrentPrice && options.customerType === "C") {
+  if (refreshesCurrentPrice && options.calculateSellPrice !== false && options.customerType === "C") {
     throw new Error("The retired C price list cannot be refreshed. Set A, B, or Other on the customer account.");
   }
   if (refreshesCurrentPrice) requireRepricingCurrency(options.currency);
@@ -277,7 +278,7 @@ export async function resyncSalesOrderLinesFromCatalog(
     for (const index of replacementIndexes) {
       const line = refreshed[index];
       if (line.price_sync_issue || !Number.isFinite(Number(line.buy_price)) || Number(line.buy_price) <= 0
-          || !Number.isFinite(Number(line.sell_price)) || Number(line.sell_price) <= 0) {
+          || (options.calculateSellPrice !== false && (!Number.isFinite(Number(line.sell_price)) || Number(line.sell_price) <= 0))) {
         throw new Error(`Current supplier price could not be verified for replacement ${line.brand} ${line.resolvedCode}. The order was not changed.`);
       }
     }
@@ -307,7 +308,7 @@ export async function resyncSalesOrderWithCodeReferenceFallback(
     if (!changed.length) throw error;
     for (const { line } of changed) {
       if (line.price_sync_issue || !Number.isFinite(Number(line.buy_price)) || Number(line.buy_price) <= 0
-          || !Number.isFinite(Number(line.sell_price)) || Number(line.sell_price) <= 0) {
+          || (options.calculateSellPrice !== false && (!Number.isFinite(Number(line.sell_price)) || Number(line.sell_price) <= 0))) {
         throw new Error(`Current price could not be verified for replacement ${line.brand} ${line.resolvedCode}. The order was not changed.`);
       }
     }
@@ -332,6 +333,7 @@ async function refreshLinePricesFromCatalog(
       marginB: options.marginB,
       includeSupplierOptions: true,
       quantity: line.qty,
+      calculateSellPrice: options.calculateSellPrice,
     });
 
     const selectedFromSavedOptions = line.supplierOptions.find((option, index) =>
@@ -356,14 +358,16 @@ async function refreshLinePricesFromCatalog(
         || exactProductCode(resolved.product_code) !== exactProductCode(line.resolvedCode || line.requestedCode)
         || (!selectUnpricedSupplier&&!selectedSupplierName) || !selected
         || !Number.isFinite(Number(selected.buy_price)) || Number(selected.buy_price) <= 0
-        || !Number.isFinite(Number(selected.sell_price)) || Number(selected.sell_price) <= 0)) {
+        || (options.calculateSellPrice !== false && (!Number.isFinite(Number(selected.sell_price)) || Number(selected.sell_price) <= 0)))) {
       if(!reprice)throw Error('NO_CURRENT_PRICE');
       throw new Error("No exact current price exists for the saved supplier and SKU.");
     }
     const quantityAdjustment = normalizeOrderQuantity(line.qty, selected || {});
 
     const replacement = line.codeChanged && exactProductCode(line.requestedCode) !== exactProductCode(line.resolvedCode);
-    const nextSellPrice = reprice || replacement ? selected!.sell_price : Number(line.sell_price) > 0 ? line.sell_price : selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
+    const nextSellPrice = options.calculateSellPrice === false
+      ? (line.manual_sell_price ? line.sell_price : null)
+      : reprice || replacement ? selected!.sell_price : Number(line.sell_price) > 0 ? line.sell_price : selected?.sell_price ?? resolved.sell_price ?? line.sell_price;
 
     const refreshed = mergeCatalogMetadata(
       {
