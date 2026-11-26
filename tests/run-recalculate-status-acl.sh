@@ -10,12 +10,18 @@ psqlrun() { docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -
 psqlrun < tests/sql/payment_integrity_setup.sql >/dev/null
 psqlrun <<'SQL' >/dev/null
 alter table invoices add column status text default 'confirmed', add column total_amount numeric default 100, add column updated_at timestamptz default now();
+alter table invoices add column sales_order_id text, add column sales_order_ids text[], add column warehouse_id uuid, add column warehouse_code text, add column warehouse_name text, add column sales_order_no text, add column seller_company text, add column purchase_company text, add column quote_date text, add column delivery_term text, add column payment_terms text, add column due_date text, add column contract_nr text, add column packing_details text, add column notes text, add column subtotal numeric, add column discount_amount numeric, add column shipping_cost numeric, add column purchase_total numeric, add column profit_total numeric, add column margin_percent numeric, add column created_at timestamptz, add column lines jsonb;
+create table sales_orders (id text primary key, organization_id uuid, currency text);
+insert into sales_orders values ('SO','00000000-0000-0000-0000-000000000001','EUR');
+create table warehouses (id uuid primary key, organization_id uuid);
 alter table bills add column status text default 'confirmed', add column total_amount numeric default 100, add column updated_at timestamptz default now(), add column purchase_order_id text, add column purchase_order_no text, add column bill_date text, add column due_date text, add column payment_terms text, add column notes text, add column subtotal numeric, add column shipping_cost numeric, add column discount_amount numeric, add column created_at timestamptz, add column lines jsonb;
 create table purchase_orders (id text primary key, organization_id uuid, currency text);
 insert into purchase_orders values ('PO','00000000-0000-0000-0000-000000000001','EUR');
 grant select on invoices,bills,payments_received,payments_made to authenticated;
 SQL
 psqlrun < supabase/migrations/20260707_94_payment_atomic_status_boundary.sql >/dev/null
+sed -n '/^create or replace function public.save_invoice_atomic(/,/^create or replace function public.save_bill_atomic(/p' supabase/migrations/20260707_95_invoice_bill_guarded_boundary.sql | sed '$d' | psqlrun >/dev/null
+psqlrun < supabase/migrations/20261126134915_invoice_edit_versions.sql >/dev/null
 sed -n '/^create or replace function public.save_bill_atomic(/,/^grant execute on function public.save_invoice_atomic/p' supabase/migrations/20260707_95_invoice_bill_guarded_boundary.sql | sed '$d' | psqlrun >/dev/null
 psqlrun < supabase/migrations/20261126133711_payment_integrity_guard.sql >/dev/null
 psqlrun < supabase/migrations/20261126140500_payment_version_guard.sql >/dev/null
@@ -43,10 +49,12 @@ BEGIN
  select status into st from bills where id='A'; if st <> 'confirmed' then raise exception 'payment delete did not recalculate'; end if;
  r := public.save_bill_atomic('{"id":"B","purchase_order_id":"PO","currency":"EUR","status":"draft","lines":[{"qty":1,"buy_price":10}]}'::jsonb,null);
  if r->'bill'->>'id' <> 'B' then raise exception 'bill save failed'; end if;
+ r := public.save_invoice_atomic('{"id":"I","sales_order_id":"SO","currency":"EUR","status":"draft","lines":[{"qty":1,"sell_price":10,"buy_price":5}]}'::jsonb,null);
+ if r->'invoice'->>'id' <> 'I' then raise exception 'invoice save failed'; end if;
 END $$;
 SQL
 for fn in recalculate_invoice_paid_status_for_org recalculate_bill_paid_status_for_org; do
   if psqlrun -c "set role authenticated; select public.$fn('00000000-0000-0000-0000-000000000001','A')" >"$tmp/denied" 2>&1; then echo "$fn: direct access unexpectedly allowed" >&2; exit 1; fi
   grep -q 'permission denied' "$tmp/denied" || { cat "$tmp/denied" >&2; exit 1; }
 done
-echo 'PASS: helper ACL; authenticated payment create/delete and bill save recalculate correctly'
+echo 'PASS: helper ACL; authenticated payment create/delete and bill/invoice save recalculate correctly'
