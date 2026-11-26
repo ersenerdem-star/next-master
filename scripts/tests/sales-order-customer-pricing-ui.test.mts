@@ -193,6 +193,8 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       const brand=renderer.root.findAll(node=>typeof node.type==='function'&&node.type.name==='Select'&&node.props.label===''&&node.props.options.some((option:any)=>option.value==='Synthetic'))[0];
       assert.ok(input && brand,'new line controls missing'); await act(async()=>{input.props.onChange('0012');brand.props.onChange('Synthetic');});
     },
+    holdSingleLookup() { holdLineLookup=true; },
+    async rerender() { await act(async()=>renderer.update(createElement(QuotesPage,{appRole:'superadmin',selectedSalesOrderId,selectedQuoteId,onSelectedSalesOrderChange:()=>{}}))); },
     async resolve(request: Deferred, value: any) { await act(async () => { request.resolve(value); }); },
     async reject(request: Deferred) { await act(async () => { request.reject(Error('Synthetic list refresh failed')); }); },
     async flushCache() { await act(async () => { for (const callback of [...timers.values()]) callback(); timers.clear(); }); },
@@ -460,5 +462,57 @@ test('a pending single-item lookup and catalog sync cannot overlap in either dir
     assert.ok(second.feedbackEvents.some(e=>e.kind==='fail'&&/operation before adding/i.test(e.text)));
     await second.resolve(second.resyncRequest,{lines:[unpricedLine()],preservedOtherPrices:false});
   } finally {await second.close()}
+});
+
+test('catalog handoff serializes price work, survives rerender, then unlocks the editor',async()=>{
+  const view=await fixture({cache:customerlessCache([unpricedLine()]),orders:[]});
+  try {
+    view.holdSingleLookup(); await view.queueCatalogHandoff();
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,1,'catalog transfer should start supplier lookup');
+    const syncButton=view.buttons('sales.orders.resyncFromCatalog')[0];
+    assert.equal(syncButton.props.disabled,true,'sync must be disabled until catalog transfer completes');
+    assert.equal(view.buttons('Import CSV')[0].props.disabled,true,'import must be disabled until catalog transfer completes');
+    await act(async()=>syncButton.props.onClick()); await view.startImport();
+    assert.equal(view.calls.filter(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback').length,0);
+    assert.equal(view.calls.filter(c=>c.name==='batchResolveQuoteImportRows').length,0);
+    await view.rerender();
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'HANDOFF',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+    assert.ok(view.lineRows().some(row=>row.resolvedCode==='HANDOFF'),'a harmless rerender must not lose the transferred item');
+    assert.equal(view.buttons('sales.orders.resyncFromCatalog')[0].props.disabled,false);
+    assert.equal(view.buttons('Import CSV')[0].props.disabled,false);
+    await view.click('sales.orders.resyncFromCatalog');
+    assert.equal(view.calls.filter(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback').length,1);
+    await view.resolve(view.resyncRequest,{lines:view.lineRows(),preservedOtherPrices:false});
+  } finally {await view.close()}
+});
+
+test('leaving the screen during catalog handoff clears progress and ignores the late response',async()=>{
+  const view=await fixture({cache:customerlessCache([unpricedLine()]),orders:[]});
+  try {
+    view.holdSingleLookup(); await view.queueCatalogHandoff();
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,1);
+    const clears=view.feedbackEvents.filter(e=>e.kind==='clear').length;
+    await view.unmount();
+    assert.ok(view.feedbackEvents.filter(e=>e.kind==='clear').length>clears,'leaving must clear catalog transfer progress');
+    const settled=[...view.feedbackEvents];
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'HANDOFF',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+    assert.deepEqual(view.feedbackEvents,settled,'late response must not recreate status after leaving');
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
+test('catalog handoff waits for active import and runs after the import completes',async()=>{
+  const view=await fixture({cache:customerlessCache([unpricedLine()]),orders:[]});
+  try {
+    view.holdSingleLookup(); await view.startImport(); await view.queueCatalogHandoff();
+    assert.equal(view.handoffPending(),true); assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,0);
+    await view.resolve(view.importRequest,[{...unpricedLine(),lineId:'imported',requestedCode:'IMPORT',resolvedCode:'IMPORT',sell_price:null}]);
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,1);
+    assert.equal(view.handoffPending(),false);
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'HANDOFF',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+    assert.ok(view.lineRows().some(row=>row.resolvedCode==='HANDOFF'));
+    assert.ok(view.lineRows().some(row=>row.resolvedCode==='IMPORT'));
+    assert.equal(view.buttons('Import CSV')[0].props.disabled,false);
+  } finally {await view.close()}
 });
 
