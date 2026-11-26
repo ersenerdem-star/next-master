@@ -916,8 +916,8 @@ export async function confirmSalesOrderWithPurchases(order: LocalSalesOrder, dec
   return { salesOrder: mapSalesOrderRow(result.sales_order), purchaseOrders: result.purchase_orders.map(mapPurchaseOrderRow), replayed: result.replayed === true };
 }
 
-export async function deleteSalesOrder(salesOrderId: string): Promise<void> {
-  await callAppRpc("delete_sales_order_guarded", { id: salesOrderId });
+export async function deleteSalesOrders(orders: Array<{id:string; updated_at:string}>): Promise<void> {
+  await callAppRpc("delete_sales_orders_guarded_batch", { items: orders.map((order) => ({id:order.id, expected_updated_at:order.updated_at})) });
 }
 
 export async function markSalesOrderPortalSeen(orderId: string): Promise<LocalSalesOrder | null> {
@@ -1016,8 +1016,8 @@ export async function upsertPurchaseOrder(order: LocalPurchaseOrder, expectedUpd
   return mapPurchaseOrderRow(result.purchase_order);
 }
 
-export async function deletePurchaseOrder(purchaseOrderId: string): Promise<void> {
-  await callAppRpc("delete_purchase_order_guarded", { id: purchaseOrderId });
+export async function deletePurchaseOrders(orders: Array<{id:string; updated_at:string}>): Promise<void> {
+  await callAppRpc("delete_purchase_orders_guarded_batch", { items: orders.map((order) => ({id:order.id, expected_updated_at:order.updated_at})) });
 }
 
 export async function fetchBills(): Promise<LocalBill[]> {

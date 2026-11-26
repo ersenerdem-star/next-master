@@ -7,7 +7,7 @@ import { findCodeReferenceMatch } from "../../infrastructure/api/codeReferencesA
 import { fetchCustomers, findCustomerByNameInList } from "../../infrastructure/api/customersApi";
 import { callAppRpc } from "../../infrastructure/api/appRpcApi";
 import {
-  deleteSalesOrder,
+  deleteSalesOrders,
   fetchInvoiceSalesLinkSummaries,
   fetchPurchaseOrderSalesLinkSummaries,
   fetchSalesOrderBrandSummaries,
@@ -36,6 +36,7 @@ import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { documentNumberError } from "../../shared/documentNumberError";
 import { salesConfirmationError } from "../../shared/salesConfirmationError";
 import { hasMissingPurchasePrice, hasMissingSalesPrice } from "../../shared/salesOrderPriceCompleteness";
+import { orderConcurrencyError } from "../../shared/orderConcurrencyError";
 import { applySalesOrderCustomerPricing, isSalesOrderWorkCurrent, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
 import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
@@ -3277,7 +3278,9 @@ export function QuotesPage({
 
     try {
       actionFeedback.begin(t("sales.orders.deleting", { count: uniqueIds.length.toLocaleString("en-US") }));
-      await Promise.all(uniqueIds.map((orderId) => deleteSalesOrder(orderId)));
+      const selected = uniqueIds.map((id) => localSalesOrders.find((row) => row.id === id));
+      if (selected.some((row) => !row?.updated_at)) throw new Error("Siparişin sürümü bulunamadı. Listeyi yenileyip tekrar deneyin.");
+      await deleteSalesOrders(selected.map((row) => ({id: row!.id, updated_at: row!.updated_at!})));
       await refreshLocalSalesOrders();
       setSelectedLocalSalesOrderIds((current) => current.filter((orderId) => !uniqueIds.includes(orderId)));
       if (uniqueIds.includes(selectedLocalSalesOrderId)) {
@@ -3286,7 +3289,7 @@ export function QuotesPage({
       }
       actionFeedback.succeed(t("sales.orders.deleted", { count: uniqueIds.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.deleteFailed"));
+      actionFeedback.fail(orderConcurrencyError(caught, locale, t("sales.orders.deleteFailed")));
     }
   }
 

@@ -8,6 +8,8 @@ const baseline=await read('supabase/migrations/20260707_96_sales_purchase_order_
 const vendorMigration=await read('supabase/migrations/20261109104136_purchase_order_vendor_resolution.sql');
 const confirmation=await read('supabase/migrations/20261126133902_safe_sales_confirmation.sql');
 const concurrency=await read('supabase/migrations/20261126133844_optimistic_order_versions.sql');
+const deletion=await read('supabase/migrations/20261126135036_atomic_order_deletion.sql');
+const salesDelete=await read('supabase/migrations/20260827090000_portal_sales_order_delete_notifications.sql');
 const org='10000000-0000-4000-8000-000000000001', admin='20000000-0000-4000-8000-000000000001';
 const gnk='30000000-0000-4000-8000-000000000001', second='30000000-0000-4000-8000-000000000002';
 const decision='40000000-0000-4000-8000-000000000001';
@@ -37,6 +39,7 @@ async function fixture(t) {
  create table sales_orders(id text primary key,organization_id uuid,sales_order_no text,customer_name text,seller_company text,purchase_company text,quote_date text,currency text,customer_type text,shipping_cost numeric,discount_amount numeric,supplier_mode text,preferred_supplier text,seller_info text,buyer_info text,delivery_term text,payment_terms text,packing_details text,notes text,status text,purchase_total numeric,sales_total numeric,profit_total numeric,margin_percent numeric,source_channel text,portal_invite_id uuid,portal_submitted_at timestamptz,portal_seen_at timestamptz,confirmed_at timestamptz,lines jsonb,created_at timestamptz default now(),updated_at timestamptz default now());
  create table purchase_orders(id text primary key,organization_id uuid,vendor_id uuid references vendors(id),supplier_name text,supplier_key text,purchase_company text,sales_order_id text,sales_order_no text,customer_name text,status text,currency text,total_amount numeric,line_count integer,lines jsonb,created_at timestamptz default now(),updated_at timestamptz default now());
  create table invoices(id text,organization_id uuid,sales_order_id text,sales_order_ids text[]);
+ create table portal_audit_logs(organization_id uuid,invite_id uuid,party_type text,event_type text,status text,details jsonb);
  create table bills(id text,organization_id uuid,purchase_order_id text,lines jsonb);create table purchase_receives(id text,organization_id uuid,purchase_order_id text);create table inventory_movements(id text,organization_id uuid,document_id text,document_no text);
  insert into organizations values('${org}');insert into profiles values('${admin}','${org}','admin',true);
  insert into vendors values('${gnk}','${org}','GNK','GNK','1'),('${second}','${org}','Other','Other','2');
@@ -44,6 +47,9 @@ async function fixture(t) {
  for(const fn of ['save_sales_order_atomic','save_purchase_order_atomic']) await db.exec(baseline.match(new RegExp(`create or replace function public\\.${fn}\\([\\s\\S]*?\\n\\$\\$;`,'i'))[0]);
  await db.exec('grant execute on function public.save_purchase_order_atomic(jsonb,text) to authenticated,service_role;');
  await db.exec(vendorMigration);await db.exec(concurrency);await db.exec(confirmation);
+ await db.exec(salesDelete.match(/create or replace function public\.delete_sales_order_guarded\([\s\S]*?\n\$\$;/i)[0]);
+ await db.exec(baseline.match(/create or replace function public\.delete_purchase_order_guarded\([\s\S]*?\n\$\$;/i)[0]);
+ await db.exec('grant all on public.sales_orders,public.purchase_orders to authenticated;');await db.exec(deletion);
  for(const name of ['GNK-Diesel','GNK-Mechanik']) await db.query('insert into purchase_vendor_resolution_private.vendor_aliases(organization_id,alias_supplier_name,vendor_id,reason)values($1,$2,$3,$4)',[org,name,gnk,'test']);
  const confirm=async (p=payload(),d=decision)=>(await db.query('select public.confirm_sales_order_with_purchases_safe($1::jsonb,$2::uuid) as result',[JSON.stringify(p),d])).rows[0].result;
  return {db,confirm};
@@ -113,4 +119,45 @@ test('callers cannot forge private capabilities or confirmation receipts',async 
  }
  await db.exec("select set_config('sales_confirmation_private.capability','true',false)");
  await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb,null)',[JSON.stringify(payload('forged'))]),/SALES_CONFIRMATION_ATOMIC_REQUIRED/);
+});
+
+test('batch deletion is all-or-nothing, checks versions and retains the original delete guard and audit',async t=>{
+ const {db}=await fixture(t);const ts='2026-11-26T10:00:00Z';
+ await db.exec('begin');
+ await db.query("insert into sales_confirmation_private.capabilities values($1,$2,'a',txid_current())",[org,admin]);
+ await db.query(`insert into sales_orders(id,organization_id,status,source_channel,portal_invite_id,lines,updated_at) values
+ ('a',$1,'confirmed','portal','50000000-0000-4000-8000-000000000001','[]',$2),('b',$1,'draft','internal',null,'[]',$2)`,[org,ts]);
+ await db.exec('commit');
+ const batch=async items=>db.query('select public.delete_sales_orders_guarded_batch($1::jsonb)',[JSON.stringify(items)]);
+ await assert.rejects(batch([{id:'a',expected_updated_at:ts},{id:'b',expected_updated_at:'2020-01-01Z'}]),/ORDER_DELETE_STALE_VERSION/);
+ assert.equal((await db.query('select count(*)::int n from sales_orders')).rows[0].n,2);assert.equal((await db.query('select count(*)::int n from portal_audit_logs')).rows[0].n,0);
+ await db.query("insert into invoices(id,organization_id,sales_order_id)values('bill',$1,'b')",[org]);
+ await assert.rejects(batch([{id:'a',expected_updated_at:ts},{id:'b',expected_updated_at:ts}]),/downstream documents/);
+ assert.equal((await db.query('select count(*)::int n from sales_orders')).rows[0].n,2);assert.equal((await db.query('select count(*)::int n from portal_audit_logs')).rows[0].n,0);
+ await db.query("delete from invoices where id='bill'");await batch([{id:'a',expected_updated_at:ts},{id:'b',expected_updated_at:ts}]);
+ assert.equal((await db.query('select count(*)::int n from sales_orders')).rows[0].n,0);assert.equal((await db.query('select count(*)::int n from portal_audit_logs')).rows[0].n,1);
+});
+test('browser roles cannot bypass guarded order boundaries with direct DML, TRUNCATE or trigger creation',async t=>{
+ const {db}=await fixture(t);for(const table of ['sales_orders','purchase_orders'])for(const privilege of ['UPDATE','DELETE','TRUNCATE','TRIGGER','REFERENCES'])
+  assert.equal((await db.query('select has_table_privilege($1,$2,$3) allowed',['authenticated','public.'+table,privilege])).rows[0].allowed,false,table+' '+privilege);
+ assert.equal((await db.query("select has_column_privilege('authenticated','public.sales_orders','portal_seen_at','UPDATE') allowed")).rows[0].allowed,true);
+ await assert.rejects(db.query("select public.delete_sales_order_guarded('old')"),/ORDER_DELETE_VERSION_REQUIRED/);
+});
+
+test('browser bootstrap INSERT cannot upsert existing order, while portal seen flag remains writable',async t=>{
+ const {db}=await fixture(t);await db.exec("grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;grant select on sales_orders,purchase_orders to authenticated;");
+ await db.query("insert into sales_orders(id,organization_id,status,lines)values('keep',$1,'draft','[]')",[org]);
+ await db.exec('set role authenticated');
+ await assert.rejects(db.query("insert into sales_orders(id,organization_id,status,lines) values('keep',$1,'draft','[]') on conflict(id) do update set lines='[1]'",[org]),/permission denied/);
+ await db.query("update sales_orders set portal_seen_at='2026-11-26T10:00:00Z' where id='keep'");
+ await db.exec('reset role');const row=(await db.query("select portal_seen_at,lines from sales_orders where id='keep'")).rows[0];assert.ok(row.portal_seen_at);assert.deepEqual(row.lines,[]);
+});
+
+test('purchase-order batch refuses stale and posted members without deleting other selections',async t=>{
+ const {db}=await fixture(t);const ts='2026-11-26T10:00:00Z';
+ await db.query("insert into purchase_orders(id,organization_id,status,lines,updated_at)values('p1',$1,'draft','[]',$2),('p2',$1,'open','[]',$2)",[org,ts]);
+ const batch=items=>db.query('select public.delete_purchase_orders_guarded_batch($1::jsonb)',[JSON.stringify(items)]);
+ await assert.rejects(batch([{id:'p1',expected_updated_at:ts},{id:'p2',expected_updated_at:'2020-01-01'}]),/ORDER_DELETE_STALE_VERSION/);
+ await assert.rejects(batch([{id:'p1',expected_updated_at:ts},{id:'p2',expected_updated_at:ts}]),/Posted purchase orders cannot be deleted/);
+ assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,2);
 });

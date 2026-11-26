@@ -16,7 +16,7 @@ import {
   buildAndUpsertMergedBillFromPurchaseOrders,
   deleteBill,
   deletePaymentMade,
-  deletePurchaseOrder,
+  deletePurchaseOrders,
   fetchBillById,
   fetchBillSummaries,
   fetchPaymentsMade,
@@ -1261,14 +1261,14 @@ export function PurchasesPage({
 
     try {
       actionFeedback.begin(p("feedback.deletingPurchaseOrder", { id: poId }));
-      await deletePurchaseOrder(poId);
+      await deletePurchaseOrders([{ id: poId, updated_at: purchaseOrderSourceVersion }]);
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setPurchaseOrderSourceSnapshot("");
       setPurchaseOrdersView("list");
       actionFeedback.succeed(p("feedback.purchaseOrderDeleted", { id: poId }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderDeleteFailed"));
+      actionFeedback.fail(orderConcurrencyError(caught, locale, p("errors.purchaseOrderDeleteFailed")));
     }
   }
 
@@ -1283,7 +1283,7 @@ export function PurchasesPage({
     }
     try {
       actionFeedback.begin(p("feedback.deletingPurchaseOrder", { id: row.id }));
-      await deletePurchaseOrder(row.id);
+      await deletePurchaseOrders([{ id: row.id, updated_at: row.updated_at || "" }]);
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderIds((current) => current.filter((item) => item !== row.id));
@@ -1295,7 +1295,7 @@ export function PurchasesPage({
       }
       actionFeedback.succeed(p("feedback.purchaseOrderDeleted", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderDeleteFailed"));
+      actionFeedback.fail(orderConcurrencyError(caught, locale, p("errors.purchaseOrderDeleteFailed")));
     }
   }
 
@@ -1318,7 +1318,9 @@ export function PurchasesPage({
 
     try {
       actionFeedback.begin(p("feedback.bulkDeletingPurchaseOrders", { count: uniqueIds.length.toLocaleString("en-US") }));
-      await Promise.all(uniqueIds.map((purchaseOrderId) => deletePurchaseOrder(purchaseOrderId)));
+      const selected = uniqueIds.map((id) => purchaseOrders.find((row) => row.id === id));
+      if (selected.some((row) => !row?.updated_at)) throw new Error("Siparişin sürümü bulunamadı. Listeyi yenileyip tekrar deneyin.");
+      await deletePurchaseOrders(selected.map((row) => ({id: row!.id, updated_at: row!.updated_at!})));
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderIds((current) => current.filter((purchaseOrderId) => !uniqueIds.includes(purchaseOrderId)));
@@ -1330,7 +1332,7 @@ export function PurchasesPage({
       }
       actionFeedback.succeed(p("feedback.bulkPurchaseOrdersDeleted", { count: uniqueIds.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.bulkPurchaseOrderDeleteFailed"));
+      actionFeedback.fail(orderConcurrencyError(caught, locale, p("errors.bulkPurchaseOrderDeleteFailed")));
     }
   }
 
