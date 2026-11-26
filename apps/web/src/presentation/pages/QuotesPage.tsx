@@ -1,7 +1,5 @@
 import { isWahlerBrand } from "../../../../../shared/wahler-price-tiers.mjs";
 import {InterfaceText} from "../../i18n/InterfaceText";
-import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
-import { confirmOrderForCapability } from "../../shared/confirmOrderForCapability";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { markupMoney } from "../../../../../shared/order-money.mjs";
 import { fetchCompanyProfiles, findCompanyProfileByName } from "../../infrastructure/api/companyProfilesApi";
@@ -17,8 +15,6 @@ import {
   fetchSalesOrderSummaries,
   markSalesOrderPortalSeen,
   confirmSalesOrderWithPurchases,
-  replacePurchaseOrdersForSalesOrder,
-  resolvePurchaseOrderVendors,
   upsertInvoice,
   upsertSalesOrder,
 } from "../../infrastructure/api/ordersApi";
@@ -35,7 +31,7 @@ import { buildBrandResolutionLookup, resolveCanonicalBrandName } from "../../sha
 import { parseCsv } from "../../shared/csv";
 import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
-import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
+import { buildInvoiceFromSalesOrder, buildLocalSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { documentNumberError } from "../../shared/documentNumberError";
 import { applySalesOrderCustomerPricing, isSalesOrderWorkCurrent, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
@@ -53,7 +49,7 @@ import { Select } from "../components/common/Select";
 import type { CompanyProfile } from "../../types/company";
 import type { LocalCustomer } from "../../types/customers";
 import type { CodeReferenceMatch } from "../../types/codeReferences";
-import type { LocalSalesOrder, LocalPurchaseOrder } from "../../types/orders";
+import type { LocalSalesOrder } from "../../types/orders";
 import type { QuoteBuilderLine } from "../../types/quoteBuilder";
 import type { QuoteDetail, QuoteSummary } from "../../types/quotes";
 import { Button } from "../components/common/Button";
@@ -3533,29 +3529,16 @@ export function QuotesPage({
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
       await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, workbenchMode === "new" && hasCustomerPricingProfile ? effectiveCustomerType : customerType, effectiveMarginA, effectiveMarginB, currency, selectedLocalSalesOrderId || undefined, selectedCustomerProfile?.id ?? null, resolvedCustomerName);
       const order = buildSalesOrderPayload("confirmed");
-      const { salesOrder: saved, purchaseOrders } = await confirmOrderForCapability<{ salesOrder: LocalSalesOrder; purchaseOrders: LocalPurchaseOrder[] }>(commercialUpgradeEnabled(), {
-        legacy: async () => {
-          // Resolve all recipients before saving the Sales root. Only the
-          // newly derived POs use canonical vendors; saved prices stay intact.
-          const recipients = await resolvePurchaseOrderVendors(order.lines.map((line) => line.supplier_name));
-          const saved = await upsertSalesOrder(order);
-          const purchaseOrders = await replacePurchaseOrdersForSalesOrder(saved.id, buildPurchaseOrdersFromSalesOrder(saved, recipients));
-          return { salesOrder: saved, purchaseOrders };
-        },
-        atomic: async () => {
-          salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
-          const fingerprint = JSON.stringify({ ...order, id: selectedLocalSalesOrderId || "", sales_order_no: quoteNo.trim(), created_at: "", updated_at: "", confirmed_at: "" });
-          const pending = confirmationAttemptRef.current;
-          if (pending && pending.fingerprint !== fingerprint) {
-            throw new Error("The previous confirmation result must be checked before changing the order. Reload its status first.");
-          }
-          const attempt = pending || { fingerprint, order, decisionId: crypto.randomUUID() };
-          confirmationAttemptRef.current = attempt;
-          const result = await confirmSalesOrderWithPurchases(attempt.order, attempt.decisionId);
-          confirmationAttemptRef.current = null;
-          return result;
-        },
-      });
+      salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
+      const fingerprint = JSON.stringify({ ...order, id: selectedLocalSalesOrderId || "", sales_order_no: quoteNo.trim(), created_at: "", updated_at: "", confirmed_at: "" });
+      const pending = confirmationAttemptRef.current;
+      if (pending && pending.fingerprint !== fingerprint) {
+        throw new Error("The previous confirmation result must be checked before changing the order. Reload its status first.");
+      }
+      const attempt = pending || { fingerprint, order, decisionId: crypto.randomUUID() };
+      confirmationAttemptRef.current = attempt;
+      const { salesOrder: saved, purchaseOrders } = await confirmSalesOrderWithPurchases(attempt.order, attempt.decisionId);
+      confirmationAttemptRef.current = null;
       const seenOrder =
         saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
       const effectiveOrder = seenOrder || saved;

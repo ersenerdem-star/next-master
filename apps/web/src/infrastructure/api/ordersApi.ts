@@ -13,7 +13,6 @@ import { supabaseClient } from "./supabaseClient";
 import { getCurrentOrgId } from "./organizationApi";
 import { fetchWarehouses } from "./warehousesApi";
 import { callAppRpc } from "./appRpcApi";
-import { commercialUpgradeEnabled } from "../../shared/commercialUpgrade";
 import { salesOrderTotals } from "../../../../../shared/order-money.mjs";
 import { recomputeInvoiceTotals, recomputeBillTotals } from "../../shared/invoiceMoney";
 
@@ -909,10 +908,9 @@ export async function resolvePurchaseOrderVendors(supplierNames: readonly string
 }
 
 export async function confirmSalesOrderWithPurchases(order: LocalSalesOrder, decisionId: string) {
-  if (!commercialUpgradeEnabled()) throw new Error("Atomic order confirmation is not enabled for this environment. The commercial upgrade must be validated before confirmation.");
   salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
   const result = await callAppRpc<{ sales_order?: Record<string, unknown>; purchase_orders?: Record<string, unknown>[]; replayed?: boolean }>(
-    "confirm_sales_order_with_purchases_atomic", { payload: mapSalesOrderPayload({ ...order, status: "confirmed" }, ""), decision_id: decisionId },
+    "confirm_sales_order_with_purchases_safe", { payload: mapSalesOrderPayload({ ...order, status: "confirmed" }, ""), decision_id: decisionId },
   );
   if (!result?.sales_order || !Array.isArray(result.purchase_orders)) throw new Error("Order confirmation response is incomplete. Check order status before retrying.");
   return { salesOrder: mapSalesOrderRow(result.sales_order), purchaseOrders: result.purchase_orders.map(mapPurchaseOrderRow), replayed: result.replayed === true };
