@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
+import { currentSupplierQuantity } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
 import { readSupplierCommercialTerms } from "../../apps/web/src/domain/shared/supplierCommercialTerms.ts";
 import { canonicalizePriceBrandName, canonicalizePriceProductCode } from "../../apps/web/src/domain/shared/normalize.ts";
 
@@ -15,6 +16,7 @@ function resolver(options: unknown[], fail = false) {
   const compiled = ts.transpileModule(declarations.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   const calls: string[] = [];
   const deps = {
+    currentSupplierQuantity,
     canonicalizePriceBrandName,
     canonicalizePriceProductCode,
     canonicalizeBrandName: (v: string) => v,
