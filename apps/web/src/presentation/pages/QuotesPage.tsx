@@ -34,6 +34,7 @@ import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../sh
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { documentNumberError } from "../../shared/documentNumberError";
+import { salesConfirmationError } from "../../shared/salesConfirmationError";
 import { applySalesOrderCustomerPricing, isSalesOrderWorkCurrent, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
 import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
@@ -3562,7 +3563,7 @@ export function QuotesPage({
       setBuilderStatus(t("sales.orders.confirmedWithPurchaseOrders", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
       actionFeedback.succeed(t("sales.orders.confirmedWithPurchaseOrdersToast", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.markConfirmedFailed")));
+      actionFeedback.fail(salesConfirmationError(caught, locale) || documentNumberError(caught, locale, t("sales.orders.markConfirmedFailed")));
     } finally {
       setConfirmingOrder(false);
     }

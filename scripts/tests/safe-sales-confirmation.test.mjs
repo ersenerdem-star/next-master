@@ -7,6 +7,7 @@ const read = path => readFile(new URL('../../'+path,import.meta.url),'utf8');
 const baseline=await read('supabase/migrations/20260707_96_sales_purchase_order_guarded_boundary.sql');
 const vendorMigration=await read('supabase/migrations/20261109104136_purchase_order_vendor_resolution.sql');
 const confirmation=await read('supabase/migrations/20261126133902_safe_sales_confirmation.sql');
+const concurrency=await read('supabase/migrations/20261126133844_optimistic_order_versions.sql');
 const org='10000000-0000-4000-8000-000000000001', admin='20000000-0000-4000-8000-000000000001';
 const gnk='30000000-0000-4000-8000-000000000001', second='30000000-0000-4000-8000-000000000002';
 const decision='40000000-0000-4000-8000-000000000001';
@@ -42,7 +43,7 @@ async function fixture(t) {
  insert into customers values('${org}','Customer','Customer');select set_config('test.uid','${admin}',false);`);
  for(const fn of ['save_sales_order_atomic','save_purchase_order_atomic']) await db.exec(baseline.match(new RegExp(`create or replace function public\\.${fn}\\([\\s\\S]*?\\n\\$\\$;`,'i'))[0]);
  await db.exec('grant execute on function public.save_purchase_order_atomic(jsonb,text) to authenticated,service_role;');
- await db.exec(vendorMigration);await db.exec(confirmation);
+ await db.exec(vendorMigration);await db.exec(concurrency);await db.exec(confirmation);
  for(const name of ['GNK-Diesel','GNK-Mechanik']) await db.query('insert into purchase_vendor_resolution_private.vendor_aliases(organization_id,alias_supplier_name,vendor_id,reason)values($1,$2,$3,$4)',[org,name,gnk,'test']);
  const confirm=async (p=payload(),d=decision)=>(await db.query('select public.confirm_sales_order_with_purchases_safe($1::jsonb,$2::uuid) as result',[JSON.stringify(p),d])).rows[0].result;
  return {db,confirm};
@@ -64,7 +65,7 @@ test('history remains untouched and direct confirmation is blocked',async t=>{
  await db.query(`insert into purchase_orders(id,organization_id,sales_order_id,status,lines)values('old',$1,'existing','open','[]')`,[org]);
  const before=(await db.query("select to_jsonb(s) s,(select to_jsonb(p) from purchase_orders p where p.id='old') p from sales_orders s where id='existing'")).rows[0];
  await assert.rejects(confirm(payload('existing')),/SALES_CONFIRMATION_HAS_DOCUMENTS/);
- await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb,null)',[JSON.stringify(payload('existing'))]),/SALES_CONFIRMATION_ATOMIC_REQUIRED/);
+ await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb,null)',[JSON.stringify({...payload('existing'),expected_updated_at:before.s.updated_at})]),/SALES_CONFIRMATION_ATOMIC_REQUIRED/);
  assert.deepEqual((await db.query("select to_jsonb(s) s,(select to_jsonb(p) from purchase_orders p where p.id='old') p from sales_orders s where id='existing'")).rows[0],before);
 });
 test('missing supplier and missing or invalid prices fail before writing',async t=>{
@@ -82,4 +83,15 @@ test('concurrent sessions retry safely without creating duplicate purchase order
  assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,2);
  await assert.rejects(other.query('select public.confirm_sales_order_with_purchases_safe($1::jsonb,$2::uuid)',[JSON.stringify(request),'40000000-0000-4000-8000-000000000002']),/SALES_CONFIRMATION_ALREADY_CONFIRMED/);
  await other.end();
+});
+
+test('stale version cannot confirm a changed draft; correct version confirms and replay succeeds',async t=>{
+ const {db,confirm}=await fixture(t);
+ await db.query(`insert into sales_orders(id,organization_id,status,lines,updated_at)values('draft',$1,'draft','[]','2026-11-26T10:00:00Z')`,[org]);
+ const stale={...payload('draft'),expected_updated_at:'2026-11-26T09:00:00Z'};
+ await assert.rejects(confirm(stale),/SALES_ORDER_STALE_VERSION/);
+ assert.equal((await db.query("select status from sales_orders where id='draft'")).rows[0].status,'draft');
+ assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,0);
+ const current={...stale,expected_updated_at:'2026-11-26T10:00:00Z'};
+ assert.equal((await confirm(current)).sales_order.status,'confirmed');assert.equal((await confirm(current)).replayed,true);
 });
