@@ -900,6 +900,7 @@ export function QuotesPage({
   const [resolvingLine, setResolvingLine] = useState(false);
   const [importingLines, setImportingLines] = useState(false);
   function invalidateSalesOrderAsyncWork() {
+    if (importingLines || resolvingLine) actionFeedback.clear();
     salesOrderLoadGenerationRef.current++;
     importOperationRef.current++;
     resolveOperationRef.current++;
