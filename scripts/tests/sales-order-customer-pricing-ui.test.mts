@@ -22,6 +22,7 @@ await build({
     if (baseline) builder.onLoad({ filter: /QuotesPage\.tsx$/ }, () => ({ loader: 'tsx', contents:
       execFileSync('git', ['show', `${baseline}:apps/web/src/presentation/pages/QuotesPage.tsx`], { encoding: 'utf8' }),
     }));
+    builder.onResolve({ filter: /shared\/salesOrderCatalogSync$/ }, () => ({path:'catalogSync',namespace:'fixture'}));
     builder.onResolve({ filter: /infrastructure\/api\// }, args => ({ path: basename(args.path), namespace: 'api-fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'api-fixture' }, async ({ path }) => {
       const source = await readFile(resolve('apps/web/src/infrastructure/api', `${path}.ts`), 'utf8');
@@ -33,6 +34,7 @@ await build({
     builder.onResolve({ filter: /InterfaceText$/ }, () => ({ path: 'interface', namespace: 'fixture' }));
     builder.onResolve({ filter: /common\/ActionFeedback$/ }, () => ({ path: 'feedback', namespace: 'fixture' }));
     builder.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({ loader: 'js', contents:
+      path === 'catalogSync' ? `export const resyncSalesOrderWithCodeReferenceFallback=(...args)=>globalThis.${fixtureKey}.call('resyncSalesOrderWithCodeReferenceFallback',...args);export const salesOrderResyncPriceSummary=()=>({failed:0});` :
       path === 'i18n' ? `const t=(key,params)=>key+(params?' '+JSON.stringify(params):'');export const useI18n=()=>({locale:'en',t});` :
       path === 'interface' ? `export const useInterfaceText=()=>x=>x;export const InterfaceText=({text})=>text;` :
       `export const useActionFeedback=()=>globalThis.${fixtureKey}.feedback;`
@@ -98,6 +100,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   globals.fetch = () => { throw Error('Unexpected real network access'); }; globals.IS_REACT_ACT_ENVIRONMENT = true;
   const summaryQueue: Deferred[] = [];
   const importRequest = deferred();
+  const resyncRequest = deferred();
   const firstDetail = holdDetail ? deferred() : null;
   const calls: Array<{ name: string; args: any[] }> = [];
   const feedbackEvents: Array<{ kind: string; text: string }> = [];
@@ -133,6 +136,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       if (name === 'getCPriceForRow') return null;
       if (name === 'fetchCloudBrands') return Promise.resolve([{id:'brand',name:'Synthetic'}]);
       if (name === 'batchResolveQuoteImportRows') return importRequest.promise;
+      if (name === 'resyncSalesOrderWithCodeReferenceFallback') return resyncRequest.promise;
       if (['fetchPurchaseOrderSalesLinkSummaries', 'fetchInvoiceSalesLinkSummaries', 'fetchSalesOrderBrandSummaries', 'fetchInventoryAvailabilitySummary', 'fetchPriceListSettings', 'fetchCloudQuotes'].includes(name)) return Promise.resolve([]);
       throw Error(`Unexpected API call ${name}`);
     },
@@ -141,7 +145,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   await act(async () => { renderer = create(createElement(QuotesPage, { appRole: 'superadmin', selectedSalesOrderId })); });
   let unmounted = false;
   return {
-    renderer, calls, saved, feedbackEvents, confirms, firstDetail, importRequest,
+    renderer, calls, saved, feedbackEvents, confirms, firstDetail, importRequest, resyncRequest,
     text: () => content(renderer.root),
     buttons: (label: string) => renderer.root.findAllByType('button').filter(button => content(button) === label),
     lineRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.wrapClassName === 'sales-lines-table').flatMap(node => node.props.rows),
@@ -162,6 +166,9 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
     async selectCustomer(value: string) {
       const select = renderer.root.findAll(node => typeof node.type==='function' && node.type.name==='Select' && node.props.label==='sales.orders.customer')[0];
       assert.ok(select,'customer selection missing'); await act(async()=>select.props.onChange(value));
+    },
+    async externalOrder(id: string) {
+      await act(async()=>renderer.update(createElement(QuotesPage,{appRole:'superadmin',selectedSalesOrderId:id})));
     },
     async startImport() {
       const input=renderer.root.findAllByType('input').find(node=>node.props.type==='file' && String(node.props.accept||'').includes('.csv'));
@@ -306,6 +313,30 @@ test('navigation save refuses a partial order while an import is in flight and r
     assert.equal(view.lineRows().length,2,'finishing the import returns the editor to a usable state');
     await view.click('sales.orders.saveDraft'); assert.equal(view.saved.length,1);
     assert.equal(view.saved[0].lines.length,2);
+  } finally {await view.close()}
+});
+
+test('in-flight catalog sync holds navigation and never writes its result to the next order',async()=>{
+  const oldLine={...unpricedLine(),requestedCode:'OLD',resolvedCode:'OLD',sell_price:73.5};
+  const nextLine={...unpricedLine(),lineId:'next',requestedCode:'NEXT',resolvedCode:'NEXT',sell_price:45};
+  const old=fullOrder('old',[oldLine]), next=fullOrder('next',[nextLine]);
+  const view=await fixture({cache:existingCache(old,[oldLine]),orders:[old,next]});
+  try {
+    await view.click('sales.orders.resyncFromCatalog');
+    assert.ok(view.calls.some(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback'));
+    await view.click('sales.orders.clearDraft');
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail'&&/synchronization.*clearing/i.test(e.text)),'clearing must explain why it is deferred');
+    assert.equal(view.lineRows()[0].resolvedCode,'OLD');
+    await view.click('sales.orders.exit');
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail'&&/synchronization/i.test(e.text)),'the reason for waiting must be visible');
+    assert.equal(view.lineRows()[0].resolvedCode,'OLD');
+    await view.externalOrder('next');
+    assert.equal(view.lineRows()[0].resolvedCode,'OLD','external navigation must wait for the in-flight save');
+    await view.resolve(view.resyncRequest,{lines:[{...oldLine,description:'Refreshed'}],preservedOtherPrices:false});
+    assert.equal(view.saved.length,1); assert.equal(view.saved[0].id,'old');
+    assert.equal(view.saved[0].lines[0].resolvedCode,'OLD');
+    assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].resolvedCode,'NEXT');
+    assert.equal(view.lineRows()[0].sell_price,45);
   } finally {await view.close()}
 });
 
