@@ -860,8 +860,10 @@ export function QuotesPage({
   const importOperationRef = useRef(0);
   const resolveOperationRef = useRef(0);
   const resyncOperationRef = useRef(0);
+  const catalogTransferOperationRef = useRef(0);
   const importingLinesRef = useRef(false);
   const resolvingLineRef = useRef(false);
+  const catalogTransferInFlightRef = useRef(false);
   const handledSalesOrdersNavTickRef = useRef(0);
   const pendingSalesOrderLoadIdRef = useRef("");
   const failedSalesOrderLoadIdRef = useRef("");
@@ -905,17 +907,21 @@ export function QuotesPage({
   const [builderStatus, setBuilderStatus] = useState(initialWorkspaceCache?.builderStatus || "");
   const [resolvingLine, setResolvingLine] = useState(false);
   const [importingLines, setImportingLines] = useState(false);
+  const [catalogTransferRunning, setCatalogTransferRunning] = useState(false);
   function invalidateSalesOrderAsyncWork() {
-    if (importingLinesRef.current || resolvingLineRef.current || resyncingCatalogRef.current) actionFeedback.clear();
+    if (importingLinesRef.current || resolvingLineRef.current || resyncingCatalogRef.current || catalogTransferInFlightRef.current) actionFeedback.clear();
     salesOrderLoadGenerationRef.current++;
     importOperationRef.current++;
     resolveOperationRef.current++;
     resyncOperationRef.current++;
+    catalogTransferOperationRef.current++;
     importingLinesRef.current = false;
     resolvingLineRef.current = false;
+    catalogTransferInFlightRef.current = false;
     resyncingCatalogRef.current = false;
     setImportingLines(false);
     setResolvingLine(false);
+    setCatalogTransferRunning(false);
     setResyncingCatalog(false);
     setLoadingDetail(false);
     if (importRef.current) importRef.current.value = "";
@@ -1003,7 +1009,6 @@ export function QuotesPage({
 
   useEffect(() => {
     let cancelled = false;
-
     async function run() {
       try {
         const salesOrderRows = await fetchSalesOrderSummaries();
@@ -1119,7 +1124,7 @@ export function QuotesPage({
 
   useEffect(() => {
     if (pendingCatalogSalesHandledRef.current) return;
-    if (resyncingCatalog) return;
+    if (resyncingCatalog || importingLines || resolvingLine) return;
     // Wait until the saved-order list is available so a catalog handoff can
     // offer every existing draft instead of silently creating a new one.
     if (!localSalesOrdersLoaded) return;
@@ -1127,8 +1132,6 @@ export function QuotesPage({
     if (!pending) return;
     pendingCatalogSalesHandledRef.current = true;
     const pendingItem = pending;
-
-    let cancelled = false;
 
     async function run() {
       const draftOrders = localSalesOrders.filter((order) => order.status === "draft");
@@ -1170,6 +1173,10 @@ export function QuotesPage({
       setPdfView(false);
       setBuilderStatus(t("sales.orders.addingFromCatalog", { productCode: pendingItem.product_code }));
       const workspaceGeneration = salesOrderLoadGenerationRef.current;
+      const operation = ++catalogTransferOperationRef.current;
+      catalogTransferInFlightRef.current = true;
+      setCatalogTransferRunning(true);
+      actionFeedback.begin(t("sales.orders.addingFromCatalog", { productCode: pendingItem.product_code }));
       try {
         const line = await buildBuilderLine(
           {
@@ -1179,7 +1186,7 @@ export function QuotesPage({
           },
           { includeSupplierOptions: true },
         );
-        if (cancelled || !isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current)) return;
+        if (!isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current)) return;
         const enrichedLine: QuoteBuilderLine = {
           ...line,
           description: pendingItem.description || line.description,
@@ -1196,17 +1203,19 @@ export function QuotesPage({
         setBuilderStatus(t("sales.orders.addedFromCatalog", { productCode: pendingItem.product_code }));
         actionFeedback.succeed(t("sales.orders.addedToWorkbench", { productCode: pendingItem.product_code }));
       } catch (caught) {
-        if (cancelled || !isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current)) return;
+        if (!isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current)) return;
         setBuilderStatus(t("sales.orders.failedToAddFromCatalog", { productCode: pendingItem.product_code }));
         actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.catalogItemAddFailed"));
+      } finally {
+        if (operation === catalogTransferOperationRef.current) {
+          catalogTransferInFlightRef.current = false;
+          setCatalogTransferRunning(false);
+        }
       }
     }
 
     void run();
-    return () => {
-      cancelled = true;
-    };
-  }, [actionFeedback, companyProfiles, localSalesOrders, localSalesOrdersLoaded, onSelectedSalesOrderChange, quoteBuilderLines.length, resyncingCatalog]);
+  }, [actionFeedback, companyProfiles, localSalesOrders, localSalesOrdersLoaded, onSelectedSalesOrderChange, quoteBuilderLines.length, resyncingCatalog, importingLines, resolvingLine]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1340,6 +1349,7 @@ export function QuotesPage({
 
   useEffect(() => () => {
     salesOrderLoadGenerationRef.current++;
+    catalogTransferOperationRef.current++;
     if (pendingSalesOrderLoadIdRef.current) {
       pendingSalesOrderLoadIdRef.current = "";
       actionFeedback.clear();
@@ -1956,7 +1966,7 @@ export function QuotesPage({
   }, [salesOrdersNavTick, externalSelectedSalesOrderId, externalSelectedQuoteId, resyncingCatalog]);
 
   async function handleResyncFromCatalog() {
-    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current) {
+    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) {
       actionFeedback.fail(locale === "tr" ? "Satır yüklemesi tamamlanınca katalog eşitlemesini başlatın." : "Wait for line loading before synchronizing the catalog.");
       return;
     }
@@ -2269,7 +2279,7 @@ export function QuotesPage({
   }
 
   async function persistSalesOrderDraft() {
-    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current) {
+    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) {
       throw new Error(locale === "tr" ? "Devam eden işlem tamamlanınca kaydedin." : "Wait for the current operation before saving.");
     }
     assertWahlerQuantityPricesReady();
@@ -2858,7 +2868,7 @@ export function QuotesPage({
   }
 
   async function handleResolveQuoteLine() {
-    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current) {
+    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) {
       actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca satırı ekleyin." : "Wait for the current operation before adding a line.");
       return;
     }
@@ -2913,7 +2923,7 @@ export function QuotesPage({
   }
 
   async function handleImportQuoteFile(file: File) {
-    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current) {
+    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) {
       actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca dosyayı yükleyin." : "Wait for the current operation before importing a file.");
       if (importRef.current) importRef.current.value = "";
       return;
@@ -3478,7 +3488,7 @@ export function QuotesPage({
   );
 
   async function handleSaveDraft() {
-    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current) { actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca kaydedin." : "Wait for the current operation before saving."); return; }
+    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) { actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca kaydedin." : "Wait for the current operation before saving."); return; }
     try {
       setSavingDraft(true);
       actionFeedback.begin(t("sales.orders.savingDraftOrder", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
@@ -3493,7 +3503,7 @@ export function QuotesPage({
   }
 
   async function handleMarkConfirmed() {
-    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current) { actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca onaylayın." : "Wait for the current operation before confirming."); return; }
+    if (resyncingCatalogRef.current || importingLinesRef.current || resolvingLineRef.current || catalogTransferInFlightRef.current) { actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca onaylayın." : "Wait for the current operation before confirming."); return; }
     if (customerPricingIssue) {
       actionFeedback.fail(customerPricingIssue);
       return;
@@ -3803,12 +3813,12 @@ export function QuotesPage({
               }}
             />
             <Button variant="secondary" onClick={() => {
-              if (resyncingCatalogRef.current || resolvingLineRef.current || importingLinesRef.current) {
+              if (resyncingCatalogRef.current || resolvingLineRef.current || importingLinesRef.current || catalogTransferInFlightRef.current) {
                 actionFeedback.fail(locale === "tr" ? "Devam eden işlem tamamlanınca dosyayı yükleyin." : "Wait for the current operation before importing a file.");
                 return;
               }
               importRef.current?.click();
-            }} disabled={resyncingCatalog || resolvingLine} busy={importingLines} busyLabel={t("sales.orders.importing")}>
+            }} disabled={resyncingCatalog || resolvingLine || catalogTransferRunning} busy={importingLines} busyLabel={t("sales.orders.importing")}>
               <InterfaceText text={"Import CSV"}/></Button>
             <Button variant="secondary" onClick={downloadQuoteTemplate}>
               <InterfaceText text={"Sample Template"}/></Button>
@@ -3831,15 +3841,15 @@ export function QuotesPage({
                   <input type="checkbox" checked={resyncKeepPrices} onChange={(event) => setResyncKeepPrices(event.target.checked)} />
                   <span className="field__label">{t("sales.orders.keepPrices")}</span>
                 </label>
-                <Button variant="secondary" onClick={() => void handleResyncFromCatalog()} disabled={importingLines || resolvingLine} busy={resyncingCatalog} busyLabel={t("sales.orders.resyncing")}>
+                <Button variant="secondary" onClick={() => void handleResyncFromCatalog()} disabled={importingLines || resolvingLine || catalogTransferRunning} busy={resyncingCatalog} busyLabel={t("sales.orders.resyncing")}>
                   {t("sales.orders.resyncFromCatalog")}
                 </Button>
               </>
             ) : null}
-            <Button variant="secondary" onClick={() => void handleSaveDraft()} disabled={importingLines || resolvingLine || resyncingCatalog} busy={savingDraft} busyLabel={t("sales.orders.savingDraft")}>
+            <Button variant="secondary" onClick={() => void handleSaveDraft()} disabled={importingLines || resolvingLine || resyncingCatalog || catalogTransferRunning} busy={savingDraft} busyLabel={t("sales.orders.savingDraft")}>
               {t("sales.orders.saveDraft")}
             </Button>
-            <Button onClick={() => void handleMarkConfirmed()} disabled={importingLines || resolvingLine || resyncingCatalog} busy={confirmingOrder} busyLabel={t("sales.orders.confirming")}>
+            <Button onClick={() => void handleMarkConfirmed()} disabled={importingLines || resolvingLine || resyncingCatalog || catalogTransferRunning} busy={confirmingOrder} busyLabel={t("sales.orders.confirming")}>
               {t("sales.orders.markConfirmed")}
             </Button>
             <Button variant="secondary" className="danger-button" onClick={clearDraft}>
@@ -4155,7 +4165,7 @@ export function QuotesPage({
                     <Button variant="secondary" onClick={() => void handleSearchOe()} busy={searchingOe} busyLabel={locale === "tr" ? "OE aranıyor…" : "Searching OE…"}>
                       {locale === "tr" ? "OE ile ürün ara" : "Find products by OE"}
                     </Button>
-                    <Button onClick={() => void handleResolveQuoteLine()} disabled={resyncingCatalog || importingLines} busy={resolvingLine} busyLabel={t("sales.orders.resolving")}>
+                    <Button onClick={() => void handleResolveQuoteLine()} disabled={resyncingCatalog || importingLines || catalogTransferRunning} busy={resolvingLine} busyLabel={t("sales.orders.resolving")}>
                       {t("sales.orders.addNewRow")}
                     </Button>
                     <Button variant="secondary" onClick={() => importRef.current?.click()} busy={importingLines} busyLabel={t("sales.orders.importing")}>
