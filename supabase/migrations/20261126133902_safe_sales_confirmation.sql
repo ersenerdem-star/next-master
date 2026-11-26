@@ -19,6 +19,14 @@ create function sales_confirmation_private.require_atomic_confirmation() returns
 language plpgsql security definer set search_path='' as $function$
 declare previous_status text;
 begin
+ -- The customer portal saves drafts via a service-role REST upsert. Its
+ -- earlier read can race internal confirmation; reject a stale portal write
+ -- at the locked row rather than allowing it to revert the confirmed order.
+ if tg_op='UPDATE' and lower(coalesce(old.status,'draft'))='confirmed' and lower(coalesce(new.status,'draft'))<>'confirmed'
+  and (exists(select 1 from public.purchase_orders p where p.organization_id=old.organization_id and p.sales_order_id=old.id)
+   or exists(select 1 from public.invoices i where i.organization_id=old.organization_id and (i.sales_order_id=old.id or old.id=any(coalesce(i.sales_order_ids,'{}'::text[]))))) then
+  raise exception 'SALES_CONFIRMATION_PORTAL_STALE' using errcode='40001';
+ end if;
  if lower(coalesce(new.status,'draft')) <> 'confirmed' then return new; end if;
  if tg_op = 'UPDATE' then previous_status := lower(coalesce(old.status,'draft'));
  else

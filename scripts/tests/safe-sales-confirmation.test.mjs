@@ -95,3 +95,22 @@ test('stale version cannot confirm a changed draft; correct version confirms and
  const current={...stale,expected_updated_at:'2026-11-26T10:00:00Z'};
  assert.equal((await confirm(current)).sales_order.status,'confirmed');assert.equal((await confirm(current)).replayed,true);
 });
+
+test('a stale service-role portal write cannot revert an internally confirmed order',async t=>{
+ const {db,confirm}=await fixture(t);const data={...payload('portal'),source_channel:'portal'};
+ await confirm(data);const before=(await db.query("select to_jsonb(s) row from sales_orders s where id='portal'")).rows[0].row;
+ await db.exec("select set_config('test.uid','',false)");
+ await assert.rejects(db.query("update sales_orders set status='draft',lines='[]' where id='portal'"),/SALES_CONFIRMATION_PORTAL_STALE/);
+ assert.deepEqual((await db.query("select to_jsonb(s) row from sales_orders s where id='portal'")).rows[0].row,before);
+});
+
+test('callers cannot forge private capabilities or confirmation receipts',async t=>{
+ const {db}=await fixture(t);
+ for(const role of ['anon','authenticated','service_role']) {
+  assert.equal((await db.query("select has_schema_privilege($1,'sales_confirmation_private','USAGE') allowed",[role])).rows[0].allowed,false);
+  assert.equal((await db.query("select has_table_privilege($1,'sales_confirmation_private.capabilities','INSERT') allowed",[role])).rows[0].allowed,false);
+  assert.equal((await db.query("select has_table_privilege($1,'sales_confirmation_private.receipts','UPDATE') allowed",[role])).rows[0].allowed,false);
+ }
+ await db.exec("select set_config('sales_confirmation_private.capability','true',false)");
+ await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb,null)',[JSON.stringify(payload('forged'))]),/SALES_CONFIRMATION_ATOMIC_REQUIRED/);
+});
