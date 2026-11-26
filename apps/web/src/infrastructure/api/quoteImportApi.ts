@@ -110,6 +110,7 @@ async function resolveQuoteImportRowsOnce(input: {
   marginA: number;
   marginB: number;
   calculateSellPrice?: boolean;
+  applyReferences?: boolean;
 }): Promise<QuoteBuilderLine[]> {
   const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
     .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
@@ -117,7 +118,7 @@ async function resolveQuoteImportRowsOnce(input: {
   if (input.calculateSellPrice !== false && input.customerType === "C") throw new Error("Customer C price list is retired. Select A, B, or an account margin.");
   const organizationId = await getCurrentOrgId();
 
-  const referenceMatches = await fetchCodeReferenceMatchesForRows(rows);
+  const referenceMatches = input.applyReferences === false ? new Map() : await fetchCodeReferenceMatchesForRows(rows);
   const normalizedBrands = [...new Set(rows.map((row) => normalizeBrandKey(row.brand)).filter(Boolean))];
   const { data: brandRows, error: brandError } = await supabaseClient
     .from("brands")
@@ -402,6 +403,7 @@ export async function batchResolveQuoteImportRows(input: {
   marginA: number;
   marginB: number;
   calculateSellPrice?: boolean;
+  applyReferences?: boolean;
 }): Promise<QuoteBuilderLine[]> {
   const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
     .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
