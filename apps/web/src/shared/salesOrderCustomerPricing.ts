@@ -37,7 +37,9 @@ export function applySalesOrderCustomerPricing(lines: QuoteBuilderLine[], contex
       || line.supplierOptions[0] || null;
     const buyPrice = selected?.buy_price ?? line.buy_price;
     const nextSell = line.manual_sell_price ? line.sell_price : buyPrice == null ? null : markupMoney(buyPrice, margin);
-    const nextPending = pending && !line.manual_sell_price && nextSell == null;
+    // Once a customer was selected this is no longer waiting for customer
+    // selection, even when the supplier has no available purchase price.
+    const nextPending = false;
     const optionChanged = line.supplierOptions.some((option) => option.sell_price !== (option.buy_price == null ? null : markupMoney(option.buy_price, margin)));
     if (line.sell_price === nextSell && Boolean(line.customer_pricing_pending) === nextPending && !optionChanged) return line;
     changed = true;
