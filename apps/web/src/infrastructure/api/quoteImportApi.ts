@@ -111,6 +111,7 @@ async function resolveQuoteImportRowsOnce(input: {
   marginB: number;
   calculateSellPrice?: boolean;
   applyReferences?: boolean;
+  useQuantityPrice?: boolean;
 }): Promise<QuoteBuilderLine[]> {
   const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
     .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));
@@ -159,7 +160,7 @@ async function resolveQuoteImportRowsOnce(input: {
   });
 
   const scopedRows = baseRows.filter((row) => row.brandId);
-  const scopedPrices = await fetchCurrentSupplierPriceBatch(scopedRows.map((row) => ({ code: row.lookupCode, brand: row.brand, quantity: currentSupplierQuantity(row.brand, row.qty) })));
+  const scopedPrices = await fetchCurrentSupplierPriceBatch(scopedRows.map((row) => ({ code: row.lookupCode, brand: row.brand, ...(input.useQuantityPrice ? { quantity: currentSupplierQuantity(row.brand, row.qty) } : {}) })));
   const pricesByRawRow = new Map<(typeof baseRows)[number], CurrentSupplierPriceBatchRow>();
   scopedRows.forEach((row, index) => pricesByRawRow.set(row, scopedPrices[index]));
 
@@ -186,7 +187,7 @@ async function resolveQuoteImportRowsOnce(input: {
     row.brandId && exactSku(row.targetCode) !== exactSku(row.lookupCode));
   if (redirectedPublishedRows.length) {
     const redirectedPrices = await fetchCurrentSupplierPriceBatch(
-      redirectedPublishedRows.map((row) => ({ code: row.targetCode, brand: row.brand, quantity: currentSupplierQuantity(row.brand, row.qty) })),
+      redirectedPublishedRows.map((row) => ({ code: row.targetCode, brand: row.brand, ...(input.useQuantityPrice ? { quantity: currentSupplierQuantity(row.brand, row.qty) } : {}) })),
     );
     redirectedPublishedRows.forEach((row, index) => {
       if (row.publishedPrice?.has_published_scope && !redirectedPrices[index].has_published_scope) {
@@ -307,6 +308,11 @@ async function resolveQuoteImportRowsOnce(input: {
     const selected = supplierMatches[0] || null;
     const sellPrice = selected?.sell_price ?? null;
     const quantityAdjustment = normalizeOrderQuantity(row.qty, selected || {});
+    // Quantity tiers must be checked for the final order quantity. Do not
+    // accept a tier read at the requested quantity if pack rules changed it.
+    if (input.useQuantityPrice && currentSupplierQuantity(row.brand, row.qty) !== undefined && quantityAdjustment.adjusted) {
+      throw new Error(`Quantity price needs verification for corrected quantity ${quantityAdjustment.corrected}.`);
+    }
     const lifecycleStatus = normalizeCatalogLifecycleStatus(String(catalogMatch?.lifecycle_status || ""));
     const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
@@ -404,6 +410,7 @@ export async function batchResolveQuoteImportRows(input: {
   marginB: number;
   calculateSellPrice?: boolean;
   applyReferences?: boolean;
+  useQuantityPrice?: boolean;
 }): Promise<QuoteBuilderLine[]> {
   const rows = input.rows.filter((row) => row.code.trim() && row.brand.trim())
     .map(row=>({...row,brand:canonicalizePriceBrandName(row.brand,row.code)}));

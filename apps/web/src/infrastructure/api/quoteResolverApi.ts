@@ -90,7 +90,7 @@ export async function resolveQuoteLine(input: {
     // default sales price even when the caller does not yet have a customer.
     const [line] = await batchResolveQuoteImportRows({
       rows: [{ code, brand, qty: input.quantity || 1 }], customerType: input.customerType,
-      marginA: input.marginA, marginB: input.marginB, calculateSellPrice: false, applyReferences: false,
+      marginA: input.marginA, marginB: input.marginB, calculateSellPrice: false, applyReferences: false, useQuantityPrice: true,
     });
     if (!line) throw new Error("Supplier price lookup returned no result.");
     if (line.found && exactSku(line.resolvedCode) !== exactSku(code)) {

@@ -37,6 +37,53 @@ async function loadQuoteImport() {
   return import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}#${moduleLoadCount}`);
 }
 
+test("buy-only tier lookup fails closed when a pack rule changes the priced quantity", async () => {
+  const requests = [];
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1",
+    codeReferences: async () => new Map(),
+    supabaseClient: tableClient({ brands: [{ id: "wahler", name: "Wahler", organization_id: "org-1" }] }, []),
+    callAppRpc: async (_name, args) => args.input_requests.map((row, request_index) => {
+      requests.push(row);
+      return { request_index, has_published_scope: true, options: [{ supplier_id: "s", supplier_name: "Supplier",
+        product_code: row.code, buy_price: 10, moq: 5, order_multiple: 1, stock_qty: null, valid_to: null }] };
+    }),
+  };
+  const { batchResolveQuoteImportRows } = await loadQuoteImport();
+  const input = { rows: [{ code: "WA1", brand: "Wahler", qty: 1 }], customerType: "A", marginA: 10, marginB: 15 };
+  const [single] = await batchResolveQuoteImportRows({ ...input, calculateSellPrice: false, useQuantityPrice: true, applyReferences: false });
+  assert.equal(requests[0].quantity, 1);
+  assert.equal(single.found, false);
+  assert.equal(single.buy_price, null);
+  assert.match(single.notes, /corrected quantity 5/);
+  requests.length = 0;
+  const [bulk] = await batchResolveQuoteImportRows(input);
+  assert.equal(requests[0].quantity, undefined);
+  assert.equal(bulk.found, true);
+  assert.equal(bulk.qty, 5);
+  assert.equal(bulk.sell_price, 11);
+});
+
+test("already resolved replacement B does not follow the second B-to-C reference", async () => {
+  let referenceCalls = 0;
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => "org-1",
+    codeReferences: async () => { referenceCalls++; return new Map([["bosch::b", { old_code: "B", new_code: "C" }]]); },
+    supabaseClient: tableClient({ brands: [{ id: "bosch", name: "Bosch", organization_id: "org-1" }] }, []),
+    callAppRpc: async (_name, args) => args.input_requests.map((row, request_index) => ({
+      request_index, has_published_scope: true, options: [{ supplier_id: "s", supplier_name: "Supplier",
+        product_code: row.code, buy_price: row.code === "B" ? 10 : 99, moq: null, order_multiple: null, stock_qty: null, valid_to: null }],
+    })),
+  };
+  const { batchResolveQuoteImportRows } = await loadQuoteImport();
+  const [line] = await batchResolveQuoteImportRows({ rows: [{ code: "B", brand: "Bosch", qty: 1 }], customerType: "A",
+    marginA: 10, marginB: 15, calculateSellPrice: false, applyReferences: false, useQuantityPrice: true });
+  assert.equal(referenceCalls, 0);
+  assert.equal(line.resolvedCode, "B");
+  assert.equal(line.buy_price, 10);
+  assert.equal(line.sell_price, null);
+});
+
 test("bulk SACHS import uses canonical price keys and preserves original uploaded codes", async () => {
   const codes = ["311.409", "314.880", "315.872", "317.333", "802.561", "803.209"];
   globalThis.__quoteImportMocks = {
