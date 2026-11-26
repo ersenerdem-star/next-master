@@ -79,8 +79,8 @@ const existingCache = (order: ReturnType<typeof fullOrder>, lines = order.lines)
 function content(node: ReactTestInstance | string): string {
   return typeof node === 'string' ? node : node.children.map(child => content(child)).join('');
 }
-async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedSalesOrderId = '', holdDetail = false, failDetail = false }: {
-  cache?: Record<string, any>; orders?: Array<ReturnType<typeof fullOrder>>; selectedSalesOrderId?: string; holdDetail?: boolean; failDetail?: boolean;
+async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedSalesOrderId = '', selectedQuoteId = '', holdDetail = false, failDetail = false, holdQuotes = false, holdQuoteDetail = false }: {
+  cache?: Record<string, any>; orders?: Array<ReturnType<typeof fullOrder>>; selectedSalesOrderId?: string; selectedQuoteId?:string; holdDetail?: boolean; failDetail?: boolean; holdQuotes?:boolean; holdQuoteDetail?:boolean;
 } = {}) {
   const globals = globalThis as any;
   const previous = { window: globals.window, document: globals.document, HTMLElement: globals.HTMLElement, fetch: globals.fetch, fixture: globals[fixtureKey], act: globals.IS_REACT_ACT_ENVIRONMENT };
@@ -102,6 +102,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   const summaryQueue: Deferred[] = [];
   const importRequest = deferred();
   const resyncRequest = deferred();
+  const quoteListRequest = deferred(), quoteDetailRequest = deferred();
   const firstDetail = holdDetail ? deferred() : null;
   const calls: Array<{ name: string; args: any[] }> = [];
   const feedbackEvents: Array<{ kind: string; text: string }> = [];
@@ -138,15 +139,17 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       if (name === 'fetchCloudBrands') return Promise.resolve([{id:'brand',name:'Synthetic'}]);
       if (name === 'batchResolveQuoteImportRows') return importRequest.promise;
       if (name === 'resyncSalesOrderWithCodeReferenceFallback') return resyncRequest.promise;
-      if (['fetchPurchaseOrderSalesLinkSummaries', 'fetchInvoiceSalesLinkSummaries', 'fetchSalesOrderBrandSummaries', 'fetchInventoryAvailabilitySummary', 'fetchPriceListSettings', 'fetchCloudQuotes'].includes(name)) return Promise.resolve([]);
+      if (name === 'fetchCloudQuotes') return holdQuotes ? quoteListRequest.promise : Promise.resolve([]);
+      if (name === 'fetchCloudQuoteDetail') return holdQuoteDetail ? quoteDetailRequest.promise : Promise.reject(Error('unexpected quote detail'));
+      if (['fetchPurchaseOrderSalesLinkSummaries', 'fetchInvoiceSalesLinkSummaries', 'fetchSalesOrderBrandSummaries', 'fetchInventoryAvailabilitySummary', 'fetchPriceListSettings'].includes(name)) return Promise.resolve([]);
       throw Error(`Unexpected API call ${name}`);
     },
   };
   let renderer!: ReactTestRenderer;
-  await act(async () => { renderer = create(createElement(QuotesPage, { appRole: 'superadmin', selectedSalesOrderId })); });
+  await act(async () => { renderer = create(createElement(QuotesPage, { appRole: 'superadmin', selectedSalesOrderId, selectedQuoteId })); });
   let unmounted = false;
   return {
-    renderer, calls, saved, feedbackEvents, confirms, prompts, firstDetail, importRequest, resyncRequest,
+    renderer, calls, saved, feedbackEvents, confirms, prompts, firstDetail, importRequest, resyncRequest, quoteListRequest, quoteDetailRequest,
     text: () => content(renderer.root),
     buttons: (label: string) => renderer.root.findAllByType('button').filter(button => content(button) === label),
     lineRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.wrapClassName === 'sales-lines-table').flatMap(node => node.props.rows),
@@ -358,6 +361,45 @@ test('catalog item handoff waits for in-flight sync and resumes afterwards',asyn
     assert.equal(view.saved.length,1); assert.equal(view.saved[0].id,'old');
     assert.equal(view.prompts.length,1,'the handoff should resume when synchronization completes');
     assert.equal(view.handoffPending(),false);
+  } finally {await view.close()}
+});
+
+test('a late cloud quote list cannot replace a new draft while catalog sync is in flight',async()=>{
+  const original={...unpricedLine(),requestedCode:'ORIGINAL',resolvedCode:'ORIGINAL'};
+  const view=await fixture({cache:customerlessCache([original]),holdQuotes:true,holdQuoteDetail:true});
+  try {
+    await view.click('sales.orders.resyncFromCatalog');
+    assert.ok(view.calls.some(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback'));
+    await view.resolve(view.quoteListRequest,[{quote_id:'stale-quote',quote_no:'OLD-QUOTE'}]);
+    assert.equal(view.calls.filter(c=>c.name==='fetchCloudQuoteDetail').length,0,'late list must not select a quote in the editor');
+    assert.equal(view.lineRows()[0].resolvedCode,'ORIGINAL');
+    await view.resolve(view.resyncRequest,{lines:[original],preservedOtherPrices:false});
+    assert.equal(view.lineRows()[0].resolvedCode,'ORIGINAL');
+  } finally {await view.close()}
+});
+
+test('a late cloud quote detail cannot overwrite a draft while catalog sync is in flight',async()=>{
+  const original={...unpricedLine(),requestedCode:'ORIGINAL',resolvedCode:'ORIGINAL'};
+  const view=await fixture({cache:customerlessCache([original]),selectedQuoteId:'stale-quote',holdQuotes:true,holdQuoteDetail:true});
+  try {
+    assert.equal(view.calls.filter(c=>c.name==='fetchCloudQuoteDetail').length,1);
+    await view.click('sales.orders.resyncFromCatalog');
+    await view.resolve(view.quoteDetailRequest,{quote:{quote_no:'STALE',customer_name:'Other customer'},lines:[]});
+    assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].resolvedCode,'ORIGINAL');
+    await view.resolve(view.resyncRequest,{lines:[original],preservedOtherPrices:false});
+    assert.equal(view.lineRows()[0].resolvedCode,'ORIGINAL');
+  } finally {await view.close()}
+});
+
+test('a selected cloud quote still opens normally when no catalog sync is running',async()=>{
+  const view=await fixture({cache:customerlessCache([]),selectedQuoteId:'real-quote',holdQuotes:true,holdQuoteDetail:true});
+  try {
+    assert.equal(view.calls.filter(c=>c.name==='fetchCloudQuoteDetail').length,1);
+    await view.resolve(view.quoteDetailRequest,{quote:{quote_no:'Q-REAL',customer_name:'Customer A'},lines:[{
+      id:'q1',product_code:'CODE',brand_text:'Synthetic',description:'Quote product',qty:2,buy_price:10,sell_price:13,supplier_name:'Supplier',
+    }]});
+    assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].resolvedCode,'CODE');
+    assert.equal(view.lineRows()[0].sell_price,13);
   } finally {await view.close()}
 });
 
