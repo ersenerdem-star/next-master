@@ -649,3 +649,16 @@ test('confirmation remains successful and invoice prompt stays usable if list re
     assert.ok(view.text().includes('sales.orders.convertToInvoiceDescription'));
   } finally { await view.close(); }
 });
+
+test('an already-seen portal order is reloaded for the invoice version', async()=>{
+  const order={...fullOrder('portal-already-seen'),source_channel:'portal',portal_submitted_at:'2026-11-26T09:00:00Z'};
+  const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    await view.click('sales.orders.markConfirmed');
+    const markIndex=view.calls.findIndex(call=>call.name==='markSalesOrderPortalSeen');
+    assert.ok(markIndex>=0);
+    assert.ok(view.calls.slice(markIndex+1).some(call=>call.name==='fetchSalesOrderById' && call.args[0]===order.id));
+    await view.click('sales.orders.convertToInvoice');
+    assert.equal(view.calls.find(call=>call.name==='createFullSalesInvoices')?.args[1][0].updated_at,'2026-11-26T10:00:00Z');
+  } finally { await view.close(); }
+});

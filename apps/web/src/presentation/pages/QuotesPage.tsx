@@ -3566,7 +3566,9 @@ export function QuotesPage({
       let auxiliaryRefreshFailed = false;
       if (saved.source_channel === "portal" && saved.portal_submitted_at) {
         try {
-          effectiveOrder = (await markSalesOrderPortalSeen(saved.id)) || saved;
+          const seenOrder = await markSalesOrderPortalSeen(saved.id);
+          if (seenOrder) effectiveOrder = seenOrder;
+          else effectiveOrder = await fetchSalesOrderById(saved.id);
         } catch {
           auxiliaryRefreshFailed = true;
           // The marker may have committed even if its response was lost. Use a
