@@ -211,6 +211,30 @@ test('real editor preserves pre-existing stored prices when customer selection c
   } finally {await view.close()}
 });
 
+test('real editor preserves an explicitly typed sale price when customer changes',async()=>{
+  const view=await fixture({cache:customerlessCache()});
+  try {
+    const input=view.renderer.root.findAllByType('input').find(node=>node.props.className==='inline-edit-input' && node.props.type==='number');
+    assert.ok(input,'manual sale price input missing');
+    await act(async()=>input.props.onChange({target:{value:'73.50'}}));
+    await view.selectCustomer('customer-a'); assert.equal(view.lineRows()[0].sell_price,73.5);
+    await view.selectCustomer('customer-b'); assert.equal(view.lineRows()[0].sell_price,73.5);
+  } finally {await view.close()}
+});
+
+test('saved customerless pending line is priced after selecting customer without repricing older lines',async()=>{
+  const pending={...unpricedLine(),sell_price:null,customer_pricing_pending:true};
+  const old={...unpricedLine(),lineId:'old-line',sell_price:73.5,customer_pricing_pending:false};
+  const order=fullOrder('pending',[pending,old]);
+  const view=await fixture({cache:{...existingCache(order,[pending,old]),customerName:'',customerSelection:''},orders:[order]});
+  try {
+    assert.equal(view.lineRows()[0].sell_price,null); assert.equal(view.lineRows()[1].sell_price,73.5);
+    await view.selectCustomer('customer-b');
+    assert.equal(view.lineRows()[0].sell_price,115); assert.equal(view.lineRows()[1].sell_price,73.5);
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
 test('late import uses the customer selected while the supplier request was pending',async()=>{
   const view=await fixture({cache:customerlessCache([])});
   try {
