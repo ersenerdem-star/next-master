@@ -2624,6 +2624,7 @@ export async function submitPortalSalesOrder(
   invite: PortalInviteRow,
   input: {
     orderId?: string;
+    expectedUpdatedAt?: string;
     salesOrderNo?: string;
     mode: "draft" | "confirm";
     deliveryTerm?: string;
@@ -2675,13 +2676,16 @@ export async function submitPortalSalesOrder(
   const existing =
     input.orderId
       ? await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-          select: "id,sales_order_no,status,created_at,portal_submitted_at,portal_seen_at,discount_amount,shipping_cost,notes",
+          select: "id,sales_order_no,status,created_at,updated_at,portal_submitted_at,portal_seen_at,discount_amount,shipping_cost,notes",
           organization_id: `eq.${invite.organization_id}`,
           id: `eq.${input.orderId}`,
           portal_invite_id: `eq.${invite.id}`,
         })
       : null;
 
+  if (input.orderId && (!existing || !input.expectedUpdatedAt)) {
+    throw new Error("This order changed since you opened it. Reload the order and review your changes.");
+  }
   if (
     existing &&
     (String(existing.status || "").trim().toLowerCase() !== "draft" || existing.portal_submitted_at)
@@ -2742,19 +2746,20 @@ export async function submitPortalSalesOrder(
     updated_at: nowIso(),
   };
 
+  // Existing drafts use compare-and-swap. A concurrent admin save, portal
+  // submission, or deletion must never be replaced with this stale snapshot.
+  const isUpdate = Boolean(input.orderId);
+  const saveUrl = buildRestUrl(supabaseUrl, "sales_orders", isUpdate ? {
+    id: `eq.${input.orderId}`, organization_id: `eq.${invite.organization_id}`,
+    portal_invite_id: `eq.${invite.id}`, status: "eq.draft", portal_submitted_at: "is.null",
+    updated_at: `eq.${input.expectedUpdatedAt}`, select: "id,updated_at",
+  } : { select: "id,updated_at" });
+  const save = async (value: Record<string, unknown>) => sendJson<Array<Record<string, unknown>>>(saveUrl, {
+    method: isUpdate ? "PATCH" : "POST", headers: { ...serviceRoleHeaders(serviceRoleKey), Prefer: "return=representation" }, body: JSON.stringify(value),
+  });
   let rows: Array<Record<string, unknown>>;
   try {
-    rows = await sendJson<Array<Record<string, unknown>>>(
-      `${buildRestUrl(supabaseUrl, "sales_orders", autoId ? {select:"id"} : { on_conflict: "id", select: "id" })}`,
-      {
-        method: "POST",
-        headers: {
-          ...serviceRoleHeaders(serviceRoleKey),
-          Prefer: autoId ? "return=representation" : "resolution=merge-duplicates,return=representation",
-        },
-        body: JSON.stringify(payload),
-      },
-    );
+    rows = await save(payload);
   } catch (error) {
     if (autoId) {
       const recovered = await recoverFirstSave();
@@ -2762,22 +2767,11 @@ export async function submitPortalSalesOrder(
       throw error;
     }
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.toLowerCase().includes("customer_id")) {
-      throw error;
-    }
+    if (!message.toLowerCase().includes("customer_id")) throw error;
     const { customer_id: _ignoredCustomerId, ...legacyPayload } = payload;
-    rows = await sendJson<Array<Record<string, unknown>>>(
-      `${buildRestUrl(supabaseUrl, "sales_orders", { on_conflict: "id", select: "id" })}`,
-      {
-        method: "POST",
-        headers: {
-          ...serviceRoleHeaders(serviceRoleKey),
-          Prefer: "resolution=merge-duplicates,return=representation",
-        },
-        body: JSON.stringify(legacyPayload),
-      },
-    );
+    rows = await save(legacyPayload);
   }
+  if (rows.length !== 1 || !rows[0]?.id) throw new Error("This order changed since you opened it. Reload the order and review your changes.");
 
   const savedId = String(rows[0]?.id || payload.id);
   // Return the just-written order independently from the history snapshot.
@@ -2801,7 +2795,7 @@ export async function submitPortalSalesOrder(
     delivery_term: payload.delivery_term,
     payment_terms: payload.payment_terms,
     packing_details: payload.packing_details,
-    updated_at: payload.updated_at,
+    updated_at: String(rows[0]?.updated_at || payload.updated_at),
     lines: prepared.lines.filter((line) => line.qty > 0 && line.resolvedCode).map((line) => {
       const safeLine = toCustomerPortalPreparedLine(line);
       return {
@@ -2840,9 +2834,11 @@ export async function deletePortalSalesOrder(
   serviceRoleKey: string,
   invite: PortalInviteRow,
   orderId: string,
+  expectedUpdatedAt: string,
 ) {
+  if (!expectedUpdatedAt) throw new Error("This order changed since you opened it. Reload the order and review your changes.");
   const existing = await fetchFirst<Record<string, unknown>>(supabaseUrl, serviceRoleKey, "sales_orders", {
-    select: "id,status,portal_submitted_at,portal_invite_id",
+    select: "id,status,portal_submitted_at,portal_invite_id,updated_at",
     organization_id: `eq.${invite.organization_id}`,
     id: `eq.${orderId}`,
     portal_invite_id: `eq.${invite.id}`,
@@ -2852,13 +2848,14 @@ export async function deletePortalSalesOrder(
     throw new Error("Portal draft order not found");
   }
   if (String(existing.status || "").toLowerCase() !== "draft" || existing.portal_submitted_at) {
-    throw new Error("Only unsubmitted draft portal orders can be deleted");
+    throw new Error("This order changed since you opened it. Reload the order and review your changes.");
   }
 
-  await sendJson<unknown>(buildRestUrl(supabaseUrl, "sales_orders", { id: `eq.${orderId}`, organization_id: `eq.${invite.organization_id}` }), {
-    method: "DELETE",
-    headers: serviceRoleHeaders(serviceRoleKey),
-  });
+  const deleted = await sendJson<Array<Record<string, unknown>>>(buildRestUrl(supabaseUrl, "sales_orders", {
+    id: `eq.${orderId}`, organization_id: `eq.${invite.organization_id}`, portal_invite_id: `eq.${invite.id}`,
+    status: "eq.draft", portal_submitted_at: "is.null", updated_at: `eq.${expectedUpdatedAt}`, select: "id",
+  }), { method: "DELETE", headers: { ...serviceRoleHeaders(serviceRoleKey), Prefer: "return=representation" } });
+  if (deleted.length !== 1) throw new Error("This order changed since you opened it. Reload the order and review your changes.");
 
   const snapshot = await buildPortalSnapshot(supabaseUrl, serviceRoleKey, invite);
   return { orderId, snapshot };

@@ -57,6 +57,7 @@ export default async (req: Request, _context: Context) => {
     });
     const result = await submitPortalSalesOrder(supabaseUrl, serviceRoleKey, invite, {
       orderId: body?.orderId ? String(body.orderId) : undefined,
+      expectedUpdatedAt: body?.expectedUpdatedAt ? String(body.expectedUpdatedAt) : undefined,
       salesOrderNo: body?.salesOrderNo ? String(body.salesOrderNo) : undefined,
       mode,
       deliveryTerm: body?.deliveryTerm ? String(body.deliveryTerm) : "",

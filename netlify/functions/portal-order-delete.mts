@@ -39,7 +39,7 @@ export default async (req: Request, _context: Context) => {
       sessionToken,
       hostname: getPortalRequestHostname(req),
     });
-    const result = await deletePortalSalesOrder(supabaseUrl, serviceRoleKey, invite, orderId);
+    const result = await deletePortalSalesOrder(supabaseUrl, serviceRoleKey, invite, orderId, String(body?.expectedUpdatedAt || ""));
     return json({ ok: true, ...result }, 200, {
       "Set-Cookie": buildPortalSessionCookie(nextSessionToken),
     });

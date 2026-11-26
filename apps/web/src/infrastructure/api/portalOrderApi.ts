@@ -237,6 +237,7 @@ export async function submitPortalOrder(
   credentials: PortalCredentials,
   input: {
     orderId?: string;
+    expectedUpdatedAt?: string;
     salesOrderNo?: string;
     mode: "draft" | "confirm";
     deliveryTerm: string;
@@ -269,10 +270,11 @@ export async function fetchPortalSalesOrderDetail(credentials: PortalCredentials
   return data.order || null;
 }
 
-export async function deletePortalDraftOrder(credentials: PortalCredentials, orderId: string) {
+export async function deletePortalDraftOrder(credentials: PortalCredentials, orderId: string, expectedUpdatedAt: string) {
   const data = await postPortalOrderJson("/api/portal-order-delete", {
     ...credentials,
     orderId,
+    expectedUpdatedAt,
   });
   if (!data.snapshot) throw new Error("Portal draft delete did not return refreshed portal snapshot");
   return {

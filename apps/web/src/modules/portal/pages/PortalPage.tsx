@@ -90,6 +90,7 @@ const PORTAL_DESKTOP_SCALE_SIDE_PADDING_PX = 24;
 type PortalOfflineDraft = {
   portalDraftLines: PortalPreparedLine[];
   portalOrderId: string;
+  portalOrderVersion?: string;
   portalSalesOrderNo: string;
   portalDeliveryTerm: string;
   portalPaymentTerms: string;
@@ -658,6 +659,7 @@ export function PortalPage() {
   );
   const [portalDraftLines, setPortalDraftLines] = useState<PortalPreparedLine[]>([]);
   const [portalOrderId, setPortalOrderId] = useState("");
+  const [portalOrderVersion, setPortalOrderVersion] = useState("");
   const portalImportContextRef = useRef({ inviteId: '', customerId: '', orderId: '' });
   portalImportContextRef.current = { inviteId: snapshot?.invite.id || '', customerId: snapshot?.customer?.id || '', orderId: portalOrderId };
   const [portalSalesOrderNo, setPortalSalesOrderNo] = useState("");
@@ -1373,6 +1375,7 @@ export function PortalPage() {
       const cachedDraft = portalCachedDraftRef.current;
       portalCachedDraftRef.current = null;
       setPortalOrderId(cachedDraft.portalOrderId || "");
+      setPortalOrderVersion(cachedDraft.portalOrderVersion || "");
       setPortalSalesOrderNo(cachedDraft.portalSalesOrderNo || "");
       setPortalDraftLines(cachedDraft.portalDraftLines || []);
       setPortalDeliveryTerm(cachedDraft.portalDeliveryTerm || "");
@@ -1417,6 +1420,7 @@ export function PortalPage() {
       return;
     }
     setPortalOrderId(latestPortalDraft?.id || "");
+    setPortalOrderVersion(latestPortalDraft?.updated_at || "");
     setPortalSalesOrderNo(latestPortalDraft?.sales_order_no || "");
     setPortalDraftLines(latestPortalDraft ? mapPortalSalesOrderToPreparedLines(latestPortalDraft) : []);
     setPortalDeliveryTerm(latestPortalDraft?.delivery_term || "");
@@ -1469,6 +1473,7 @@ export function PortalPage() {
       writePortalDraftCache(credentials.email, {
         portalDraftLines,
         portalOrderId,
+        portalOrderVersion,
         portalSalesOrderNo,
         portalDeliveryTerm,
         portalPaymentTerms,
@@ -1494,6 +1499,7 @@ export function PortalPage() {
     portalDeliveryTerm,
     portalDraftLines,
     portalOrderId,
+    portalOrderVersion,
     portalOrderNotes,
     portalOrderStatus,
     portalPackingDetails,
@@ -2131,6 +2137,7 @@ export function PortalPage() {
         }
         targetLines = mapPortalSalesOrderToPreparedLines(selectedTarget);
         setPortalOrderId(selectedTarget.id);
+        setPortalOrderVersion(selectedTarget.updated_at || "");
         setPortalSalesOrderNo(selectedTarget.sales_order_no || selectedTarget.id);
         setPortalDraftLines(targetLines);
         setPortalDeliveryTerm(selectedTarget.delivery_term || "");
@@ -2168,6 +2175,7 @@ export function PortalPage() {
       await handleSubmitPortalOrder("draft", {
         lines: nextLines,
         orderId: selectedTarget?.id || "",
+        expectedUpdatedAt: selectedTarget?.updated_at || "",
         salesOrderNo: selectedTarget?.sales_order_no || selectedTarget?.id || "",
         deliveryTerm: selectedTarget?.delivery_term || "",
         paymentTerms: selectedTarget?.payment_terms || activeSnapshot.pricingProfile?.payment_terms || "",
@@ -2311,6 +2319,7 @@ export function PortalPage() {
     overrides: {
       lines?: PortalPreparedLine[];
       orderId?: string;
+      expectedUpdatedAt?: string;
       salesOrderNo?: string;
       deliveryTerm?: string;
       paymentTerms?: string;
@@ -2371,6 +2380,7 @@ export function PortalPage() {
       if (expectedPrices === null) return;
       const result = await submitPortalOrder(credentials, {
         orderId: effectiveOrderId || undefined,
+        expectedUpdatedAt: overrides.expectedUpdatedAt ?? portalOrderVersion,
         salesOrderNo: effectiveSalesOrderNo || undefined,
         mode,
         ...(expectedPrices.length ? {expectedPrices} : {}),
@@ -2412,6 +2422,7 @@ export function PortalPage() {
           packing_details: effectivePackingDetails,
         }),
         id: savedId,
+        updated_at: result.order?.updated_at || compactOrder?.updated_at || "",
         lines: orderLines.map((line) => ({
               code: line.resolvedCode || line.requestedCode,
               requested_code: line.requestedCode,
@@ -2456,6 +2467,7 @@ export function PortalPage() {
       setPortalDraftLines(orderLines);
       settlePortalOrderMutation();
       setPortalOrderId(result.orderId || effectiveOrderId);
+      setPortalOrderVersion(result.order?.updated_at || compactOrder?.updated_at || "");
       setPortalSalesOrderNo(result.order?.sales_order_no || compactOrder?.sales_order_no || effectiveSalesOrderNo || result.orderId);
       setSelection({ kind: "sales-order", id: result.orderId });
       // Keep the newly saved draft visible in the same Sales Orders view as a confirmed order.
@@ -2481,6 +2493,7 @@ export function PortalPage() {
 
   function handleResumePortalDraft(row: PortalSalesOrderRow) {
     setPortalOrderId(row.id || "");
+    setPortalOrderVersion(row.updated_at || "");
     setPortalSalesOrderNo(row.sales_order_no || "");
     setPortalDraftLines(mapPortalSalesOrderToPreparedLines(row));
     setPortalDeliveryTerm(row.delivery_term || "");
@@ -2538,7 +2551,7 @@ export function PortalPage() {
         title: ui("Deleting Sales Order"),
         message: `Removing sales order ${row.sales_order_no || row.id} from your portal workspace.`,
       });
-      const result = await deletePortalDraftOrder(credentials, row.id);
+      const result = await deletePortalDraftOrder(credentials, row.id, row.updated_at || "");
       setSnapshot((current) => mergePortalSnapshotOrderDetails(current, result.snapshot));
       settlePortalOrderMutation();
       if (selection?.kind === "sales-order" && selection.id === row.id) {
@@ -2684,6 +2697,7 @@ export function PortalPage() {
       setPortalOverlay({ title: ui("Updating Sales Order"), message: "Saving the revised quantities and recalculating prices." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
+        expectedUpdatedAt: row.updated_at || "",
         salesOrderNo: row.sales_order_no || row.id,
         mode: "draft",
         deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
@@ -2752,6 +2766,7 @@ export function PortalPage() {
       setPortalOverlay({ title: ui("Adding Manual Part"), message: "Checking the item and refreshing the sales order total." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
+        expectedUpdatedAt: row.updated_at || "",
         salesOrderNo: row.sales_order_no || row.id,
         mode: "draft",
         deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
@@ -2782,7 +2797,7 @@ export function PortalPage() {
             };
       });
       const compactOrder = mutationSnapshot.salesOrders.find((order) => order.id === savedId) || result.order;
-      const optimisticOrder = { ...(compactOrder || row), id: savedId, lines: optimisticLines };
+      const optimisticOrder = { ...(compactOrder || row), id: savedId, updated_at: result.order?.updated_at || compactOrder?.updated_at || "", lines: optimisticLines };
       const nextSnapshot = mergePortalSnapshotOrderDetails(null, {
         ...mutationSnapshot,
         salesOrders: [optimisticOrder, ...mutationSnapshot.salesOrders.filter((order) => order.id !== savedId)],
@@ -2851,6 +2866,7 @@ export function PortalPage() {
       setPortalOverlay({ title: ui("Removing Order Line"), message: "Updating the sales order total." });
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
+        expectedUpdatedAt: row.updated_at || "",
         salesOrderNo: row.sales_order_no || row.id,
         mode: "draft",
         deliveryTerm: "delivery_term" in row ? String(row.delivery_term || "") : "",
@@ -2865,6 +2881,7 @@ export function PortalPage() {
       const optimisticOrder = {
         ...(compactOrder || row),
         id: savedId,
+        updated_at: result.order?.updated_at || compactOrder?.updated_at || "",
         lines: currentLines.filter((_, index) => index !== lineIndex),
       };
       setSnapshot(mergePortalSnapshotOrderDetails(snapshot, {
@@ -2921,6 +2938,7 @@ export function PortalPage() {
       if (expectedPrices === null) return;
       const result = await submitPortalOrder(credentials, {
         orderId: row.id,
+        expectedUpdatedAt: row.updated_at || "",
         salesOrderNo: row.sales_order_no || row.id,
         mode: "confirm",
         ...(expectedPrices.length ? {expectedPrices} : {}),
@@ -3493,7 +3511,7 @@ export function PortalPage() {
           if (!order) throw new Error('Saved draft could not be displayed. Reload the order list.');
           setPortalOrderDetailsById(current=>({...current,[order.id]:order}));
           setSnapshot(current=>current ? {...current,salesOrders:[order,...current.salesOrders.filter(item=>item.id!==order.id)]} : current);
-          setPortalOrderId(order.id);setPortalSalesOrderNo(order.sales_order_no || order.id);
+          setPortalOrderId(order.id);setPortalOrderVersion(order.updated_at || "");setPortalSalesOrderNo(order.sales_order_no || order.id);
           setSelection({kind:'sales-order',id:order.id});setActiveSection('orders');
           notifyPortal(`Sales order ${order.sales_order_no || order.id} saved automatically.`);
         }} />

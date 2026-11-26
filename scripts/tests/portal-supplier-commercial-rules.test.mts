@@ -11,15 +11,21 @@ const invite: PortalInviteRow = {
   access_can_view_payments: true, access_can_view_orders: true, allowed_brand_ids: [],
 };
 const source = "https://commercial-portal.example.invalid";
-async function fixture(check: (state: { terms: Record<string, unknown>; writes: string[]; expired: boolean; saved: Record<string, any> | null; loseResponse: boolean }) => Promise<void>) {
+async function fixture(check: (state: { terms: Record<string, unknown>; writes: string[]; expired: boolean; saved: Record<string, any> | null; loseResponse: boolean; patchUrls:string[] }) => Promise<void>) {
   const previous = globalThis.fetch;
-  const state = { terms: { moq: 5, order_multiple: 4, stock_qty: 0, valid_to: "2026-12-31" } as Record<string, unknown>, writes: [] as string[], expired: false, saved: null as Record<string, any> | null, loseResponse:false };
+  const state = { terms: { moq: 5, order_multiple: 4, stock_qty: 0, valid_to: "2026-12-31" } as Record<string, unknown>, writes: [] as string[], expired: false, saved: null as Record<string, any> | null, loseResponse:false, patchUrls:[] as string[] };
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     assert.equal(url.origin, source);
     if (init?.method && !["GET", "POST"].includes(init.method)) state.writes.push(url.pathname);
     if (url.pathname.endsWith("/sales_orders") && init?.method === "POST") state.writes.push(url.pathname);
     let data: unknown = [];
+    if (url.pathname.endsWith('/sales_orders') && init?.method === 'PATCH') {
+      state.patchUrls.push(url.toString());
+      // Simulate the admin committing after portal read, before conditional PATCH.
+      if (state.saved) state.saved={...state.saved,updated_at:'2026-11-26T10:00:01+00:00',notes:'admin update'};
+      return Response.json([]);
+    }
     if (url.pathname.endsWith('/sales_orders') && init?.method === 'POST') {
       if (state.saved) return Response.json({message:'duplicate'}, {status:409});
       state.saved=JSON.parse(String(init.body));
@@ -85,6 +91,18 @@ test('first save rejects a changed customer price before creating anything',asyn
   });
 });
 const row = (qty: number) => ({ code: "10131", brand: "Geba", qty });
+
+test('a concurrent admin save rejects the stale portal edit without overwriting it',async()=>{
+ await fixture(async state=>{
+  state.saved={id:'draft',organization_id:invite.organization_id,portal_invite_id:invite.id,status:'draft',portal_submitted_at:null,
+   sales_order_no:'SO-1',updated_at:'2026-11-26T10:00:00+00:00',notes:'old'};
+  const input={orderId:'draft',expectedUpdatedAt:'2026-11-26T10:00:00+00:00',mode:'draft' as const,rows:[row(8)]};
+  await assert.rejects(submitPortalSalesOrder(source,'test-key',invite,input),/changed since you opened/);
+  assert.equal(state.saved?.notes,'admin update');assert.equal(state.patchUrls.length,1);
+  const url=new URL(state.patchUrls[0]);assert.equal(url.searchParams.get('updated_at'),'eq.2026-11-26T10:00:00+00:00');
+  assert.equal(url.searchParams.get('portal_submitted_at'),'is.null');assert.equal(url.searchParams.get('status'),'eq.draft');
+ });
+});
 
 test('portal drafts price all 17 units from the eligible threshold and keep the requested quantity',async()=>{
  await fixture(async state=>{
