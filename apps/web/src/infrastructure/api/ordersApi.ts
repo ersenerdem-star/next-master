@@ -1143,7 +1143,7 @@ export async function fetchPaymentsReceivedByCustomerNames(names: string[]): Pro
 
 export async function upsertPaymentReceived(payment: LocalPaymentReceived, previousId?: string): Promise<LocalPaymentReceived> {
   const result = await callAppRpc<{ payment?: Record<string, unknown> }>("save_payment_received_atomic", {
-    payload: mapPaymentReceivedPayload(payment, ""),
+    payload: { ...mapPaymentReceivedPayload(payment, ""), ...(previousId ? { expected_updated_at: payment.updated_at || null } : {}) },
     previous_id: previousId || null,
   });
   if (!result?.payment) throw new Error("Payment received save failed");
@@ -1182,7 +1182,7 @@ export async function fetchPaymentsMadeBySupplierNames(names: string[]): Promise
 
 export async function upsertPaymentMade(payment: LocalPaymentMade, previousId?: string): Promise<LocalPaymentMade> {
   const result = await callAppRpc<{ payment?: Record<string, unknown> }>("save_payment_made_atomic", {
-    payload: mapPaymentMadePayload(payment, ""),
+    payload: { ...mapPaymentMadePayload(payment, ""), ...(previousId ? { expected_updated_at: payment.updated_at || null } : {}) },
     previous_id: previousId || null,
   });
   if (!result?.payment) throw new Error("Payment made save failed");

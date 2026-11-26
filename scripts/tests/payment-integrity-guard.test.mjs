@@ -86,3 +86,25 @@ test('another organization or a non-admin cannot overwrite a payment', async () 
     assert.equal(Number(foreign.rows[0].amount), 77);
   } finally { await db.close(); }
 });
+
+test('payment updates require an unchanged version and reject older clients', async () => {
+  const db = await fixture();
+  try {
+    await db.exec("grant insert, update, delete on public.payments_received, public.payments_made to authenticated");
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126140500_payment_version_guard.sql', import.meta.url), 'utf8'));
+    const privileges = await db.query("select has_table_privilege('authenticated','public.payments_received','UPDATE') r, has_table_privilege('authenticated','public.payments_made','DELETE') m");
+    assert.equal(privileges.rows[0].r, false); assert.equal(privileges.rows[0].m, false);
+    for (const [fn, table, field] of [['save_payment_received_atomic', 'payments_received', 'invoice_id'], ['save_payment_made_atomic', 'payments_made', 'bill_id']]) {
+      const original = (await db.query(`select updated_at::text as version from public.${table} where id='P'`)).rows[0].version;
+      const data = { id:'P', [field]:'B', amount:123, currency:'EUR', status:'confirmed' };
+      await assert.rejects(() => db.query(`select public.${fn}($1::jsonb,$2)`, [JSON.stringify(data),'P']), /PAYMENT_VERSION_REQUIRED/);
+      await assert.rejects(() => db.query(`select public.${fn}($1::jsonb,$2)`, [JSON.stringify({...data,expected_updated_at:'2020-01-01T00:00:00Z'}),'P']), /PAYMENT_VERSION_CONFLICT/);
+      const unchanged = (await db.query(`select amount,${field} from public.${table} where id='P'`)).rows[0];
+      assert.equal(Number(unchanged.amount),100); assert.equal(unchanged[field],'A');
+      await db.query(`select public.${fn}($1::jsonb,$2)`, [JSON.stringify({...data,expected_updated_at:original}),'P']);
+      const saved = (await db.query(`select amount,${field} from public.${table} where id='P'`)).rows[0];
+      assert.equal(Number(saved.amount),123); assert.equal(saved[field],'B');
+      await assert.rejects(() => db.query(`select public.${fn}($1::jsonb,$2)`, [JSON.stringify({...data,amount:999,expected_updated_at:original}),'P']), /PAYMENT_VERSION_CONFLICT/);
+    }
+  } finally { await db.close(); }
+});

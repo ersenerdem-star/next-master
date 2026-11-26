@@ -35,5 +35,31 @@ run_race() {
   [ "$count" = 1 ] || { echo "$label: expected one surviving payment, got $count" >&2; exit 1; }
   echo "PASS: $label concurrent duplicate rejected"
 }
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126140500_payment_version_guard.sql >/dev/null
 run_race receipt save_payment_received_atomic invoice_id payments_received
 run_race made save_payment_made_atomic bill_id payments_made
+
+run_update_race() {
+  label="$1" fn="$2" field="$3" table="$4"
+  id="UPDATE-$label"
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SELECT public.$fn('{\"id\":\"$id\",\"$field\":\"A\",\"amount\":100,\"currency\":\"EUR\"}'::jsonb,null)" >/dev/null
+  version="$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select updated_at::text from public.$table where id='$id'")"
+  first="SELECT public.$fn('{\"id\":\"$id\",\"$field\":\"A\",\"amount\":200,\"currency\":\"EUR\",\"expected_updated_at\":\"$version\"}'::jsonb,'$id')"
+  second="SELECT public.$fn('{\"id\":\"$id\",\"$field\":\"A\",\"amount\":300,\"currency\":\"EUR\",\"expected_updated_at\":\"$version\"}'::jsonb,'$id')"
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SET application_name='nm-version-first'; BEGIN; $first; SELECT pg_sleep(3); COMMIT;" >"$tmpdir/$label-version-first.log" 2>&1 &
+  first_pid=$!
+  ready=0
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ "$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select count(*) from pg_stat_activity where application_name='nm-version-first' and wait_event='PgSleep'")" = 1 ]; then ready=1; break; fi
+    sleep 0.1
+  done
+  [ "$ready" = 1 ] || { cat "$tmpdir/$label-version-first.log" >&2; exit 1; }
+  if docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "BEGIN; $second; COMMIT;" >"$tmpdir/$label-version-second.log" 2>&1; then echo "$label stale update accepted" >&2; exit 1; fi
+  wait "$first_pid"
+  grep -q PAYMENT_VERSION_CONFLICT "$tmpdir/$label-version-second.log" || { cat "$tmpdir/$label-version-second.log" >&2; exit 1; }
+  amount="$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select amount from public.$table where id='$id'")"
+  [ "$amount" = 200.00 ] || [ "$amount" = 200 ] || { echo "$label wrong resulting amount $amount" >&2; exit 1; }
+  echo "PASS: $label concurrent stale update rejected"
+}
+run_update_race receipt save_payment_received_atomic invoice_id payments_received
+run_update_race made save_payment_made_atomic bill_id payments_made

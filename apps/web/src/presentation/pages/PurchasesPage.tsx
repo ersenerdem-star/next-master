@@ -1494,7 +1494,6 @@ export function PurchasesPage({
     const payload: LocalPaymentMade = {
       ...paymentMadeDraft,
       amount: Number(paymentMadeDraft.amount || 0),
-      updated_at: new Date().toISOString(),
     };
     try {
       actionFeedback.begin(p("feedback.savingPayment", { id: payload.id }));

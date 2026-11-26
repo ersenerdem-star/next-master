@@ -645,7 +645,6 @@ export function SalesPage({
     const payload: LocalPaymentReceived = {
       ...paymentReceivedDraft,
       amount: Number(paymentReceivedDraft.amount || 0),
-      updated_at: new Date().toISOString(),
     };
     try {
       actionFeedback.begin(t("sales.payments.savingPayment", { paymentNo: payload.id }));
