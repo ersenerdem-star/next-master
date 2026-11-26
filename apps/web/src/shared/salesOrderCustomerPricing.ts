@@ -10,6 +10,12 @@ export type SalesOrderPricingContext = {
   pricingBlocked?: boolean;
 };
 
+// Customer changes intentionally do not change this token. Opening, replacing,
+// clearing or leaving an editor does; late responses must not cross editors.
+export function isSalesOrderWorkCurrent(startedGeneration: number, currentGeneration: number) {
+  return startedGeneration === currentGeneration;
+}
+
 // Only a new line or an explicitly marked pending line may be repriced.
 // Existing historical lines never acquire the marker simply by being opened.
 export function applySalesOrderCustomerPricing(lines: QuoteBuilderLine[], context: SalesOrderPricingContext): QuoteBuilderLine[] {
