@@ -49,3 +49,17 @@ if ! rg -q 'SALES_ORDER_ALREADY_INVOICED' "$second_log"; then
   cat "$second_log"
   exit 1
 fi
+# Old clients racing to invoice the same entire order are serialized too.
+docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "insert into public.sales_orders (id, organization_id, customer_id, customer_name, currency, status, lines) values ('old-race','11111111-1111-4111-8111-111111111111','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Customer A','EUR','confirmed','[{\"resolvedCode\":\"A\",\"brand\":\"B\",\"qty\":10,\"buy_price\":10,\"sell_price\":11}]')" >/dev/null
+docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "begin; set role authenticated; set app.test_org='11111111-1111-4111-8111-111111111111'; set app.test_role='admin'; select public.save_invoice_atomic('{\"id\":\"old-race-a\",\"sales_order_id\":\"old-race\",\"customer_name\":\"Customer A\",\"currency\":\"EUR\",\"lines\":[{\"product_code\":\"A\",\"brand\":\"B\",\"qty\":10,\"buy_price\":10,\"sell_price\":11}]}'); select pg_sleep(2); commit;" >"$first_log" 2>&1 &
+first_pid=$!
+sleep 0.5
+if docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "set role authenticated; set app.test_org='11111111-1111-4111-8111-111111111111'; set app.test_role='admin'; select public.save_invoice_atomic('{\"id\":\"old-race-b\",\"sales_order_id\":\"old-race\",\"customer_name\":\"Customer A\",\"currency\":\"EUR\",\"lines\":[{\"product_code\":\"A\",\"brand\":\"B\",\"qty\":10,\"buy_price\":10,\"sell_price\":11}]}');" >"$second_log" 2>&1; then
+  cat "$second_log"
+  exit 1
+fi
+wait "$first_pid"
+if ! rg -q 'SALES_ORDER_ALREADY_INVOICED' "$second_log"; then
+  cat "$second_log"
+  exit 1
+fi
