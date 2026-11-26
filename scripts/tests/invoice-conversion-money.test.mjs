@@ -36,3 +36,17 @@ test('purchase invoice conversion keeps unit precision matching its rounded line
   assert.equal(merged.lines[0].buy_price,1.005);
   assert.equal(merged.total_amount,6.04);
 });
+
+test('historic incomplete source prices cannot silently become zero in single or merged invoices', () => {
+  const noSell = order('no-sell', 10, 20, 1, 1);
+  noSell.lines[0].sell_price = null;
+  const noBuy = order('no-buy', 10, 20, 1, 1);
+  noBuy.lines[0].buy_price = null;
+  assert.throws(() => buildInvoiceFromSalesOrder(noSell), /INVOICE_SOURCE_PRICE_MISSING/);
+  assert.throws(() => buildInvoiceFromSalesOrder(noBuy), /INVOICE_SOURCE_PRICE_MISSING/);
+  assert.throws(() => buildMergedInvoiceFromSalesOrders([order('good'), noSell]), /INVOICE_SOURCE_PRICE_MISSING/);
+  const explicitZero = order('zero', 10, 20, 1, 1);
+  explicitZero.lines[0].buy_price = 0;
+  explicitZero.lines[0].sell_price = 0;
+  assert.equal(buildInvoiceFromSalesOrder(explicitZero).lines[0].sell_price, 0);
+});

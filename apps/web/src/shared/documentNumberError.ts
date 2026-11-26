@@ -7,6 +7,19 @@ export function documentNumberError(error: unknown, locale: string, fallback: st
   if (/\b(?:SALES|PURCHASE)_ORDER_(?:STALE_VERSION|VERSION_REQUIRED)\b/.test(message)) {
     return orderConcurrencyError(error, locale, fallback);
   }
+  if (message.includes("SALES_ORDER_ALREADY_INVOICED")) {
+    return locale === "tr"
+      ? "Bu sipariş için zaten fatura var. Fatura listesini kontrol edin; tekrar tam fatura oluşturulmadı."
+      : "An invoice already exists for this order. Check the invoice list; no duplicate full invoice was created.";
+  }
+  if (message.includes("INVOICE_SOURCE_PRICE_MISSING")) {
+    return locale === "tr"
+      ? "Fatura oluşturmadan önce siparişteki eksik alış ve satış fiyatlarını tamamlayın."
+      : "Complete the missing purchase and sales prices before creating the invoice.";
+  }
+  if (message.includes("SALES_ORDER_NOT_CONFIRMED")) {
+    return locale === "tr" ? "Yalnız onaylı siparişlerden fatura oluşturulabilir." : "Only confirmed orders can be invoiced.";
+  }
   if (message.includes("SALES_ORDER_NUMBER_ALREADY_USED")) {
     return locale === "tr"
       ? "Bu satış siparişi numarası zaten kullanılıyor. Lütfen başka bir sipariş numarası girin."

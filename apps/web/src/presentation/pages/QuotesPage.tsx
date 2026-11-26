@@ -15,7 +15,7 @@ import {
   fetchSalesOrderSummaries,
   markSalesOrderPortalSeen,
   confirmSalesOrderWithPurchases,
-  upsertInvoice,
+  createFullSalesInvoices,
   upsertSalesOrder,
 } from "../../infrastructure/api/ordersApi";
 import { batchResolveQuoteImportRows } from "../../infrastructure/api/quoteImportApi";
@@ -35,6 +35,7 @@ import { buildInvoiceFromSalesOrder, buildLocalSalesOrder } from "../../shared/l
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { documentNumberError } from "../../shared/documentNumberError";
 import { salesConfirmationError } from "../../shared/salesConfirmationError";
+import { hasMissingSalesPrice } from "../../shared/salesOrderPriceCompleteness";
 import { applySalesOrderCustomerPricing, isSalesOrderWorkCurrent, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
 import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
@@ -1484,6 +1485,7 @@ export function QuotesPage({
     [quoteBuilderLines],
   );
   const hasPendingSalesPrices = quoteBuilderLines.some((line) => line.customer_pricing_pending && !line.manual_sell_price);
+  const hasIncompleteSalesPrices = hasMissingSalesPrice(quoteBuilderLines);
   const productConflictLines = useMemo(
     () => quoteBuilderLines.filter((line) => line.has_product_conflict),
     [quoteBuilderLines],
@@ -3013,7 +3015,7 @@ export function QuotesPage({
   }
 
   async function handleExportQuoteXlsx() {
-    if (hasPendingSalesPrices) {
+    if (hasIncompleteSalesPrices) {
       actionFeedback.fail(locale === "tr" ? "Excel oluşturmadan önce bekleyen satış fiyatlarını tamamlayın." : "Complete pending sales prices before exporting.");
       return;
     }
@@ -3062,7 +3064,7 @@ export function QuotesPage({
   }
 
   function handlePrintDraftPdf() {
-    if (hasPendingSalesPrices) {
+    if (hasIncompleteSalesPrices) {
       actionFeedback.fail(locale === "tr" ? "PDF oluşturmadan önce bekleyen satış fiyatlarını tamamlayın." : "Complete pending sales prices before printing.");
       return;
     }
@@ -3305,13 +3307,18 @@ export function QuotesPage({
 
     try {
       actionFeedback.begin(t("sales.orders.convertingToInvoices", { count: invoiceReadyOrders.length.toLocaleString("en-US") }));
-      await Promise.all(invoiceReadyOrders.map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))));
-      await Promise.all(
+      await createFullSalesInvoices(invoiceReadyOrders.map((order) => buildInvoiceFromSalesOrder(order)));
+      const seen = await Promise.allSettled(
         invoiceReadyOrders
           .filter((order) => order.source_channel === "portal" && order.portal_submitted_at)
           .map((order) => markSalesOrderPortalSeen(order.id)),
       );
-      await refreshLocalSalesOrders();
+      let refreshFailed = false;
+      try { await refreshLocalSalesOrders(); } catch { refreshFailed = true; }
+      if (refreshFailed || seen.some((result) => result.status === "rejected")) {
+        actionFeedback.succeed(locale === "tr" ? "Faturalar oluşturuldu. Liste veya portal durumu yenilenemedi; tekrar fatura oluşturmadan önce sayfayı yenileyin." : "Invoices were created. Refresh the page before retrying; the list or portal state could not be refreshed.");
+        return;
+      }
       actionFeedback.succeed(
         t("sales.orders.invoicesCreated", {
           count: invoiceReadyOrders.length.toLocaleString("en-US"),
@@ -3577,13 +3584,16 @@ export function QuotesPage({
     try {
       setCreatingInvoice(true);
       actionFeedback.begin(t("sales.orders.creatingInvoiceFrom", { salesOrderNo: pendingConfirmedOrder.sales_order_no }));
-      const invoice = await upsertInvoice(buildInvoiceFromSalesOrder(pendingConfirmedOrder));
+      const [invoice] = await createFullSalesInvoices([buildInvoiceFromSalesOrder(pendingConfirmedOrder)]);
+      let refreshFailed = false;
       if (pendingConfirmedOrder.source_channel === "portal" && pendingConfirmedOrder.portal_submitted_at) {
-        await markSalesOrderPortalSeen(pendingConfirmedOrder.id);
+        try { await markSalesOrderPortalSeen(pendingConfirmedOrder.id); } catch { refreshFailed = true; }
       }
-      await refreshLocalSalesOrders(pendingConfirmedOrder.id);
+      try { await refreshLocalSalesOrders(pendingConfirmedOrder.id); } catch { refreshFailed = true; }
       setBuilderStatus(t("sales.orders.invoiceCreatedFromOrder", { salesOrderNo: pendingConfirmedOrder.sales_order_no, invoiceNo: invoice.id }));
-      actionFeedback.succeed(t("sales.orders.invoiceCreatedFromOrderToast", { salesOrderNo: pendingConfirmedOrder.sales_order_no, invoiceNo: invoice.id }));
+      actionFeedback.succeed(refreshFailed
+        ? locale === "tr" ? `Fatura ${invoice.id} oluşturuldu; liste yenilenemedi. Tekrar denemeden önce sayfayı yenileyin.` : `Invoice ${invoice.id} was created; refresh the page before retrying.`
+        : t("sales.orders.invoiceCreatedFromOrderToast", { salesOrderNo: pendingConfirmedOrder.sales_order_no, invoiceNo: invoice.id }));
       setInvoicePromptOpen(false);
       setPendingConfirmedOrder(null);
     } catch (caught) {
@@ -4201,9 +4211,10 @@ export function QuotesPage({
 
               <div className="quote-bottom-right">
                 <div className="quote-summary-card">
+                  {hasIncompleteSalesPrices ? <p role="status" className="info-text">{locale === "tr" ? "Satış fiyatı eksik olan satırlar var; toplam ve kâr hesaplanmadı." : "Some sales prices are missing; totals and profit are unavailable."}</p> : null}
                   <div className="quote-summary-row">
                     <span>{t("sales.orders.subTotal")}</span>
-                    <strong>{hasPendingSalesPrices ? "—" : formatMoney(draftTotals.subtotal, currency)}</strong>
+                    <strong>{hasIncompleteSalesPrices ? "—" : formatMoney(draftTotals.subtotal, currency)}</strong>
                   </div>
                   <div className="quote-summary-row">
                     <span>{t("sales.orders.discount")}</span>
@@ -4219,7 +4230,7 @@ export function QuotesPage({
                   </div>
                   <div className="quote-summary-row quote-summary-row--total">
                     <span>{t("sales.orders.totalAmount")}</span>
-                    <strong>{hasPendingSalesPrices ? "—" : formatMoney(draftTotals.totalAmount, currency)}</strong>
+                    <strong>{hasIncompleteSalesPrices ? "—" : formatMoney(draftTotals.totalAmount, currency)}</strong>
                   </div>
 
                   <div className="quote-summary-internal">
@@ -4229,11 +4240,11 @@ export function QuotesPage({
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.profit")}</span>
-                      <strong>{hasPendingSalesPrices ? "—" : formatMoney(draftTotals.profit, currency)}</strong>
+                      <strong>{hasIncompleteSalesPrices ? "—" : formatMoney(draftTotals.profit, currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.marginPercent")}</span>
-                      <strong>{hasPendingSalesPrices ? "—" : `${draftTotals.margin}%`}</strong>
+                      <strong>{hasIncompleteSalesPrices ? "—" : `${draftTotals.margin}%`}</strong>
                     </div>
                   </div>
                 </div>

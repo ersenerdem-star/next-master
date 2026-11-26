@@ -5,6 +5,7 @@ import { fetchCustomerForInvoicePriceRefresh, fetchCustomers, findCustomerByName
 import {
   deleteInvoice,
   deletePaymentReceived,
+  createFullSalesInvoices,
   fetchInvoiceById,
   fetchInvoiceSummaries,
   fetchPaymentsReceived,
@@ -685,8 +686,13 @@ export function SalesPage({
       const ordersToConvert = await Promise.all(
         salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
       );
-      const created = await Promise.all(ordersToConvert.map((order) => upsertInvoice(buildInvoiceFromSalesOrder(order))));
-      const refreshed = await fetchInvoiceSummaries();
+      const created = await createFullSalesInvoices(ordersToConvert.map((order) => buildInvoiceFromSalesOrder(order)));
+      let refreshed: LocalInvoice[];
+      try { refreshed = await fetchInvoiceSummaries(); } catch {
+        setSelectedSalesOrderIds([]);
+        actionFeedback.succeed(locale === "tr" ? "Faturalar oluşturuldu; liste yenilenemedi. Tekrar denemeden önce sayfayı yenileyin." : "Invoices were created; refresh the page before retrying.");
+        return;
+      }
       setInvoices(refreshed);
       setSelectedSalesOrderIds([]);
       if (created[0]) {
@@ -727,8 +733,13 @@ export function SalesPage({
 
     try {
       actionFeedback.begin(t("sales.invoices.merging", { count: selectedOrders.length.toLocaleString("en-US") }));
-      const merged = await upsertInvoice(buildMergedInvoiceFromSalesOrders(selectedOrders));
-      const refreshed = await fetchInvoiceSummaries();
+      const [merged] = await createFullSalesInvoices([buildMergedInvoiceFromSalesOrders(selectedOrders)]);
+      let refreshed: LocalInvoice[];
+      try { refreshed = await fetchInvoiceSummaries(); } catch {
+        setSelectedSalesOrderIds([]);
+        actionFeedback.succeed(locale === "tr" ? "Fatura oluşturuldu; liste yenilenemedi. Tekrar denemeden önce sayfayı yenileyin." : "Invoice was created; refresh the page before retrying.");
+        return;
+      }
       setInvoices(refreshed);
       setSelectedSalesOrderIds([]);
       setSelectedInvoiceId(merged.id);

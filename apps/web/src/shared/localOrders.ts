@@ -1,5 +1,6 @@
 import type { QuoteBuilderLine } from "../types/quoteBuilder";
 import { roundMoney, multiplyMoney, sumMoney, marginPercent as decimalMarginPercent, salesOrderTotals, requireUnitPrice, requireQuantity } from "../../../../shared/order-money.mjs";
+import { assertInvoiceSourcePrices } from "./salesOrderPriceCompleteness";
 import type { LocalBill, LocalBillLine, LocalInvoice, LocalInvoiceLine, LocalPurchaseOrder, LocalPurchaseOrderLine, LocalSalesOrder, PurchaseOrderVendorRecipient } from "../types/orders";
 
 const SALES_ORDERS_KEY = "master-next-sales-orders";
@@ -255,6 +256,7 @@ export function createInvoiceFromSalesOrder(order: LocalSalesOrder) {
 }
 
 export function buildInvoiceFromSalesOrder(order: LocalSalesOrder) {
+  assertInvoiceSourcePrices(order.lines);
   const lines: LocalInvoiceLine[] = order.lines.map((line) => {
     const purchaseTotal = multiplyMoney(line.buy_price ?? 0, line.qty);
     const salesTotal = multiplyMoney(line.sell_price ?? 0, line.qty);
@@ -327,6 +329,8 @@ export function buildMergedInvoiceFromSalesOrders(orders: LocalSalesOrder[]) {
   if (!orders.length) {
     throw new Error("At least one sales order is required");
   }
+
+  for (const order of orders) assertInvoiceSourcePrices(order.lines);
 
   const first = orders[0];
   const customerId = mergedPartyIdentity(orders, "customer_id", "customer_name");

@@ -1007,6 +1007,20 @@ export async function upsertInvoice(invoice: LocalInvoice, previousId?: string):
   return mapInvoiceRow(result.invoice);
 }
 
+// Full-order conversion is one transaction, including bulk requests. Manual
+// invoice edits continue to use upsertInvoice and retain their existing scope.
+export async function createFullSalesInvoices(invoices: LocalInvoice[]): Promise<LocalInvoice[]> {
+  if (!invoices.length) return [];
+  const resolved = await Promise.all(invoices.map((invoice) => resolveInvoiceWarehouseDefaults(recomputeInvoiceTotals(invoice))));
+  const result = await callAppRpc<{ invoices?: Record<string, unknown>[] }>("create_full_sales_invoices_atomic", {
+    input_payloads: resolved.map((invoice) => mapInvoicePayload(invoice, "")),
+  });
+  if (!Array.isArray(result?.invoices) || result.invoices.length !== invoices.length) {
+    throw new Error("Invoice creation result could not be verified. Refresh invoices before retrying.");
+  }
+  return result.invoices.map(mapInvoiceRow);
+}
+
 export async function deleteInvoice(invoiceId: string): Promise<void> {
   await callAppRpc("delete_invoice_guarded", { id: invoiceId });
 }
