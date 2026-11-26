@@ -859,6 +859,8 @@ export function QuotesPage({
   const salesOrderLoadGenerationRef = useRef(0);
   const importOperationRef = useRef(0);
   const resolveOperationRef = useRef(0);
+  const resyncOperationRef = useRef(0);
+  const handledSalesOrdersNavTickRef = useRef(0);
   const pendingSalesOrderLoadIdRef = useRef("");
   const failedSalesOrderLoadIdRef = useRef("");
   const loadedSalesOrderIdRef = useRef("");
@@ -900,12 +902,14 @@ export function QuotesPage({
   const [resolvingLine, setResolvingLine] = useState(false);
   const [importingLines, setImportingLines] = useState(false);
   function invalidateSalesOrderAsyncWork() {
-    if (importingLines || resolvingLine) actionFeedback.clear();
+    if (importingLines || resolvingLine || resyncingCatalog) actionFeedback.clear();
     salesOrderLoadGenerationRef.current++;
     importOperationRef.current++;
     resolveOperationRef.current++;
+    resyncOperationRef.current++;
     setImportingLines(false);
     setResolvingLine(false);
+    setResyncingCatalog(false);
     if (importRef.current) importRef.current.value = "";
     return salesOrderLoadGenerationRef.current;
   }
@@ -1044,6 +1048,7 @@ export function QuotesPage({
 
   useEffect(() => {
     if (!localSalesOrdersLoaded || !selectedLocalSalesOrderId) return;
+    if (resyncingCatalog) return;
     if (localSalesOrders.some((order) => order.id === selectedLocalSalesOrderId)) return;
 
     // A cached order can have been deleted or belong to another tenant. Do
@@ -1051,7 +1056,7 @@ export function QuotesPage({
     resetSalesOrderEditor();
     setSalesOrdersView("list");
     writeSalesOrderWorkspaceCache(null);
-  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId]);
+  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, resyncingCatalog]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1273,14 +1278,16 @@ export function QuotesPage({
   }, [externalSelectedQuoteId]);
 
   useEffect(() => {
+    if (resyncingCatalog) return;
     if (externalSelectedQuoteId) {
       if (selectedQuoteId !== externalSelectedQuoteId) invalidateSalesOrderAsyncWork();
       setSelectedQuoteId(externalSelectedQuoteId);
       setSalesOrdersView("detail");
     }
-  }, [externalSelectedQuoteId]);
+  }, [externalSelectedQuoteId, resyncingCatalog]);
 
   useEffect(() => {
+    if (resyncingCatalog) return;
     if (!externalSelectedSalesOrderId) {
       failedSalesOrderLoadIdRef.current = "";
       return;
@@ -1303,7 +1310,7 @@ export function QuotesPage({
     }
     setSalesOrdersView("detail");
     void loadLocalSalesOrderIntoEditor(target);
-  }, [externalSelectedSalesOrderId, localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView]);
+  }, [externalSelectedSalesOrderId, localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView, resyncingCatalog]);
 
   useEffect(() => {
     const id = cachedSalesOrderRestoreRef.current;
@@ -1920,18 +1927,23 @@ export function QuotesPage({
   }
 
   useEffect(() => {
-    if (!salesOrdersNavTick) return;
+    if (!salesOrdersNavTick || handledSalesOrdersNavTickRef.current === salesOrdersNavTick) return;
+    if (resyncingCatalog) return;
     if (externalSelectedSalesOrderId || externalSelectedQuoteId) return;
+    handledSalesOrdersNavTickRef.current = salesOrdersNavTick;
     invalidateSalesOrderAsyncWork();
     setSalesOrdersView("list");
     setPdfView(false);
-  }, [salesOrdersNavTick, externalSelectedSalesOrderId, externalSelectedQuoteId]);
+  }, [salesOrdersNavTick, externalSelectedSalesOrderId, externalSelectedQuoteId, resyncingCatalog]);
 
   async function handleResyncFromCatalog() {
     if (!quoteBuilderLines.length) {
       actionFeedback.fail(t("sales.orders.noLinesToResync"));
       return;
     }
+    const workspaceGeneration = salesOrderLoadGenerationRef.current;
+    const operation = ++resyncOperationRef.current;
+    const isCurrent = () => operation === resyncOperationRef.current && isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current);
     try {
       if (customerPricingIssue) throw new Error(customerPricingIssue);
       if (!hasCustomerPricingProfile && workbenchMode === "existing" && quoteBuilderLines.some((line) => line.customer_pricing_pending)) {
@@ -1950,6 +1962,7 @@ export function QuotesPage({
         hydrateMissingPricesIfKeepingPrices: true,
         calculateSellPrice: workbenchMode !== "new" || hasCustomerPricingProfile,
       });
+      if (!isCurrent()) return;
       if (selectedLocalSalesOrderId) {
         const order = buildLocalSalesOrder({
           id: selectedLocalSalesOrderId,
@@ -1978,6 +1991,7 @@ export function QuotesPage({
           lines: syncedLines,
         });
         const saved = await upsertSalesOrder(order);
+        if (!isCurrent()) return;
         setQuoteBuilderLines(syncedLines);
         setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
         await refreshLocalSalesOrders(saved.id);
@@ -2004,9 +2018,10 @@ export function QuotesPage({
       if (summary.failed) actionFeedback.fail(message);
       else actionFeedback.succeed(message);
     } catch (caught) {
+      if (!isCurrent()) return;
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
     } finally {
-      setResyncingCatalog(false);
+      if (operation === resyncOperationRef.current) setResyncingCatalog(false);
     }
   }
 
@@ -2290,6 +2305,10 @@ export function QuotesPage({
   }
 
   async function confirmSalesOrderNavigation(nextAction: () => void | Promise<void>) {
+    if (resyncingCatalog) {
+      actionFeedback.fail(locale === "tr" ? "Katalog eşitlemesi tamamlanınca başka siparişe geçin." : "Wait for catalog synchronization before changing orders.");
+      return;
+    }
     if (openingSalesOrderId) {
       invalidateSalesOrderAsyncWork();
       failedSalesOrderLoadIdRef.current = openingSalesOrderId;
@@ -3047,6 +3066,10 @@ export function QuotesPage({
   }
 
   function clearDraft() {
+    if (resyncingCatalog) {
+      actionFeedback.fail(locale === "tr" ? "Katalog eşitlemesi tamamlanınca taslağı temizleyin." : "Wait for catalog synchronization before clearing the draft.");
+      return;
+    }
     if (!quoteBuilderLines.length && !customerName && !quoteNo && !quoteNotes) {
       actionFeedback.fail(t("sales.orders.draftAlreadyEmpty"));
       return;
