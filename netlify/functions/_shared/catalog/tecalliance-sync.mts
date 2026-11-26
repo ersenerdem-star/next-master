@@ -780,7 +780,7 @@ export function mapMonroeCatalogArticle(article: TecAllianceApiArticle, productC
   };
 }
 
-export async function fetchMonroeCatalogFields(productCode: string, { fitment = false, vehicle = true } = {}) {
+export async function fetchMonroeCatalogFields(productCode: string, { fitment = false, vehicle = true, vehiclesCache = new Map() } = {}) {
   const result = await requestTecAllianceArticles({
     searchQuery: productCode, page: 1, perPage: 10, requestTimeoutMs: 12000, searchMatchType: 'exact',
   }, { providerLabel: 'Monroe', providerId: 2143, dataSupplierId: 37, manufacturerNames: ['MONROE'] });
@@ -803,15 +803,16 @@ export async function fetchMonroeCatalogFields(productCode: string, { fitment = 
   let fitmentEvidence: Record<string, unknown> = {status:'not_requested'};
   if (vehicle) {
     let requests = 0;
+    const started = Date.now();
     const call = async (method: string, values: Record<string, unknown>) => {
-      if (++requests > 24) throw Error('FITMENT_REQUEST_BOUND');
+      if (++requests > 84 || Date.now()-started > 150000) throw Error('FITMENT_REQUEST_BOUND');
       await new Promise(resolve => setTimeout(resolve,1100));
       const response = await fetchTecAllianceJson<Record<string, unknown>>(TECALLIANCE_API_URL,
         {[method]:{provider:2143,articleCountry:'GB',lang:'en',...values}},12000);
       return {response};
     };
     try {
-      const detail = await collectCompleteVehicles(article, {call,manufacturer:'MONROE',supplierId:37,maxTargets:600});
+      const detail = await collectCompleteVehicles(article, {call,manufacturer:'MONROE',supplierId:37,maxTargets:2000,vehiclesCache});
       const printable = (value: string) => value.length <= 12000 ? value || null : null;
       fields.vehicle = printable([...new Set(detail.vehicles.map((row: any) => row.manuDesc))].sort().join('; '));
       fields.vehicle_model = printable([...new Set(detail.vehicles.map((row: any) => row.manuDesc+' '+row.modelDesc))].sort().join('; '));

@@ -25,6 +25,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
  const monroeFitment=monroe&&job.manifest.monroe_policy==='monroe-fitment-fill.v1';
+ const monroeVehicles=new Map();
  const monroeImageOnly=monroe&&job.manifest.monroe_policy==='monroe-image-fill.v1';
  const knorrAutomatic=def.family==='knorr_bremse'&&job.manifest.automatic_application?.policy==='knorr-official-missing-only.v1'&&Boolean(job.manifest.discovery_job);
  const automatic=def.authority==='distributor'&&job.manifest.automatic_application?.policy==='wilmink-missing-only.v1'&&Boolean(job.manifest.discovery_job);
@@ -55,7 +56,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  if(rows.length!==1&&!missingKnorr){const reason='CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS';observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:{},fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:reason}),observedAt:new Date().toISOString(),unavailable:reason};}else{
  await new Promise(r=>setTimeout(r,delayMs));
  try{const raw=monroeFitment
-  ?await provider.fetch(item.product_code,{fitment:true,vehicle:!rows[0].vehicle?.trim()||!rows[0].vehicle_model?.trim()})
+  ?await provider.fetch(item.product_code,{fitment:true,vehiclesCache:monroeVehicles,vehicle:!rows[0].vehicle?.trim()||!rows[0].vehicle_model?.trim()})
   :await provider.fetch(item.product_code),safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const before=rows[0]||{};
  const plan=planSupplierCatalogEnrichment({existing:before,incoming:safe.fields,phase:'official'});
