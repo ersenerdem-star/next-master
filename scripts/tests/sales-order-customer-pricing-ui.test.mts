@@ -102,6 +102,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   const summaryQueue: Deferred[] = [];
   const importRequest = deferred();
   const resyncRequest = deferred();
+  const resolveRequest = deferred(); let holdLineLookup=false;
   const quoteListRequest = deferred(), quoteDetailRequest = deferred();
   const firstDetail = holdDetail ? deferred() : null;
   const calls: Array<{ name: string; args: any[] }> = [];
@@ -139,6 +140,8 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       if (name === 'fetchCloudBrands') return Promise.resolve([{id:'brand',name:'Synthetic'}]);
       if (name === 'batchResolveQuoteImportRows') return importRequest.promise;
       if (name === 'resyncSalesOrderWithCodeReferenceFallback') return resyncRequest.promise;
+      if (name === 'findCodeReferenceMatch') return Promise.resolve(null);
+      if (name === 'resolveQuoteLine') return holdLineLookup ? resolveRequest.promise : Promise.reject(Error('Synthetic enrichment unavailable'));
       if (name === 'fetchCloudQuotes') return holdQuotes ? quoteListRequest.promise : Promise.resolve([]);
       if (name === 'fetchCloudQuoteDetail') return holdQuoteDetail ? quoteDetailRequest.promise : Promise.reject(Error('unexpected quote detail'));
       if (['fetchPurchaseOrderSalesLinkSummaries', 'fetchInvoiceSalesLinkSummaries', 'fetchSalesOrderBrandSummaries', 'fetchInventoryAvailabilitySummary', 'fetchPriceListSettings'].includes(name)) return Promise.resolve([]);
@@ -149,7 +152,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   await act(async () => { renderer = create(createElement(QuotesPage, { appRole: 'superadmin', selectedSalesOrderId, selectedQuoteId })); });
   let unmounted = false;
   return {
-    renderer, calls, saved, feedbackEvents, confirms, prompts, firstDetail, importRequest, resyncRequest, quoteListRequest, quoteDetailRequest,
+    renderer, calls, saved, feedbackEvents, confirms, prompts, firstDetail, importRequest, resyncRequest, resolveRequest, quoteListRequest, quoteDetailRequest,
     text: () => content(renderer.root),
     buttons: (label: string) => renderer.root.findAllByType('button').filter(button => content(button) === label),
     lineRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.wrapClassName === 'sales-lines-table').flatMap(node => node.props.rows),
@@ -183,6 +186,12 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       const input=renderer.root.findAllByType('input').find(node=>node.props.type==='file' && String(node.props.accept||'').includes('.csv'));
       assert.ok(input,'import file input missing');
       await act(async()=>{input.props.onChange({target:{files:[{name:'parts.csv',text:async()=> 'part_no,brand,qty\n0012,Synthetic,3'}]}});});
+    },
+    async fillNewLine() {
+      holdLineLookup=true;
+      const input=renderer.root.findAll(node=>typeof node.type==='function'&&node.type.name==='Input'&&node.props.placeholder==='sales.orders.partNoOrName')[0];
+      const brand=renderer.root.findAll(node=>typeof node.type==='function'&&node.type.name==='Select'&&node.props.label===''&&node.props.options.some((option:any)=>option.value==='Synthetic'))[0];
+      assert.ok(input && brand,'new line controls missing'); await act(async()=>{input.props.onChange('0012');brand.props.onChange('Synthetic');});
     },
     async resolve(request: Deferred, value: any) { await act(async () => { request.resolve(value); }); },
     async reject(request: Deferred) { await act(async () => { request.reject(Error('Synthetic list refresh failed')); }); },
@@ -316,7 +325,7 @@ test('navigation save refuses a partial order while an import is in flight and r
     view.setConfirmResponse(true); await view.click('sales.orders.exit');
     assert.equal(view.saved.length,0,'navigation-save must not persist incomplete order');
     assert.equal(view.confirms.length,1);
-    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail' && /import to finish/i.test(e.text)), 'failure should explain that import is pending');
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail' && /operation before saving/i.test(e.text)), 'failure should explain that import is pending');
     assert.equal(view.lineRows().length,1,'the editor must remain open');
     await view.resolve(view.importRequest,[{...unpricedLine(),lineId:'line-new',requestedCode:'NEW',resolvedCode:'NEW',sell_price:null}]);
     assert.equal(view.lineRows().length,2,'finishing the import returns the editor to a usable state');
@@ -401,5 +410,55 @@ test('a selected cloud quote still opens normally when no catalog sync is runnin
     assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].resolvedCode,'CODE');
     assert.equal(view.lineRows()[0].sell_price,13);
   } finally {await view.close()}
+});
+
+test('catalog sync waits for a pending import instead of synchronizing only partial lines',async()=>{
+  const view=await fixture({cache:customerlessCache([unpricedLine()])});
+  try {
+    await view.startImport(); assert.ok(view.calls.some(c=>c.name==='batchResolveQuoteImportRows'));
+    const syncButton=view.buttons('sales.orders.resyncFromCatalog')[0];
+    assert.equal(syncButton.props.disabled,true,'sync button must be disabled during import');
+    await act(async()=>syncButton.props.onClick()); // Simulate a same-turn event queued before disabled state rendered.
+    assert.equal(view.calls.filter(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback').length,0);
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail'&&/line loading/i.test(e.text)));
+    await view.resolve(view.importRequest,[{...unpricedLine(),lineId:'new',sell_price:null}]);
+    assert.equal(view.lineRows().length,2);
+  } finally {await view.close()}
+});
+
+test('an import request cannot start during an in-flight catalog sync',async()=>{
+  const view=await fixture({cache:customerlessCache([unpricedLine()])});
+  try {
+    await view.click('sales.orders.resyncFromCatalog');
+    assert.ok(view.calls.some(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback'));
+    assert.equal(view.buttons('Import CSV')[0].props.disabled,true,'import button must be disabled during sync');
+    await view.startImport(); // Simulate a file dialog result already in flight.
+    assert.equal(view.calls.filter(c=>c.name==='batchResolveQuoteImportRows').length,0);
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail'&&/operation before importing/i.test(e.text)));
+    await view.resolve(view.resyncRequest,{lines:[unpricedLine()],preservedOtherPrices:false});
+    assert.equal(view.lineRows().length,1);
+  } finally {await view.close()}
+});
+
+test('a pending single-item lookup and catalog sync cannot overlap in either direction',async()=>{
+  const first=await fixture({cache:customerlessCache([unpricedLine()])});
+  try {
+    await first.fillNewLine(); await first.click('sales.orders.addNewRow');
+    assert.ok(first.calls.some(c=>c.name==='resolveQuoteLine'));
+    const button=first.buttons('sales.orders.resyncFromCatalog')[0]; assert.equal(button.props.disabled,true);
+    await act(async()=>button.props.onClick());
+    assert.equal(first.calls.filter(c=>c.name==='resyncSalesOrderWithCodeReferenceFallback').length,0);
+    assert.ok(first.feedbackEvents.some(e=>e.kind==='fail'&&/line loading/i.test(e.text)));
+    await first.resolve(first.resolveRequest,{resolved:{found:true,product_code:'0012',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+  } finally {await first.close()}
+  const second=await fixture({cache:customerlessCache([unpricedLine()])});
+  try {
+    await second.fillNewLine(); await second.click('sales.orders.resyncFromCatalog');
+    const button=second.buttons('sales.orders.addNewRow')[0]; assert.equal(button.props.disabled,true);
+    await act(async()=>button.props.onClick());
+    assert.equal(second.calls.filter(c=>c.name==='resolveQuoteLine').length,0);
+    assert.ok(second.feedbackEvents.some(e=>e.kind==='fail'&&/operation before adding/i.test(e.text)));
+    await second.resolve(second.resyncRequest,{lines:[unpricedLine()],preservedOtherPrices:false});
+  } finally {await second.close()}
 });
 
