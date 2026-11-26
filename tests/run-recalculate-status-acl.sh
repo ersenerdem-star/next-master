@@ -21,13 +21,13 @@ grant select on invoices,bills,payments_received,payments_made to authenticated;
 SQL
 psqlrun < supabase/migrations/20260707_94_payment_atomic_status_boundary.sql >/dev/null
 sed -n '/^create or replace function public.save_invoice_atomic(/,/^create or replace function public.save_bill_atomic(/p' supabase/migrations/20260707_95_invoice_bill_guarded_boundary.sql | sed '$d' | psqlrun >/dev/null
-psqlrun < supabase/migrations/20261126134915_invoice_edit_versions.sql >/dev/null
+psqlrun < supabase/migrations/20261126135640_invoice_edit_versions.sql >/dev/null
 sed -n '/^create or replace function public.save_bill_atomic(/,/^grant execute on function public.save_invoice_atomic/p' supabase/migrations/20260707_95_invoice_bill_guarded_boundary.sql | sed '$d' | psqlrun >/dev/null
-psqlrun < supabase/migrations/20261126133711_payment_integrity_guard.sql >/dev/null
-psqlrun < supabase/migrations/20261126140500_payment_version_guard.sql >/dev/null
-psqlrun < supabase/migrations/20261126141700_payment_delete_version_guard.sql >/dev/null
-psqlrun < supabase/migrations/20261126143500_bill_version_guard.sql >/dev/null
-psqlrun < supabase/migrations/20261126144500_recalculate_status_acl.sql >/dev/null
+psqlrun < supabase/migrations/20261126135649_payment_integrity_guard.sql >/dev/null
+psqlrun < supabase/migrations/20261126135654_payment_version_guard.sql >/dev/null
+psqlrun < supabase/migrations/20261126135658_payment_delete_version_guard.sql >/dev/null
+psqlrun < supabase/migrations/20261126135703_bill_version_guard.sql >/dev/null
+psqlrun < supabase/migrations/20261126135707_recalculate_status_acl.sql >/dev/null
 psqlrun <<'SQL' >/dev/null
 DO $$ BEGIN
  if has_function_privilege('authenticated','public.recalculate_invoice_paid_status_for_org(uuid,text)','execute') or has_function_privilege('authenticated','public.recalculate_bill_paid_status_for_org(uuid,text)','execute') or has_function_privilege('anon','public.recalculate_bill_paid_status_for_org(uuid,text)','execute') then raise exception 'untrusted helper access'; end if;

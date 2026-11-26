@@ -13,7 +13,7 @@ done
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/sql/payment_integrity_setup.sql >/dev/null
 sed -n '/^create or replace function public.save_payment_received_atomic(/,/^create or replace function public.delete_payment_received_guarded(/p' supabase/migrations/20260707_94_payment_atomic_status_boundary.sql | sed '$d' | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null
 sed -n '/^create or replace function public.delete_payment_received_guarded(/,/^grant execute on function public.save_payment_received_atomic/p' supabase/migrations/20260707_94_payment_atomic_status_boundary.sql | sed '$d' | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126133711_payment_integrity_guard.sql >/dev/null
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126135649_payment_integrity_guard.sql >/dev/null
 
 run_race() {
   label="$1" fn="$2" field="$3" table="$4"
@@ -36,8 +36,8 @@ run_race() {
   [ "$count" = 1 ] || { echo "$label: expected one surviving payment, got $count" >&2; exit 1; }
   echo "PASS: $label concurrent duplicate rejected"
 }
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126140500_payment_version_guard.sql >/dev/null
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126141700_payment_delete_version_guard.sql >/dev/null
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126135654_payment_version_guard.sql >/dev/null
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126135658_payment_delete_version_guard.sql >/dev/null
 run_race receipt save_payment_received_atomic invoice_id payments_received
 run_race made save_payment_made_atomic bill_id payments_made
 

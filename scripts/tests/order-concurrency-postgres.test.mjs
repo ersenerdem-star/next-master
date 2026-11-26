@@ -33,7 +33,7 @@ test('saved sales and purchase orders reject stale and legacy writers under conc
       on conflict(organization_id,id) do update set lines=excluded.lines,updated_at=clock_timestamp() returning * into v;
       return jsonb_build_object('purchase_order',to_jsonb(v)); end $$;`;
     await pool.query(setup);
-    const migration = readFileSync(new URL('../../supabase/migrations/20261126133844_optimistic_order_versions.sql', import.meta.url), 'utf8');
+    const migration = readFileSync(new URL('../../supabase/migrations/20261126135620_optimistic_order_versions.sql', import.meta.url), 'utf8');
     await pool.query(migration);
     for (const kind of ['sales', 'purchase']) {
       const rpc = `public.save_${kind}_order_atomic`;

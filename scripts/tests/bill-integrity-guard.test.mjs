@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 const setup = readFileSync(new URL('../../tests/sql/bill_integrity_setup.sql', import.meta.url), 'utf8');
 const initial = readFileSync(new URL('../../supabase/migrations/20260707_95_invoice_bill_guarded_boundary.sql', import.meta.url), 'utf8');
-const migration = readFileSync(new URL('../../supabase/migrations/20261126143500_bill_version_guard.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../../supabase/migrations/20261126135703_bill_version_guard.sql', import.meta.url), 'utf8');
 async function fixture() {
   const db = new PGlite(); await db.exec(setup);
   const start=initial.indexOf('create or replace function public.save_bill_atomic(');

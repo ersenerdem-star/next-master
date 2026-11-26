@@ -28,7 +28,7 @@ docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_ST
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
   < "$repo_root/supabase/migrations/20261126125226_document_number_guard.sql"
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
-  < "$repo_root/supabase/migrations/20261126133750_invoice_full_conversion_guard.sql"
+  < "$repo_root/supabase/migrations/20261126135635_invoice_full_conversion_guard.sql"
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
   < "$repo_root/scripts/tests/invoice-full-conversion-pg.assert.sql"
 # Exercise two separate database sessions, with the first holding its transaction
@@ -64,7 +64,7 @@ if ! rg -q 'SALES_ORDER_ALREADY_INVOICED' "$second_log"; then
   exit 1
 fi
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
-  < "$repo_root/supabase/migrations/20261126134915_invoice_edit_versions.sql"
+  < "$repo_root/supabase/migrations/20261126135640_invoice_edit_versions.sql"
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
   < "$repo_root/scripts/tests/invoice-edit-version-pg.assert.sql"
 # Competing invoice edits opened at the same version must not overwrite.
@@ -88,6 +88,6 @@ fi
 # Fixture simulates the permissive live grants before the restriction.
 docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "grant truncate, trigger on public.invoices to authenticated" >/dev/null
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
-  < "$repo_root/supabase/migrations/20261126135133_invoice_direct_write_restriction.sql"
+  < "$repo_root/supabase/migrations/20261126135644_invoice_direct_write_restriction.sql"
 docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
   < "$repo_root/scripts/tests/invoice-direct-write-pg.assert.sql"

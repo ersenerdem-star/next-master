@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 
 const initial = readFileSync(new URL('../../supabase/migrations/20260707_94_payment_atomic_status_boundary.sql', import.meta.url), 'utf8');
-const migration = readFileSync(new URL('../../supabase/migrations/20261126133711_payment_integrity_guard.sql', import.meta.url), 'utf8');
+const migration = readFileSync(new URL('../../supabase/migrations/20261126135649_payment_integrity_guard.sql', import.meta.url), 'utf8');
 
 async function fixture() {
   const db = new PGlite();
@@ -91,7 +91,7 @@ test('payment updates require an unchanged version and reject older clients', as
   const db = await fixture();
   try {
     await db.exec("grant insert, update, delete on public.payments_received, public.payments_made to authenticated");
-    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126140500_payment_version_guard.sql', import.meta.url), 'utf8'));
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126135654_payment_version_guard.sql', import.meta.url), 'utf8'));
     const privileges = await db.query("select has_table_privilege('authenticated','public.payments_received','UPDATE') r, has_table_privilege('authenticated','public.payments_made','DELETE') m");
     assert.equal(privileges.rows[0].r, false); assert.equal(privileges.rows[0].m, false);
     for (const [fn, table, field] of [['save_payment_received_atomic', 'payments_received', 'invoice_id'], ['save_payment_made_atomic', 'payments_made', 'bill_id']]) {
@@ -115,8 +115,8 @@ test('deleting payments requires the current version and recalculates the docume
     const start = initial.indexOf('create or replace function public.delete_payment_received_guarded(');
     const end = initial.indexOf('grant execute on function public.save_payment_received_atomic', start);
     await db.exec(initial.slice(start, end));
-    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126140500_payment_version_guard.sql', import.meta.url), 'utf8'));
-    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126141700_payment_delete_version_guard.sql', import.meta.url), 'utf8'));
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126135654_payment_version_guard.sql', import.meta.url), 'utf8'));
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126135658_payment_delete_version_guard.sql', import.meta.url), 'utf8'));
     for (const [fn, table, kind] of [['delete_payment_received_guarded','payments_received','invoice'],['delete_payment_made_guarded','payments_made','bill']]) {
       const version=(await db.query(`select updated_at::text as version from public.${table} where id='P'`)).rows[0].version;
       await assert.rejects(()=>db.query(`select public.${fn}($1)`,['P']), /PAYMENT_VERSION_REQUIRED/);
