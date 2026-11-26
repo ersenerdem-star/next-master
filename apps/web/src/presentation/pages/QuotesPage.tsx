@@ -899,6 +899,15 @@ export function QuotesPage({
   const [builderStatus, setBuilderStatus] = useState(initialWorkspaceCache?.builderStatus || "");
   const [resolvingLine, setResolvingLine] = useState(false);
   const [importingLines, setImportingLines] = useState(false);
+  function invalidateSalesOrderAsyncWork() {
+    salesOrderLoadGenerationRef.current++;
+    importOperationRef.current++;
+    resolveOperationRef.current++;
+    setImportingLines(false);
+    setResolvingLine(false);
+    if (importRef.current) importRef.current.value = "";
+    return salesOrderLoadGenerationRef.current;
+  }
   const [exportingXlsx, setExportingXlsx] = useState(false);
   const [exportingPurchaseAnalysis, setExportingPurchaseAnalysis] = useState(false);
   const [printingDraft, setPrintingDraft] = useState(false);
@@ -1264,7 +1273,7 @@ export function QuotesPage({
 
   useEffect(() => {
     if (externalSelectedQuoteId) {
-      if (selectedQuoteId !== externalSelectedQuoteId) salesOrderLoadGenerationRef.current++;
+      if (selectedQuoteId !== externalSelectedQuoteId) invalidateSalesOrderAsyncWork();
       setSelectedQuoteId(externalSelectedQuoteId);
       setSalesOrdersView("detail");
     }
@@ -1812,7 +1821,7 @@ export function QuotesPage({
   }
 
   async function loadLocalSalesOrderIntoEditor(order: LocalSalesOrder) {
-    const generation = ++salesOrderLoadGenerationRef.current;
+    const generation = invalidateSalesOrderAsyncWork();
     pendingSalesOrderLoadIdRef.current = order.id;
     failedSalesOrderLoadIdRef.current = "";
     setOpeningSalesOrderId(order.id);
@@ -1912,7 +1921,7 @@ export function QuotesPage({
   useEffect(() => {
     if (!salesOrdersNavTick) return;
     if (externalSelectedSalesOrderId || externalSelectedQuoteId) return;
-    salesOrderLoadGenerationRef.current++;
+    invalidateSalesOrderAsyncWork();
     setSalesOrdersView("list");
     setPdfView(false);
   }, [salesOrdersNavTick, externalSelectedSalesOrderId, externalSelectedQuoteId]);
@@ -2213,6 +2222,9 @@ export function QuotesPage({
   }
 
   async function persistSalesOrderDraft() {
+    if (importingLines || resolvingLine) {
+      throw new Error(locale === "tr" ? "Devam eden satır yüklemesi tamamlanınca kaydedin." : "Wait for the line import to finish before saving.");
+    }
     assertWahlerQuantityPricesReady();
     if (customerPricingIssue) throw new Error(customerPricingIssue);
     if (!quoteBuilderLines.length) {
@@ -2278,7 +2290,7 @@ export function QuotesPage({
 
   async function confirmSalesOrderNavigation(nextAction: () => void | Promise<void>) {
     if (openingSalesOrderId) {
-      salesOrderLoadGenerationRef.current++;
+      invalidateSalesOrderAsyncWork();
       failedSalesOrderLoadIdRef.current = openingSalesOrderId;
       pendingSalesOrderLoadIdRef.current = "";
       cachedSalesOrderRestoreRef.current = "";
@@ -3038,7 +3050,7 @@ export function QuotesPage({
       actionFeedback.fail(t("sales.orders.draftAlreadyEmpty"));
       return;
     }
-    salesOrderLoadGenerationRef.current++;
+    invalidateSalesOrderAsyncWork();
     setQuoteBuilderLines([]);
     setCustomerName("");
     setCustomerSelection("");
@@ -3066,7 +3078,7 @@ export function QuotesPage({
   }
 
   function resetSalesOrderEditor() {
-    salesOrderLoadGenerationRef.current++;
+    invalidateSalesOrderAsyncWork();
     loadedSalesOrderIdRef.current = "";
     pendingSalesOrderLoadIdRef.current = "";
     cachedSalesOrderRestoreRef.current = "";
@@ -3110,7 +3122,7 @@ export function QuotesPage({
 
   function closeSalesOrderEditor() {
     void confirmSalesOrderNavigation(async () => {
-      salesOrderLoadGenerationRef.current++;
+      invalidateSalesOrderAsyncWork();
       onSelectedSalesOrderChange?.("");
       setSalesOrdersView("list");
       setPdfView(false);
