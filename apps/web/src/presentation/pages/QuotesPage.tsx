@@ -1110,6 +1110,7 @@ export function QuotesPage({
 
   useEffect(() => {
     if (pendingCatalogSalesHandledRef.current) return;
+    if (resyncingCatalog) return;
     // Wait until the saved-order list is available so a catalog handoff can
     // offer every existing draft instead of silently creating a new one.
     if (!localSalesOrdersLoaded) return;
@@ -1196,7 +1197,7 @@ export function QuotesPage({
     return () => {
       cancelled = true;
     };
-  }, [actionFeedback, companyProfiles, localSalesOrders, localSalesOrdersLoaded, onSelectedSalesOrderChange, quoteBuilderLines.length]);
+  }, [actionFeedback, companyProfiles, localSalesOrders, localSalesOrdersLoaded, onSelectedSalesOrderChange, quoteBuilderLines.length, resyncingCatalog]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1313,6 +1314,7 @@ export function QuotesPage({
   }, [externalSelectedSalesOrderId, localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView, resyncingCatalog]);
 
   useEffect(() => {
+    if (resyncingCatalog) return;
     const id = cachedSalesOrderRestoreRef.current;
     if (!id || !localSalesOrdersLoaded) return;
     cachedSalesOrderRestoreRef.current = "";
@@ -1322,7 +1324,7 @@ export function QuotesPage({
       (externalSelectedSalesOrderId && externalSelectedSalesOrderId !== id) || pendingSalesOrderLoadIdRef.current === id) return;
     const target = localSalesOrders.find((item) => item.id === id);
     if (target) void loadLocalSalesOrderIntoEditor(target);
-  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView, externalSelectedSalesOrderId]);
+  }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView, externalSelectedSalesOrderId, resyncingCatalog]);
 
   useEffect(() => () => {
     salesOrderLoadGenerationRef.current++;
