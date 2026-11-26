@@ -38,6 +38,7 @@ import { BrandPill } from "../components/common/BrandPill";
 import { buildEntityAlias } from "../../shared/entityAlias";
 import { recomputeInvoiceTotals as calculateInvoiceTotals, previewInvoiceMoney } from "../../shared/invoiceMoney";
 import { usePaymentDraftEditor } from "../hooks/usePaymentDraftEditor";
+import { documentNumberError } from "../../shared/documentNumberError";
 
 type SalesPageProps = {
   appRole?: string;
@@ -67,7 +68,7 @@ export function SalesPage({
   onSelectedInvoiceChange,
 }: SalesPageProps) {
   const ui=useInterfaceText();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const actionFeedback = useActionFeedback();
   const [activeTab, setLocalActiveTab] = useState<"Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists">(activeTabProp);
   function setActiveTab(tab: "Customers" | "Sales Orders" | "Invoices" | "Payments Received" | "Price Lists") {
@@ -609,7 +610,7 @@ export function SalesPage({
       setInvoiceDraft(cloneInvoice(saved));
       actionFeedback.succeed(t("sales.invoices.resyncedFromCatalog"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.resyncFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.invoices.resyncFailed")));
     } finally {
       setResyncingInvoice(false);
     }
@@ -633,7 +634,7 @@ export function SalesPage({
       setInvoiceDraft(cloneInvoice(saved));
       actionFeedback.succeed(t("sales.invoices.saved", { invoiceNo: saved.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.saveFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.invoices.saveFailed")));
     }
   }
 
@@ -694,7 +695,7 @@ export function SalesPage({
       }
       actionFeedback.succeed(t("sales.invoices.created", { count: created.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.createFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.invoices.createFailed")));
     }
   }
 
@@ -734,7 +735,7 @@ export function SalesPage({
       setInvoiceDraft(cloneInvoice(merged));
       actionFeedback.succeed(t("sales.invoices.mergedCreated", { invoiceNo: merged.id, count: selectedOrders.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.mergeFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.invoices.mergeFailed")));
     }
   }
 

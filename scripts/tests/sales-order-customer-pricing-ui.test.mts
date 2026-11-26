@@ -246,6 +246,18 @@ test('file import remains available for an unsaved new order',async()=>{
   } finally {await view.close()}
 });
 
+test('duplicate sales order number is shown as an actionable error in the real editor',async()=>{
+  const view=await fixture({cache:draftCache()});
+  try {
+    const mock=(globalThis as any)[fixtureKey]; const original=mock.call;
+    mock.call=(name:string,...args:any[])=>name==='upsertSalesOrder'
+      ? Promise.reject(new Error('SALES_ORDER_NUMBER_ALREADY_USED')) : original(name,...args);
+    await view.click('sales.orders.saveDraft');
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail'&&/sales order number is already in use.*different order number/i.test(e.text)));
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
 test('real sales editor waits for an actual customer, then computes the chosen customer list',async()=>{
   const view=await fixture({cache:customerlessCache()});
   try {

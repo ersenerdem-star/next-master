@@ -37,6 +37,7 @@ import { downloadQuoteTemplate } from "../../shared/importTemplates";
 import { consumeCatalogTransfer, PENDING_CATALOG_SALES_ITEM_KEY } from "../../shared/catalogTransfer";
 import { buildInvoiceFromSalesOrder, buildLocalSalesOrder, buildPurchaseOrdersFromSalesOrder } from "../../shared/localOrders";
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
+import { documentNumberError } from "../../shared/documentNumberError";
 import { applySalesOrderCustomerPricing, isSalesOrderWorkCurrent, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
 import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
@@ -2059,7 +2060,7 @@ export function QuotesPage({
       else actionFeedback.succeed(message);
     } catch (caught) {
       if (started && !isCurrent()) return;
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.resyncFailed")));
     } finally {
       if (started && operation === resyncOperationRef.current) {
         resyncingCatalogRef.current = false;
@@ -2377,7 +2378,7 @@ export function QuotesPage({
       actionFeedback.succeed(t("sales.orders.draftSaved", { salesOrderNo: saved.sales_order_no }));
       await nextAction();
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.saveDraftFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.saveDraftFailed")));
     } finally {
       setSavingDraft(false);
     }
@@ -3326,7 +3327,7 @@ export function QuotesPage({
         }),
       );
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.bulkInvoiceConversionFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.bulkInvoiceConversionFailed")));
     }
   }
 
@@ -3506,7 +3507,7 @@ export function QuotesPage({
       if (!saved) return;
       actionFeedback.succeed(t("sales.orders.draftSavedAs", { salesOrderNo: saved.sales_order_no }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.saveDraftFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.saveDraftFailed")));
     } finally {
       setSavingDraft(false);
     }
@@ -3582,7 +3583,7 @@ export function QuotesPage({
       setBuilderStatus(t("sales.orders.confirmedWithPurchaseOrders", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
       actionFeedback.succeed(t("sales.orders.confirmedWithPurchaseOrdersToast", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.markConfirmedFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.markConfirmedFailed")));
     } finally {
       setConfirmingOrder(false);
     }
@@ -3606,7 +3607,7 @@ export function QuotesPage({
       setInvoicePromptOpen(false);
       setPendingConfirmedOrder(null);
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.convertToInvoiceFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.orders.convertToInvoiceFailed")));
     } finally {
       setCreatingInvoice(false);
     }
