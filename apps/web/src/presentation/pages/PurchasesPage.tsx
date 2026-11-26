@@ -308,6 +308,9 @@ export function PurchasesPage({
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [receiveWarehouseId, setReceiveWarehouseId] = useState("");
   const pendingCatalogPurchaseHandledRef = useRef(false);
+  // A transferred product is an unsaved draft, not an absent selection to
+  // replace when the asynchronously loaded purchase-order list is empty.
+  const catalogPurchaseDraftRef = useRef(false);
   const inventoryAvailabilityLookup = useMemo(() => buildInventoryAvailabilityLookup(inventoryAvailabilityRows), [inventoryAvailabilityRows]);
   const stockedWarehouses = useMemo(
     () => warehouses.filter((warehouse) => warehouse.is_active !== false && warehouse.fulfillment_model !== "dropship"),
@@ -447,6 +450,7 @@ export function PurchasesPage({
     const pending = consumeCatalogTransfer(PENDING_CATALOG_PURCHASE_ITEM_KEY);
     if (!pending) return;
     pendingCatalogPurchaseHandledRef.current = true;
+    catalogPurchaseDraftRef.current = true;
 
     setActiveTab("Purchase Orders");
     const nextLine: LocalPurchaseOrderLine = {
@@ -495,6 +499,10 @@ export function PurchasesPage({
   }, [actionFeedback, companyProfiles]);
 
   useEffect(() => {
+    // The transfer effect runs before this effect in the same commit, while
+    // React state still contains the initial empty list and selection.
+    if (catalogPurchaseDraftRef.current && !selectedPurchaseOrderId) return;
+    if (selectedPurchaseOrderId) catalogPurchaseDraftRef.current = false;
     if (!purchaseOrders.length) {
       setSelectedPurchaseOrderId("");
       setPurchaseOrderDraft(null);
