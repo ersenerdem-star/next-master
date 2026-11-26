@@ -85,3 +85,9 @@ if [ "$(docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -tAc "sel
   echo 'stale invoice update overwrote first edit' >&2
   exit 1
 fi
+# Fixture simulates the permissive live grants before the restriction.
+docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "grant truncate, trigger on public.invoices to authenticated" >/dev/null
+docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
+  < "$repo_root/supabase/migrations/20261126135133_invoice_direct_write_restriction.sql"
+docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
+  < "$repo_root/scripts/tests/invoice-direct-write-pg.assert.sql"
