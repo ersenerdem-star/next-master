@@ -85,12 +85,12 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   const storage = new Map<string, string>([['next-master-sales-order-workspace', JSON.stringify(cache)]]);
   const store = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) };
   const timers = new Map<number, () => void>(); let timerId = 0;
-  const confirms: string[] = [];
+  const confirms: string[] = []; let confirmResponse=false;
   const browser = Object.assign(new EventTarget(), {
     localStorage: store, sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     setTimeout(callback: () => void) { const id = ++timerId; timers.set(id, callback); return id; },
     clearTimeout(id: number) { timers.delete(id); },
-    confirm(text: string) { confirms.push(text); return false; },
+    confirm(text: string) { confirms.push(text); return confirmResponse; },
     prompt() { throw Error('Unexpected prompt'); },
   });
   globals.window = browser; globals.document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
@@ -147,6 +147,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
     lineRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.wrapClassName === 'sales-lines-table').flatMap(node => node.props.rows),
     cache: () => JSON.parse(storage.get('next-master-sales-order-workspace') || 'null'),
     setDetailFailure(failed: boolean) { detailFailure = failed; },
+    setConfirmResponse(value: boolean) { confirmResponse=value; },
     holdSummary() { const request = deferred(); summaryQueue.push(request); return request; },
     async click(label: string) {
       const button = renderer.root.findAllByType('button').find(button => content(button) === label);
@@ -278,12 +279,33 @@ test('late import cannot add lines to another saved order after leaving its orig
   const view=await fixture({cache:customerlessCache([]),orders:[order]});
   try {
     await view.startImport(); assert.ok(view.calls.some(c=>c.name==='batchResolveQuoteImportRows'));
+    const clears=view.feedbackEvents.filter(e=>e.kind==='clear').length;
     await view.click('sales.orders.exit'); await view.clickOrder(order.id);
+    assert.ok(view.feedbackEvents.filter(e=>e.kind==='clear').length>clears,'leaving an in-progress import must clear its progress indicator');
     assert.equal(view.lineRows().length,1); assert.equal(view.lineRows()[0].sell_price,73.5);
+    const settled=[...view.feedbackEvents];
     await view.resolve(view.importRequest,[{...unpricedLine(),sell_price:null}]);
+    assert.deepEqual(view.feedbackEvents,settled,'late import must not recreate progress or success in the next order');
     assert.equal(view.lineRows().length,1,'late result must not append to another order');
     assert.equal(view.lineRows()[0].resolvedCode,'OLD'); assert.equal(view.lineRows()[0].sell_price,73.5);
     assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
+test('navigation save refuses a partial order while an import is in flight and reports the reason',async()=>{
+  const view=await fixture({cache:customerlessCache([unpricedLine()])});
+  try {
+    await view.selectCustomer('customer-a'); await view.startImport();
+    assert.ok(view.calls.some(c=>c.name==='batchResolveQuoteImportRows'));
+    view.setConfirmResponse(true); await view.click('sales.orders.exit');
+    assert.equal(view.saved.length,0,'navigation-save must not persist incomplete order');
+    assert.equal(view.confirms.length,1);
+    assert.ok(view.feedbackEvents.some(e=>e.kind==='fail' && /import to finish/i.test(e.text)), 'failure should explain that import is pending');
+    assert.equal(view.lineRows().length,1,'the editor must remain open');
+    await view.resolve(view.importRequest,[{...unpricedLine(),lineId:'line-new',requestedCode:'NEW',resolvedCode:'NEW',sell_price:null}]);
+    assert.equal(view.lineRows().length,2,'finishing the import returns the editor to a usable state');
+    await view.click('sales.orders.saveDraft'); assert.equal(view.saved.length,1);
+    assert.equal(view.saved[0].lines.length,2);
   } finally {await view.close()}
 });
 
