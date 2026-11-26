@@ -514,7 +514,7 @@ export function SalesPage({
     }
     try {
       actionFeedback.begin(t("sales.invoices.deleting", { invoiceNo: row.id }));
-      await deleteInvoice(row.id);
+      await deleteInvoice(row.id, row.updated_at);
       const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
       if (selectedInvoiceId === row.id) {
@@ -525,7 +525,7 @@ export function SalesPage({
       }
       actionFeedback.succeed(t("sales.invoices.deleted", { invoiceNo: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.invoices.deleteFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.invoices.deleteFailed")));
     }
   }
 
@@ -604,7 +604,7 @@ export function SalesPage({
         ...invoiceDraft,
         lines: nextLines,
       });
-      const saved = await upsertInvoice(nextDraft, selectedInvoiceId);
+      const saved = await upsertInvoice(nextDraft, selectedInvoiceId, invoiceDraft.updated_at);
       const refreshed = await fetchInvoiceSummaries();
       setInvoices(refreshed);
       setSelectedInvoiceId(saved.id);
@@ -626,7 +626,7 @@ export function SalesPage({
         updated_at: new Date().toISOString(),
       };
       actionFeedback.begin(t("sales.invoices.savingInvoice", { invoiceNo: payload.id }));
-      const saved = await upsertInvoice(payload, previousId);
+      const saved = await upsertInvoice(payload, previousId, invoiceDraft.updated_at);
       const next = [saved, ...invoices.filter((item) => item.id !== previousId && item.id !== saved.id)].sort((a, b) =>
         String(b.updated_at).localeCompare(String(a.updated_at)),
       );

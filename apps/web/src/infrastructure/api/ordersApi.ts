@@ -997,10 +997,10 @@ export async function fetchInvoicesByCustomerNames(names: string[]): Promise<Loc
   return ((data || []) as unknown as Record<string, unknown>[]).map(mapInvoiceRow);
 }
 
-export async function upsertInvoice(invoice: LocalInvoice, previousId?: string): Promise<LocalInvoice> {
+export async function upsertInvoice(invoice: LocalInvoice, previousId?: string, expectedUpdatedAt?: string | null): Promise<LocalInvoice> {
   const resolvedInvoice = await resolveInvoiceWarehouseDefaults(recomputeInvoiceTotals(invoice));
   const result = await callAppRpc<{ invoice?: Record<string, unknown> }>("save_invoice_atomic", {
-    payload: mapInvoicePayload(resolvedInvoice, ""),
+    payload: { ...mapInvoicePayload(resolvedInvoice, ""), expected_updated_at: expectedUpdatedAt ?? null },
     previous_id: previousId || null,
   });
   if (!result?.invoice) throw new Error("Invoice save failed");
@@ -1022,8 +1022,8 @@ export async function createFullSalesInvoices(invoices: LocalInvoice[], sourceOr
   return result.invoices.map(mapInvoiceRow);
 }
 
-export async function deleteInvoice(invoiceId: string): Promise<void> {
-  await callAppRpc("delete_invoice_guarded", { id: invoiceId });
+export async function deleteInvoice(invoiceId: string, expectedUpdatedAt?: string | null): Promise<void> {
+  await callAppRpc("delete_invoice_guarded", { id: invoiceId, expected_updated_at: expectedUpdatedAt ?? null });
 }
 
 export async function upsertPurchaseOrder(order: LocalPurchaseOrder, expectedUpdatedAt?: string | null): Promise<LocalPurchaseOrder> {

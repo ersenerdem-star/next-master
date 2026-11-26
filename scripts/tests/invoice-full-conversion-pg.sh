@@ -63,3 +63,25 @@ if ! rg -q 'SALES_ORDER_ALREADY_INVOICED' "$second_log"; then
   cat "$second_log"
   exit 1
 fi
+docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
+  < "$repo_root/supabase/migrations/20261126134915_invoice_edit_versions.sql"
+docker exec -i "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 \
+  < "$repo_root/scripts/tests/invoice-edit-version-pg.assert.sql"
+# Competing invoice edits opened at the same version must not overwrite.
+docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "update public.invoices set updated_at = '2026-01-01T00:00:00Z' where id='partial-one'" >/dev/null
+docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "begin; set role authenticated; set app.test_org='11111111-1111-4111-8111-111111111111'; set app.test_role='admin'; select public.save_invoice_atomic('{\"id\":\"partial-one\",\"sales_order_id\":\"partial\",\"customer_name\":\"Customer A\",\"currency\":\"EUR\",\"notes\":\"winner\",\"expected_updated_at\":\"2026-01-01T00:00:00Z\"}', 'partial-one'); select pg_sleep(2); commit;" >"$first_log" 2>&1 &
+first_pid=$!
+sleep 0.5
+if docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -v ON_ERROR_STOP=1 -c "set role authenticated; set app.test_org='11111111-1111-4111-8111-111111111111'; set app.test_role='admin'; select public.save_invoice_atomic('{\"id\":\"partial-one\",\"sales_order_id\":\"partial\",\"customer_name\":\"Customer A\",\"currency\":\"EUR\",\"notes\":\"loser\",\"expected_updated_at\":\"2026-01-01T00:00:00Z\"}', 'partial-one');" >"$second_log" 2>&1; then
+  cat "$second_log"
+  exit 1
+fi
+wait "$first_pid"
+if ! rg -q 'INVOICE_VERSION_CONFLICT' "$second_log"; then
+  cat "$second_log"
+  exit 1
+fi
+if [ "$(docker exec "$fixture_container" psql -h 127.0.0.1 -U postgres -tAc "select notes from public.invoices where id='partial-one'")" != 'winner' ]; then
+  echo 'stale invoice update overwrote first edit' >&2
+  exit 1
+fi
