@@ -515,4 +515,3 @@ test('catalog handoff waits for active import and runs after the import complete
     assert.equal(view.buttons('Import CSV')[0].props.disabled,false);
   } finally {await view.close()}
 });
-
