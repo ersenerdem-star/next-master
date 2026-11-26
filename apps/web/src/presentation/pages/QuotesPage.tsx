@@ -35,7 +35,7 @@ import { buildInvoiceFromSalesOrder, buildLocalSalesOrder } from "../../shared/l
 import { hydrateSalesOrderLines } from "../../shared/hydrateSalesOrderLines";
 import { documentNumberError } from "../../shared/documentNumberError";
 import { salesConfirmationError } from "../../shared/salesConfirmationError";
-import { hasMissingSalesPrice } from "../../shared/salesOrderPriceCompleteness";
+import { hasMissingPurchasePrice, hasMissingSalesPrice } from "../../shared/salesOrderPriceCompleteness";
 import { applySalesOrderCustomerPricing, isSalesOrderWorkCurrent, type SalesOrderPricingContext } from "../../shared/salesOrderCustomerPricing";
 import { fetchPreservedSupplierConfirmationLines } from "../../shared/preservedSupplierConfirmation";
 import { salesOrderTotals, multiplyMoney } from "../../../../../shared/order-money.mjs";
@@ -1486,6 +1486,7 @@ export function QuotesPage({
   );
   const hasPendingSalesPrices = quoteBuilderLines.some((line) => line.customer_pricing_pending && !line.manual_sell_price);
   const hasIncompleteSalesPrices = hasMissingSalesPrice(quoteBuilderLines);
+  const hasIncompletePurchasePrices = hasMissingPurchasePrice(quoteBuilderLines);
   const productConflictLines = useMemo(
     () => quoteBuilderLines.filter((line) => line.has_product_conflict),
     [quoteBuilderLines],
@@ -3307,7 +3308,7 @@ export function QuotesPage({
 
     try {
       actionFeedback.begin(t("sales.orders.convertingToInvoices", { count: invoiceReadyOrders.length.toLocaleString("en-US") }));
-      await createFullSalesInvoices(invoiceReadyOrders.map((order) => buildInvoiceFromSalesOrder(order)));
+      await createFullSalesInvoices(invoiceReadyOrders.map((order) => buildInvoiceFromSalesOrder(order)), invoiceReadyOrders);
       const seen = await Promise.allSettled(
         invoiceReadyOrders
           .filter((order) => order.source_channel === "portal" && order.portal_submitted_at)
@@ -3584,7 +3585,7 @@ export function QuotesPage({
     try {
       setCreatingInvoice(true);
       actionFeedback.begin(t("sales.orders.creatingInvoiceFrom", { salesOrderNo: pendingConfirmedOrder.sales_order_no }));
-      const [invoice] = await createFullSalesInvoices([buildInvoiceFromSalesOrder(pendingConfirmedOrder)]);
+      const [invoice] = await createFullSalesInvoices([buildInvoiceFromSalesOrder(pendingConfirmedOrder)], [pendingConfirmedOrder]);
       let refreshFailed = false;
       if (pendingConfirmedOrder.source_channel === "portal" && pendingConfirmedOrder.portal_submitted_at) {
         try { await markSalesOrderPortalSeen(pendingConfirmedOrder.id); } catch { refreshFailed = true; }
@@ -4211,7 +4212,7 @@ export function QuotesPage({
 
               <div className="quote-bottom-right">
                 <div className="quote-summary-card">
-                  {hasIncompleteSalesPrices ? <p role="status" className="info-text">{locale === "tr" ? "Satış fiyatı eksik olan satırlar var; toplam ve kâr hesaplanmadı." : "Some sales prices are missing; totals and profit are unavailable."}</p> : null}
+                  {hasIncompleteSalesPrices ? <p role="status" className="info-text">{locale === "tr" ? "Satış fiyatı eksik olan satırlar var; toplam ve kâr hesaplanmadı." : "Some sales prices are missing; totals and profit are unavailable."}</p> : hasIncompletePurchasePrices ? <p role="status" className="info-text">{locale === "tr" ? "Alış fiyatı eksik olan satırlar var; alış toplamı ve kâr hesaplanmadı." : "Some purchase prices are missing; purchase totals and profit are unavailable."}</p> : null}
                   <div className="quote-summary-row">
                     <span>{t("sales.orders.subTotal")}</span>
                     <strong>{hasIncompleteSalesPrices ? "—" : formatMoney(draftTotals.subtotal, currency)}</strong>
@@ -4236,15 +4237,15 @@ export function QuotesPage({
                   <div className="quote-summary-internal">
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.purchaseTotal")}</span>
-                      <strong>{formatMoney(draftTotals.purchase, currency)}</strong>
+                      <strong>{hasIncompletePurchasePrices ? "—" : formatMoney(draftTotals.purchase, currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.profit")}</span>
-                      <strong>{hasIncompleteSalesPrices ? "—" : formatMoney(draftTotals.profit, currency)}</strong>
+                      <strong>{hasIncompleteSalesPrices || hasIncompletePurchasePrices ? "—" : formatMoney(draftTotals.profit, currency)}</strong>
                     </div>
                     <div className="quote-summary-mini">
                       <span>{t("sales.orders.marginPercent")}</span>
-                      <strong>{hasIncompleteSalesPrices ? "—" : `${draftTotals.margin}%`}</strong>
+                      <strong>{hasIncompleteSalesPrices || hasIncompletePurchasePrices ? "—" : `${draftTotals.margin}%`}</strong>
                     </div>
                   </div>
                 </div>

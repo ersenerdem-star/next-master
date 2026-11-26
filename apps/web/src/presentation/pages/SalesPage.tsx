@@ -686,7 +686,7 @@ export function SalesPage({
       const ordersToConvert = await Promise.all(
         salesOrders.filter((order) => selectedSalesOrderIds.includes(order.id)).map((order) => fetchSalesOrderById(order.id)),
       );
-      const created = await createFullSalesInvoices(ordersToConvert.map((order) => buildInvoiceFromSalesOrder(order)));
+      const created = await createFullSalesInvoices(ordersToConvert.map((order) => buildInvoiceFromSalesOrder(order)), ordersToConvert);
       let refreshed: LocalInvoice[];
       try { refreshed = await fetchInvoiceSummaries(); } catch {
         setSelectedSalesOrderIds([]);
@@ -733,7 +733,7 @@ export function SalesPage({
 
     try {
       actionFeedback.begin(t("sales.invoices.merging", { count: selectedOrders.length.toLocaleString("en-US") }));
-      const [merged] = await createFullSalesInvoices([buildMergedInvoiceFromSalesOrders(selectedOrders)]);
+      const [merged] = await createFullSalesInvoices([buildMergedInvoiceFromSalesOrders(selectedOrders)], selectedOrders);
       let refreshed: LocalInvoice[];
       try { refreshed = await fetchInvoiceSummaries(); } catch {
         setSelectedSalesOrderIds([]);

@@ -1,6 +1,6 @@
 -- Guard only the automatic full-order conversion. Existing invoices and the
 -- separate manual invoice edit path are not rewritten or restricted.
-create function public.create_full_sales_invoices_atomic(input_payloads jsonb)
+create function public.create_full_sales_invoices_atomic(input_payloads jsonb, input_order_versions jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_org uuid := public.current_profile_org_id();
@@ -40,6 +40,10 @@ begin
       where s.organization_id = v_org and s.id = v_id for update;
     if not found then raise exception 'Linked sales order was not found'; end if;
     if v_order.status <> 'confirmed' then raise exception 'SALES_ORDER_NOT_CONFIRMED'; end if;
+    if nullif(input_order_versions->>v_id, '') is null
+       or (input_order_versions->>v_id)::timestamptz is distinct from v_order.updated_at then
+      raise exception 'INVOICE_SOURCE_ORDER_STALE';
+    end if;
     if pg_catalog.jsonb_typeof(v_order.lines) is distinct from 'array'
        or pg_catalog.jsonb_array_length(v_order.lines) = 0
        or exists (select 1 from pg_catalog.jsonb_array_elements(v_order.lines) l(value)
@@ -78,6 +82,6 @@ begin
   return pg_catalog.jsonb_build_object('invoices', v_results);
 end;
 $$;
-revoke all on function public.create_full_sales_invoices_atomic(jsonb) from public, anon;
-grant execute on function public.create_full_sales_invoices_atomic(jsonb) to authenticated, service_role;
+revoke all on function public.create_full_sales_invoices_atomic(jsonb, jsonb) from public, anon;
+grant execute on function public.create_full_sales_invoices_atomic(jsonb, jsonb) to authenticated, service_role;
 notify pgrst, 'reload schema';

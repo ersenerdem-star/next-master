@@ -50,3 +50,11 @@ test('historic incomplete source prices cannot silently become zero in single or
   explicitZero.lines[0].sell_price = 0;
   assert.equal(buildInvoiceFromSalesOrder(explicitZero).lines[0].sell_price, 0);
 });
+
+test('missing purchase price suppresses purchase and profit display without suppressing valid sales totals', async () => {
+  const {hasMissingPurchasePrice, hasMissingSalesPrice} = await import('../../apps/web/src/shared/salesOrderPriceCompleteness.ts');
+  const lines = [{buy_price: null, sell_price: 15}];
+  assert.equal(hasMissingPurchasePrice(lines), true);
+  assert.equal(hasMissingSalesPrice(lines), false);
+  assert.equal(hasMissingPurchasePrice([{buy_price: 0, sell_price: 15}]), false);
+});

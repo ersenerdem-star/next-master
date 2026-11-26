@@ -7,6 +7,11 @@ export function documentNumberError(error: unknown, locale: string, fallback: st
   if (/\b(?:SALES|PURCHASE)_ORDER_(?:STALE_VERSION|VERSION_REQUIRED)\b/.test(message)) {
     return orderConcurrencyError(error, locale, fallback);
   }
+  if (message.includes("INVOICE_SOURCE_ORDER_STALE")) {
+    return locale === "tr"
+      ? "Satış siparişi değişti. Fatura oluşturmadan önce siparişi yeniden açıp kontrol edin."
+      : "The sales order changed. Reopen and review it before creating the invoice.";
+  }
   if (message.includes("SALES_ORDER_ALREADY_INVOICED")) {
     return locale === "tr"
       ? "Bu sipariş için zaten fatura var. Fatura listesini kontrol edin; tekrar tam fatura oluşturulmadı."
