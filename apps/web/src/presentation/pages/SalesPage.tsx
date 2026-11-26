@@ -656,7 +656,7 @@ export function SalesPage({
       selectPaymentReceived(saved);
       actionFeedback.succeed(t("sales.payments.saved", { paymentNo: saved.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.payments.saveFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.payments.saveFailed")));
     }
   }
 

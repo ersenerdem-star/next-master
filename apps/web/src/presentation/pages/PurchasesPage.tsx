@@ -55,6 +55,7 @@ import { buildEntityAlias } from "../../shared/entityAlias";
 import { fetchWarehouses } from "../../infrastructure/api/warehousesApi";
 import type { Warehouse } from "../../types/warehouses";
 import { useI18n } from "../../i18n/I18nProvider";
+import { documentNumberError } from "../../shared/documentNumberError";
 import { recomputeBillTotals, previewInvoiceMoney } from "../../shared/invoiceMoney";
 import { refreshAfterCommit } from "../../shared/refreshAfterCommit";
 import { orderConcurrencyError } from "../../shared/orderConcurrencyError";
@@ -1504,7 +1505,7 @@ export function PurchasesPage({
       selectPaymentMade(saved);
       actionFeedback.succeed(p("feedback.paymentSaved", { id: saved.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.paymentSaveFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, p("errors.paymentSaveFailed")));
     }
   }
 

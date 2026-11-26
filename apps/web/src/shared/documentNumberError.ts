@@ -30,5 +30,10 @@ export function documentNumberError(error: unknown, locale: string, fallback: st
       ? "Bu fatura numarası zaten kullanılıyor. Lütfen başka bir fatura numarası girin."
       : "This invoice number is already in use. Enter a different invoice number.";
   }
+  if (message.includes("PAYMENT_NUMBER_ALREADY_USED")) {
+    return locale === "tr"
+      ? "Bu ödeme veya tahsilat numarası zaten kullanılıyor. Lütfen başka bir numara girin."
+      : "This payment number is already in use. Enter a different number.";
+  }
   return message || fallback;
 }

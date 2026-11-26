@@ -6,6 +6,7 @@ test("document-number collisions give an actionable message for each document ty
   assert.match(documentNumberError(new Error("SALES_ORDER_NUMBER_ALREADY_USED"), "tr", "failed"), /siparişi numarası zaten kullanılıyor.*başka/i);
   assert.match(documentNumberError(new Error("INVOICE_NUMBER_ALREADY_USED"), "tr", "failed"), /fatura numarası zaten kullanılıyor.*başka/i);
   assert.match(documentNumberError({message:"INVOICE_NUMBER_ALREADY_USED"}, "en", "failed"), /invoice number is already in use/i);
+  assert.match(documentNumberError(new Error("PAYMENT_NUMBER_ALREADY_USED"), "tr", "failed"), /ödeme.*numarası zaten kullanılıyor/i);
 });
 
 test("unrelated errors remain visible", () => {

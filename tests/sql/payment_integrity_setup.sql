@@ -1,0 +1,12 @@
+create role anon; create role authenticated; create role service_role;
+create table public.invoices(id text primary key, organization_id uuid, customer_name text, currency text);
+create table public.bills(id text primary key, organization_id uuid, supplier_name text, purchase_company text, currency text);
+create table public.payments_received(id text primary key, organization_id uuid, invoice_id text, invoice_no text, customer_name text, currency text, received_date text, amount numeric, method text, reference_no text, notes text, status text, created_at timestamptz, updated_at timestamptz);
+create table public.payments_made(id text primary key, organization_id uuid, bill_id text, bill_no text, supplier_name text, purchase_company text, currency text, payment_date text, amount numeric, method text, reference_no text, notes text, status text, created_at timestamptz, updated_at timestamptz);
+create function public.current_profile_org_id() returns uuid language sql as $$select '00000000-0000-0000-0000-000000000001'::uuid$$;
+create function public.current_profile_role() returns text language sql as $$select 'admin'::text$$;
+create function public.is_superadmin() returns boolean language sql as $$select false$$;
+create function public.recalculate_invoice_paid_status_for_org(uuid,text) returns jsonb language sql as $$select jsonb_build_object('id',$2)$$;
+create function public.recalculate_bill_paid_status_for_org(uuid,text) returns jsonb language sql as $$select jsonb_build_object('id',$2)$$;
+insert into public.invoices values ('A','00000000-0000-0000-0000-000000000001','C','EUR');
+insert into public.bills values ('A','00000000-0000-0000-0000-000000000001','S','P','EUR');
