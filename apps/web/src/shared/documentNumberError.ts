@@ -40,6 +40,14 @@ export function documentNumberError(error: unknown, locale: string, fallback: st
       ? "Bu fatura numarası zaten kullanılıyor. Lütfen başka bir fatura numarası girin."
       : "This invoice number is already in use. Enter a different invoice number.";
   }
+  if (message.includes("BILL_VERSION_CONFLICT") || message.includes("BILL_VERSION_REQUIRED")) {
+    return locale === "tr"
+      ? "Bu alış faturası başka bir oturumda değişmiş olabilir. İşlem yapılmadı; güncel kaydı yeniden açıp kontrol edin."
+      : "This bill may have changed in another session. No action was taken; reopen the current record and review it.";
+  }
+  if (message.includes("BILL_NUMBER_ALREADY_USED")) {
+    return locale === "tr" ? "Bu alış faturası numarası zaten kullanılıyor. Başka bir numara girin." : "This bill number is already in use. Enter a different number.";
+  }
   if (message.includes("PAYMENT_VERSION_CONFLICT") || message.includes("PAYMENT_VERSION_REQUIRED")) {
     return locale === "tr"
       ? "Bu ödeme veya tahsilat başka bir oturumda değişmiş olabilir. İşlem yapılmadı; güncel kaydı yeniden açıp kontrol edin."

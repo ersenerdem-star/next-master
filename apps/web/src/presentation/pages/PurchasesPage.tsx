@@ -1462,7 +1462,7 @@ export function PurchasesPage({
       actionFeedback.succeed(p("feedback.billSaved", { id: saved.id }));
       return saved;
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.billSaveFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, p("errors.billSaveFailed")));
       return null;
     }
   }
@@ -1473,7 +1473,7 @@ export function PurchasesPage({
     }
     try {
       actionFeedback.begin(p("feedback.deletingBill", { id: row.id }));
-      await deleteBill(row.id);
+      await deleteBill(row.id, row.updated_at || null);
       const refreshed = await fetchBillSummaries();
       setBills(refreshed);
       if (selectedBillId === row.id || billDraft?.id === row.id) {
@@ -1484,7 +1484,7 @@ export function PurchasesPage({
       }
       actionFeedback.succeed(p("feedback.billDeleted", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.billDeleteFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, p("errors.billDeleteFailed")));
     }
   }
 

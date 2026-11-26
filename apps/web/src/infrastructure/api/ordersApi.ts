@@ -1058,7 +1058,7 @@ export async function fetchBillsBySupplierNames(names: string[]): Promise<LocalB
 
 export async function upsertBill(bill: LocalBill, previousId?: string): Promise<LocalBill> {
   const result = await callAppRpc<{ bill?: Record<string, unknown> }>("save_bill_atomic", {
-    payload: mapBillPayload(recomputeBillTotals(bill), ""),
+    payload: { ...mapBillPayload(recomputeBillTotals(bill), ""), ...(previousId ? { expected_updated_at: bill.updated_at || null } : {}) },
     previous_id: previousId || null,
   });
   if (!result?.bill) throw new Error("Bill save failed");
@@ -1089,8 +1089,8 @@ export async function buildAndUpsertMergedBillFromPurchaseOrders(orders: LocalPu
   return await upsertBill(buildMergedBillFromPurchaseOrders(enrichedOrders));
 }
 
-export async function deleteBill(billId: string): Promise<void> {
-  await callAppRpc("delete_bill_guarded", { id: billId });
+export async function deleteBill(billId: string, expectedUpdatedAt: string | null): Promise<void> {
+  await callAppRpc("delete_bill_guarded", { id: billId, expected_updated_at: expectedUpdatedAt || null });
 }
 
 export async function fetchPaymentsReceived(): Promise<LocalPaymentReceived[]> {

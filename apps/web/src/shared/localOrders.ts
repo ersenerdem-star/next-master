@@ -428,10 +428,8 @@ export function buildBillFromPurchaseOrder(order: LocalPurchaseOrder) {
     notes: line.notes,
   }));
 
-  const current = loadLocalBills();
-  const previous = current.find((item) => item.purchase_order_id === order.id);
   const bill: LocalBill = {
-    id: previous?.id || makeId("bill"),
+    id: makeId("bill"),
     purchase_order_id: order.id,
     purchase_order_no: order.id,
     supplier_name: order.supplier_name,
@@ -447,7 +445,7 @@ export function buildBillFromPurchaseOrder(order: LocalPurchaseOrder) {
     shipping_cost: 0,
     discount_amount: 0,
     total_amount: roundMoney(order.total_amount),
-    created_at: previous?.created_at || nowIso(),
+    created_at: nowIso(),
     updated_at: nowIso(),
     lines,
   };

@@ -1,0 +1,14 @@
+create role anon; create role authenticated; create role service_role;
+create table public.purchase_orders(id text primary key, organization_id uuid, currency text);
+create table public.bills(id text primary key, organization_id uuid, purchase_order_id text, purchase_order_no text, supplier_name text, purchase_company text, currency text, status text, bill_date text, due_date text, payment_terms text, notes text, subtotal numeric, shipping_cost numeric, discount_amount numeric, total_amount numeric, created_at timestamptz, updated_at timestamptz, lines jsonb);
+create table public.payments_made(id text primary key, organization_id uuid, bill_id text);
+create table public.payments_received(id text primary key, organization_id uuid);
+create table public.bill_recalc_log(bill_id text);
+create function public.current_profile_org_id() returns uuid language sql as $$select coalesce(nullif(current_setting('test.org',true),''),'00000000-0000-0000-0000-000000000001')::uuid$$;
+create function public.current_profile_role() returns text language sql as $$select coalesce(nullif(current_setting('test.role',true),''),'admin')::text$$;
+create function public.is_superadmin() returns boolean language sql as $$select false$$;
+create function public.recalculate_bill_paid_status_for_org(uuid,text) returns jsonb language plpgsql as $$begin insert into public.bill_recalc_log values($2); return jsonb_build_object('id',$2); end;$$;
+grant select, insert, update, delete, truncate, references, trigger on public.bills, public.payments_received, public.payments_made to authenticated;
+grant select, insert, update, delete on public.bills, public.payments_received, public.payments_made to service_role;
+insert into public.purchase_orders values('PO1','00000000-0000-0000-0000-000000000001','EUR');
+insert into public.bills(id,organization_id,purchase_order_id,currency,status,created_at,updated_at,lines) values('B1','00000000-0000-0000-0000-000000000001','PO1','EUR','draft',now(),now(),'[]');
