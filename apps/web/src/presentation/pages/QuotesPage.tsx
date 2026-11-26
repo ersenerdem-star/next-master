@@ -1348,12 +1348,14 @@ export function QuotesPage({
   }, [localSalesOrders, localSalesOrdersLoaded, selectedLocalSalesOrderId, salesOrdersView, externalSelectedSalesOrderId, resyncingCatalog]);
 
   useEffect(() => () => {
+    const hasOwnedProgress = Boolean(pendingSalesOrderLoadIdRef.current || catalogTransferInFlightRef.current ||
+      importingLinesRef.current || resolvingLineRef.current || resyncingCatalogRef.current);
     salesOrderLoadGenerationRef.current++;
     catalogTransferOperationRef.current++;
     if (pendingSalesOrderLoadIdRef.current) {
       pendingSalesOrderLoadIdRef.current = "";
-      actionFeedback.clear();
     }
+    if (hasOwnedProgress) actionFeedback.clear();
   }, []);
 
   useEffect(() => {
