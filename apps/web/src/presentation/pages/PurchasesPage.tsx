@@ -57,6 +57,7 @@ import type { Warehouse } from "../../types/warehouses";
 import { useI18n } from "../../i18n/I18nProvider";
 import { recomputeBillTotals, previewInvoiceMoney } from "../../shared/invoiceMoney";
 import { refreshAfterCommit } from "../../shared/refreshAfterCommit";
+import { orderConcurrencyError } from "../../shared/orderConcurrencyError";
 
 function formatMoney(value: number, currency = "EUR") {
   return `${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
@@ -275,6 +276,7 @@ export function PurchasesPage({
   const purchaseOrderDraftRef = useRef(purchaseOrderDraft);
   purchaseOrderDraftRef.current = purchaseOrderDraft;
   const [purchaseOrderSourceSnapshot, setPurchaseOrderSourceSnapshot] = useState("");
+  const [purchaseOrderSourceVersion, setPurchaseOrderSourceVersion] = useState("");
   const [selectedBillId, setSelectedBillId] = useState("");
   const [billDraft, setBillDraft] = useState<LocalBill | null>(null);
   const billMoneyPreview = useMemo(() => previewInvoiceMoney(recomputeBillTotals, billDraft), [billDraft]);
@@ -487,6 +489,7 @@ export function PurchasesPage({
       return nextDraft;
     });
     setPurchaseOrderSourceSnapshot("");
+    setPurchaseOrderSourceVersion("");
     setPurchaseOrdersView("detail");
     actionFeedback.succeed(p("feedback.productAddedToPurchaseDraft", { code: pending.product_code }));
   }, [actionFeedback, companyProfiles]);
@@ -496,6 +499,7 @@ export function PurchasesPage({
       setSelectedPurchaseOrderId("");
       setPurchaseOrderDraft(null);
       setPurchaseOrderSourceSnapshot("");
+      setPurchaseOrderSourceVersion("");
       setPurchaseOrdersView("list");
       return;
     }
@@ -531,11 +535,13 @@ export function PurchasesPage({
           const snapshot = serializePurchaseOrderForDirtyCheck(detail);
           setPurchaseOrderDraft({ ...detail, lines: detail.lines.map((line) => ({ ...line })) });
           setPurchaseOrderSourceSnapshot(snapshot);
+          setPurchaseOrderSourceVersion(detail.updated_at || "");
         }
       } catch {
         if (!cancelled) {
           setPurchaseOrderDraft(null);
           setPurchaseOrderSourceSnapshot("");
+          setPurchaseOrderSourceVersion("");
         }
       }
     }
@@ -844,15 +850,16 @@ export function PurchasesPage({
         ...purchaseOrderDraft,
         lines: nextLines,
       });
-      const saved = await upsertPurchaseOrder(nextDraft);
+      const saved = await upsertPurchaseOrder(nextDraft, purchaseOrderSourceSnapshot ? purchaseOrderSourceVersion : null);
       const refreshed = await fetchPurchaseOrderSummaries();
       setPurchaseOrders(refreshed);
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(saved));
+      setPurchaseOrderSourceVersion(saved.updated_at || "");
       actionFeedback.succeed(p("feedback.purchaseOrderResynced"));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderCatalogResyncFailed"));
+      actionFeedback.fail(orderConcurrencyError(caught, locale, p("errors.purchaseOrderCatalogResyncFailed")));
     } finally {
       setResyncingPurchaseOrder(false);
     }
@@ -1191,6 +1198,7 @@ export function PurchasesPage({
     if (!fresh || !current || current.id !== id || serializePurchaseOrderForDirtyCheck(current) !== expectedSnapshot) return;
     setPurchaseOrderDraft(fresh);
     setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(fresh));
+    setPurchaseOrderSourceVersion(fresh.updated_at || "");
   }
 
   async function savePurchaseOrderDraft() {
@@ -1198,7 +1206,7 @@ export function PurchasesPage({
     const previousStatus = purchaseOrders.find((item) => item.id === purchaseOrderDraft.id)?.status || "";
     try {
       actionFeedback.begin(p("feedback.savingPurchaseOrder", { id: purchaseOrderDraft.id }));
-      const saved = await upsertPurchaseOrder(recomputePurchaseOrderTotals(purchaseOrderDraft));
+      const saved = await upsertPurchaseOrder(recomputePurchaseOrderTotals(purchaseOrderDraft), purchaseOrderSourceSnapshot ? purchaseOrderSourceVersion : null);
       let message = p("feedback.purchaseOrderSaved", { id: saved.id });
       if (saved.status === "confirmed" && previousStatus !== "confirmed") {
         try {
@@ -1215,6 +1223,7 @@ export function PurchasesPage({
       setSelectedPurchaseOrderId(saved.id);
       setPurchaseOrderDraft({ ...saved, lines: saved.lines.map((line) => ({ ...line })) });
       setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(saved));
+      setPurchaseOrderSourceVersion(saved.updated_at || "");
       setPurchaseOrders((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       const refreshed = await refreshAfterCommit(fetchPurchaseOrderSummaries);
       if (refreshed) setPurchaseOrders(refreshed);
@@ -1222,7 +1231,7 @@ export function PurchasesPage({
       actionFeedback.succeed(message);
       return saved;
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.purchaseOrderSaveFailed"));
+      actionFeedback.fail(orderConcurrencyError(caught, locale, p("errors.purchaseOrderSaveFailed")));
       return null;
     }
   }
@@ -1594,6 +1603,7 @@ export function PurchasesPage({
                     setSelectedPurchaseOrderId(row.id);
                     setPurchaseOrderDraft(null);
                     setPurchaseOrderSourceSnapshot("");
+                    setPurchaseOrderSourceVersion("");
                     setPurchaseOrdersView("detail");
                   })
                 }
@@ -1613,6 +1623,7 @@ export function PurchasesPage({
               setPurchaseOrderDraft(result.target);
               setSelectedPurchaseOrderId(result.target.id);
               setPurchaseOrderSourceSnapshot(serializePurchaseOrderForDirtyCheck(result.target));
+              setPurchaseOrderSourceVersion(result.target.updated_at || "");
               setPurchaseOrders(current => [...result.targets, ...(result.targets.some(t => t.id === result.source.id) ? [] : [result.source]), ...current.filter(o => o.id !== result.source.id && !result.targets.some(t => t.id === o.id))]);
               actionFeedback.succeed(locale === "tr" ? `Satın alma planı kaydedildi: ${result.targets.length} tedarikçi${result.source.status === "closed" ? " · Boşalan kaynak PO kapatıldı." : ""}` : `Sourcing plan saved: ${result.targets.length} suppliers`);
               void refreshAfterCommit(fetchPurchaseOrderSummaries).then(fresh => { if (fresh) setPurchaseOrders(fresh); });

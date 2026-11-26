@@ -866,9 +866,9 @@ export async function fetchSalesOrderById(salesOrderId: string): Promise<LocalSa
   return fetchOrderRecord("sales_orders", SALES_ORDER_COLUMNS, mapSalesOrderRow, salesOrderId);
 }
 
-export async function upsertSalesOrder(order: LocalSalesOrder): Promise<LocalSalesOrder> {
+export async function upsertSalesOrder(order: LocalSalesOrder, expectedUpdatedAt?: string | null): Promise<LocalSalesOrder> {
   const result = await callAppRpc<{ sales_order?: Record<string, unknown> }>("save_sales_order_atomic", {
-    payload: mapSalesOrderPayload(order, ""),
+    payload: { ...mapSalesOrderPayload(order, ""), expected_updated_at: expectedUpdatedAt ?? null },
   });
   if (!result?.sales_order) throw new Error("Sales order save failed");
   return mapSalesOrderRow(result.sales_order);
@@ -907,10 +907,10 @@ export async function resolvePurchaseOrderVendors(supplierNames: readonly string
   return recipients;
 }
 
-export async function confirmSalesOrderWithPurchases(order: LocalSalesOrder, decisionId: string) {
+export async function confirmSalesOrderWithPurchases(order: LocalSalesOrder, decisionId: string, expectedUpdatedAt?: string | null) {
   salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);
   const result = await callAppRpc<{ sales_order?: Record<string, unknown>; purchase_orders?: Record<string, unknown>[]; replayed?: boolean }>(
-    "confirm_sales_order_with_purchases_safe", { payload: mapSalesOrderPayload({ ...order, status: "confirmed" }, ""), decision_id: decisionId },
+    "confirm_sales_order_with_purchases_safe", { payload: { ...mapSalesOrderPayload({ ...order, status: "confirmed" }, ""), expected_updated_at: expectedUpdatedAt ?? null }, decision_id: decisionId },
   );
   if (!result?.sales_order || !Array.isArray(result.purchase_orders)) throw new Error("Order confirmation response is incomplete. Check order status before retrying.");
   return { salesOrder: mapSalesOrderRow(result.sales_order), purchaseOrders: result.purchase_orders.map(mapPurchaseOrderRow), replayed: result.replayed === true };
@@ -926,7 +926,6 @@ export async function markSalesOrderPortalSeen(orderId: string): Promise<LocalSa
     .from("sales_orders")
     .update({
       portal_seen_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     })
     .eq("organization_id", organizationId)
     .eq("id", orderId)
@@ -1012,9 +1011,9 @@ export async function deleteInvoice(invoiceId: string): Promise<void> {
   await callAppRpc("delete_invoice_guarded", { id: invoiceId });
 }
 
-export async function upsertPurchaseOrder(order: LocalPurchaseOrder): Promise<LocalPurchaseOrder> {
+export async function upsertPurchaseOrder(order: LocalPurchaseOrder, expectedUpdatedAt?: string | null): Promise<LocalPurchaseOrder> {
   const result = await callAppRpc<{ purchase_order?: Record<string, unknown> }>("save_purchase_order_atomic", {
-    payload: mapPurchaseOrderPayload(order, ""),
+    payload: { ...mapPurchaseOrderPayload(order, ""), expected_updated_at: expectedUpdatedAt ?? null },
   });
   if (!result?.purchase_order) throw new Error("Purchase order save failed");
   return mapPurchaseOrderRow(result.purchase_order);

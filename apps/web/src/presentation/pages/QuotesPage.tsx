@@ -100,6 +100,7 @@ type PersistedSalesOrderWorkspace = {
   selectedLocalSalesOrderId?: string;
   selectedQuoteId?: string;
   salesOrderSourceSnapshot?: string;
+  salesOrderSourceVersion?: string;
   builderStatus?: string;
   quoteNo?: string;
   customerName?: string;
@@ -876,6 +877,7 @@ export function QuotesPage({
   const workbenchModeRef = useRef(workbenchMode);
   workbenchModeRef.current = workbenchMode;
   const [salesOrderSourceSnapshot, setSalesOrderSourceSnapshot] = useState(initialWorkspaceCache?.salesOrderSourceSnapshot || "");
+  const [salesOrderSourceVersion, setSalesOrderSourceVersion] = useState(initialWorkspaceCache?.salesOrderSourceVersion || "");
   const [selectedQuoteId, setSelectedQuoteId] = useState(externalSelectedQuoteId || initialCachedQuoteId);
   const [detail, setDetail] = useState<QuoteDetail>({ quote: null, lines: [] });
   const [loadingQuotes, setLoadingQuotes] = useState(false);
@@ -1563,6 +1565,7 @@ export function QuotesPage({
       selectedLocalSalesOrderId,
       selectedQuoteId: workbenchMode === "new" && !selectedLocalSalesOrderId ? selectedQuoteId : "",
       salesOrderSourceSnapshot,
+      salesOrderSourceVersion,
       builderStatus,
       quoteNo,
       customerName,
@@ -1611,6 +1614,7 @@ export function QuotesPage({
     selectedLocalSalesOrderId,
     selectedQuoteId,
     salesOrderSourceSnapshot,
+    salesOrderSourceVersion,
     builderStatus,
     quoteNo,
     customerName,
@@ -1869,6 +1873,7 @@ export function QuotesPage({
       };
       setWorkbenchMode("existing");
       setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(editorOrder));
+      setSalesOrderSourceVersion(editorOrder.updated_at || "");
       setSelectedLocalSalesOrderId(editorOrder.id);
       setSelectedQuoteId("");
       onSelectedQuoteChange?.("");
@@ -1914,6 +1919,7 @@ export function QuotesPage({
       if (selectedLocalSalesOrderId === order.id && !quoteBuilderLines.length) {
         setSelectedLocalSalesOrderId("");
         setSalesOrderSourceSnapshot("");
+        setSalesOrderSourceVersion("");
       }
       setSalesOrdersView("list");
       onSelectedSalesOrderChange?.("");
@@ -2013,10 +2019,11 @@ export function QuotesPage({
           portal_seen_at: currentLocalSalesOrder?.portal_seen_at ?? null,
           lines: syncedLines,
         });
-        const saved = await upsertSalesOrder(order);
+        const saved = await upsertSalesOrder(order, salesOrderSourceVersion);
         if (!isCurrent()) return;
         setQuoteBuilderLines(syncedLines);
         setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
+        setSalesOrderSourceVersion(saved.updated_at || "");
         await refreshLocalSalesOrders(saved.id);
       } else {
         setQuoteBuilderLines(applySalesOrderCustomerPricing(syncedLines, customerPricingContextRef.current));
@@ -2273,7 +2280,7 @@ export function QuotesPage({
       actionFeedback.fail(t("sales.orders.addLinesBeforeSavingDraft"));
       return null;
     }
-    const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"));
+    const saved = await upsertSalesOrder(buildSalesOrderPayload("draft"), selectedLocalSalesOrderId ? salesOrderSourceVersion : null);
     // Publish the committed identity and its row together. Selecting an id
     // absent from the previous summary list would trigger stale-cache cleanup.
     setLocalSalesOrders((current) => mergeSavedSalesOrder(current, saved));
@@ -2284,6 +2291,7 @@ export function QuotesPage({
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
     setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(saved));
+    setSalesOrderSourceVersion(saved.updated_at || "");
     let listRefreshFailed = false;
     try {
       await refreshLocalSalesOrders(saved.id, saved);
@@ -3159,6 +3167,7 @@ export function QuotesPage({
     setSalesOrdersView("detail");
     setWorkbenchMode("new");
     setSalesOrderSourceSnapshot("");
+    setSalesOrderSourceVersion("");
     onSelectedSalesOrderChange?.("");
     setSelectedQuoteId("");
     onSelectedQuoteChange?.("");
@@ -3537,7 +3546,7 @@ export function QuotesPage({
       }
       const attempt = pending || { fingerprint, order, decisionId: crypto.randomUUID() };
       confirmationAttemptRef.current = attempt;
-      const { salesOrder: saved, purchaseOrders } = await confirmSalesOrderWithPurchases(attempt.order, attempt.decisionId);
+      const { salesOrder: saved, purchaseOrders } = await confirmSalesOrderWithPurchases(attempt.order, attempt.decisionId, selectedLocalSalesOrderId ? salesOrderSourceVersion : null);
       confirmationAttemptRef.current = null;
       const seenOrder =
         saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
@@ -3545,6 +3554,7 @@ export function QuotesPage({
       setSelectedQuoteId("");
       onSelectedQuoteChange?.("");
       setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(effectiveOrder));
+      setSalesOrderSourceVersion(effectiveOrder.updated_at || "");
       await refreshLocalSalesOrders(effectiveOrder.id);
       setPendingConfirmedOrder(effectiveOrder);
       setInvoicePromptOpen(true);

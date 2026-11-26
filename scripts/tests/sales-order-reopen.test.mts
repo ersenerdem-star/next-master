@@ -282,3 +282,32 @@ test('unmounting the editor clears its pending feedback and ignores a late saved
     assert.equal(view.saved.length, 0);
   } finally { await view.close(); }
 });
+
+test('a saved editor sends the version actually loaded, and refreshes it after save', async () => {
+  const order = fullOrder();
+  const view = await fixture({ cache: existingCache(order, []), orders: [order] });
+  try {
+    assert.equal(view.lineRows().length, 1);
+    await view.click('sales.orders.saveDraft');
+    const save = view.calls.filter(call => call.name === 'upsertSalesOrder').at(-1)!;
+    assert.equal(save.args[1], order.updated_at);
+    await view.flushCache();
+    assert.equal(view.cache().salesOrderSourceVersion, view.saved[0].updated_at);
+  } finally { await view.close(); }
+});
+
+test('a stale-version failure keeps unsaved lines and tells the user to reopen', async () => {
+  const order = fullOrder();
+  const view = await fixture({ cache: existingCache(order, []), orders: [order] });
+  try {
+    const fixtureImpl = (globalThis as any)[fixtureKey];
+    const originalCall = fixtureImpl.call;
+    fixtureImpl.call = (name: string, ...args: any[]) => name === 'upsertSalesOrder'
+      ? Promise.reject(new Error('SALES_ORDER_STALE_VERSION')) : originalCall(name, ...args);
+    await view.click('sales.orders.saveDraft');
+    assert.equal(view.lineRows()[0].resolvedCode, 'TEST-001');
+    assert.equal(view.lineRows()[0].qty, 3);
+    assert.ok(view.feedbackEvents.some(event => event.kind === 'fail' && /reopen/i.test(event.text)));
+    assert.equal(view.saved.length, 0);
+  } finally { await view.close(); }
+});
