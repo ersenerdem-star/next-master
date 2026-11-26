@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 const output = resolve('scripts/tests/.payment-version-ui-fixture.mjs');
 after(async () => { await rm(output, { force: true }); });
 await build({
-  stdin: {contents: `export {usePaymentDraftEditor} from './apps/web/src/presentation/hooks/usePaymentDraftEditor.ts'; export {upsertPaymentReceived,upsertPaymentMade} from './apps/web/src/infrastructure/api/ordersApi.ts'; export {documentNumberError} from './apps/web/src/shared/documentNumberError.ts';`, resolveDir:process.cwd(), loader:'ts'},
+  stdin: {contents: `export {usePaymentDraftEditor} from './apps/web/src/presentation/hooks/usePaymentDraftEditor.ts'; export {upsertPaymentReceived,upsertPaymentMade,deletePaymentReceived,deletePaymentMade} from './apps/web/src/infrastructure/api/ordersApi.ts'; export {documentNumberError} from './apps/web/src/shared/documentNumberError.ts';`, resolveDir:process.cwd(), loader:'ts'},
   outfile:output, bundle:true, platform:'node', format:'esm', packages:'external',
   plugins:[{name:'mock-rpc',setup(builder) {
     builder.onResolve({filter:/\/appRpcApi$/},()=>({path:'rpc',namespace:'mock'}));
@@ -25,7 +25,7 @@ await build({
     }));
   }}],
 });
-const {usePaymentDraftEditor, upsertPaymentReceived, upsertPaymentMade, documentNumberError}=await import(pathToFileURL(output).href);
+const {usePaymentDraftEditor, upsertPaymentReceived, upsertPaymentMade, deletePaymentReceived, deletePaymentMade, documentNumberError}=await import(pathToFileURL(output).href);
 const version='2026-11-26T10:12:34.123456+00:00';
 for (const kind of ['received','made']) {
   test(`${kind} editor sends its original version and keeps unsaved input on conflict`, async () => {
@@ -50,7 +50,29 @@ for (const kind of ['received','made']) {
     assert.equal(rpcCall[1].previous_id,'PAY-1');
     assert.equal(rpcCall[1].payload.amount,321);
     assert.equal(renderer.root.findByType('input').props.value,'321');
-    assert.match(renderer.root.findByType('p').children.join(''),/henüz kaydedilmedi/);
+    assert.match(renderer.root.findByType('p').children.join(''),/İşlem yapılmadı/);
+    await act(async()=>renderer.unmount());
+  });
+}
+
+for (const kind of ['received','made']) {
+  test(`${kind} deletion sends the row version and reports conflict`, async () => {
+    let rpcCall:any;
+    (globalThis as any).__paymentUiRpc = async (...args:any[]) => { rpcCall=args; throw new Error('PAYMENT_VERSION_CONFLICT'); };
+    const row={id:'PAY-1',updated_at:version};
+    function DeleteAction() {
+      const [message,setMessage]=useState('');
+      return createElement('section',{},
+        createElement('button',{onClick:async()=>{try { await (kind==='received'?deletePaymentReceived:deletePaymentMade)(row.id,row.updated_at); } catch(e) {setMessage(documentNumberError(e,'tr','hata'));} }},'delete'),
+        createElement('p',{},message),
+      );
+    }
+    let renderer:any;
+    await act(async()=>{renderer=create(createElement(DeleteAction));});
+    await act(async()=>{await renderer.root.findByType('button').props.onClick();});
+    assert.equal(rpcCall[0],kind==='received'?'delete_payment_received_guarded':'delete_payment_made_guarded');
+    assert.deepEqual(rpcCall[1],{id:'PAY-1',expected_updated_at:version});
+    assert.match(renderer.root.findByType('p').children.join(''),/İşlem yapılmadı/);
     await act(async()=>renderer.unmount());
   });
 }

@@ -1514,7 +1514,7 @@ export function PurchasesPage({
     }
     try {
       actionFeedback.begin(p("feedback.deletingPayment", { id: row.id }));
-      await deletePaymentMade(row.id);
+      await deletePaymentMade(row.id, row.updated_at || null);
       const [refreshedPayments, refreshedBills] = await Promise.all([fetchPaymentsMade(), fetchBillSummaries()]);
       setPaymentsMade(refreshedPayments);
       setBills(refreshedBills);
@@ -1525,7 +1525,7 @@ export function PurchasesPage({
       }
       actionFeedback.succeed(p("feedback.paymentDeleted", { id: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : p("errors.paymentDeleteFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, p("errors.paymentDeleteFailed")));
     }
   }
 

@@ -42,8 +42,8 @@ export function documentNumberError(error: unknown, locale: string, fallback: st
   }
   if (message.includes("PAYMENT_VERSION_CONFLICT") || message.includes("PAYMENT_VERSION_REQUIRED")) {
     return locale === "tr"
-      ? "Bu ödeme veya tahsilat başka bir oturumda değişmiş olabilir. Güncel kaydı yeniden açıp kontrol edin; yaptığınız değişiklikler henüz kaydedilmedi."
-      : "This payment may have changed in another session. Reopen the current record and review it; your changes have not been saved.";
+      ? "Bu ödeme veya tahsilat başka bir oturumda değişmiş olabilir. İşlem yapılmadı; güncel kaydı yeniden açıp kontrol edin."
+      : "This payment may have changed in another session. No action was taken; reopen the current record and review it.";
   }
   if (message.includes("PAYMENT_NUMBER_ALREADY_USED")) {
     return locale === "tr"

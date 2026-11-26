@@ -12,6 +12,7 @@ until docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
 done
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < tests/sql/payment_integrity_setup.sql >/dev/null
 sed -n '/^create or replace function public.save_payment_received_atomic(/,/^create or replace function public.delete_payment_received_guarded(/p' supabase/migrations/20260707_94_payment_atomic_status_boundary.sql | sed '$d' | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null
+sed -n '/^create or replace function public.delete_payment_received_guarded(/,/^grant execute on function public.save_payment_received_atomic/p' supabase/migrations/20260707_94_payment_atomic_status_boundary.sql | sed '$d' | docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres >/dev/null
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126133711_payment_integrity_guard.sql >/dev/null
 
 run_race() {
@@ -36,6 +37,7 @@ run_race() {
   echo "PASS: $label concurrent duplicate rejected"
 }
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126140500_payment_version_guard.sql >/dev/null
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres < supabase/migrations/20261126141700_payment_delete_version_guard.sql >/dev/null
 run_race receipt save_payment_received_atomic invoice_id payments_received
 run_race made save_payment_made_atomic bill_id payments_made
 
@@ -63,3 +65,32 @@ run_update_race() {
 }
 run_update_race receipt save_payment_received_atomic invoice_id payments_received
 run_update_race made save_payment_made_atomic bill_id payments_made
+
+run_delete_race() {
+  label="$1" savefn="$2" deletefn="$3" field="$4" table="$5" resultkey="$6"
+  id="DELETE-$label"
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SELECT public.$savefn('{\"id\":\"$id\",\"$field\":\"A\",\"amount\":100,\"currency\":\"EUR\"}'::jsonb,null)" >/dev/null
+  version="$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select updated_at::text from public.$table where id='$id'")"
+  if docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SELECT public.$deletefn('$id')" >"$tmpdir/$label-old-delete.log" 2>&1; then echo "$label legacy delete accepted" >&2; exit 1; fi
+  grep -q PAYMENT_VERSION_REQUIRED "$tmpdir/$label-old-delete.log" || { cat "$tmpdir/$label-old-delete.log" >&2; exit 1; }
+  update="SELECT public.$savefn('{\"id\":\"$id\",\"$field\":\"A\",\"amount\":200,\"currency\":\"EUR\",\"expected_updated_at\":\"$version\"}'::jsonb,'$id')"
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SET application_name='nm-delete-first'; BEGIN; $update; SELECT pg_sleep(3); COMMIT;" >"$tmpdir/$label-delete-first.log" 2>&1 &
+  first_pid=$!
+  ready=0
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    if [ "$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select count(*) from pg_stat_activity where application_name='nm-delete-first' and wait_event='PgSleep'")" = 1 ]; then ready=1; break; fi
+    sleep 0.1
+  done
+  [ "$ready" = 1 ] || { cat "$tmpdir/$label-delete-first.log" >&2; exit 1; }
+  if docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -c "SELECT public.$deletefn('$id','$version')" >"$tmpdir/$label-delete-stale.log" 2>&1; then echo "$label stale delete accepted" >&2; exit 1; fi
+  wait "$first_pid"
+  grep -q PAYMENT_VERSION_CONFLICT "$tmpdir/$label-delete-stale.log" || { cat "$tmpdir/$label-delete-stale.log" >&2; exit 1; }
+  count="$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select count(*) from public.$table where id='$id'")"
+  [ "$count" = 1 ] || { echo "$label unexpectedly deleted" >&2; exit 1; }
+  current="$(docker exec "$container" psql -X -A -t -U postgres -d postgres -c "select updated_at::text from public.$table where id='$id'")"
+  result="$(docker exec "$container" psql -X -A -t -v ON_ERROR_STOP=1 -U postgres -d postgres -c "select public.$deletefn('$id','$current')->'$resultkey'->>'id'")"
+  [ "$result" = A ] || { echo "$label failed to recalculate document" >&2; exit 1; }
+  echo "PASS: $label stale delete rejected; fresh delete recalculates"
+}
+run_delete_race receipt save_payment_received_atomic delete_payment_received_guarded invoice_id payments_received invoice
+run_delete_race made save_payment_made_atomic delete_payment_made_guarded bill_id payments_made bill

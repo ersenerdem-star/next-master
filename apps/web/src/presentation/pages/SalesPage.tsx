@@ -535,7 +535,7 @@ export function SalesPage({
     }
     try {
       actionFeedback.begin(t("sales.payments.deleting", { paymentNo: row.id }));
-      await deletePaymentReceived(row.id);
+      await deletePaymentReceived(row.id, row.updated_at || null);
       const [refreshedPayments, refreshedInvoices] = await Promise.all([fetchPaymentsReceived(), fetchInvoiceSummaries()]);
       setPaymentsReceived(refreshedPayments);
       setInvoices(refreshedInvoices);
@@ -546,7 +546,7 @@ export function SalesPage({
       }
       actionFeedback.succeed(t("sales.payments.deleted", { paymentNo: row.id }));
     } catch (caught) {
-      actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.payments.deleteFailed"));
+      actionFeedback.fail(documentNumberError(caught, locale, t("sales.payments.deleteFailed")));
     }
   }
 

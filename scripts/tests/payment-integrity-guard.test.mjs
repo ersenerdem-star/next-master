@@ -108,3 +108,31 @@ test('payment updates require an unchanged version and reject older clients', as
     }
   } finally { await db.close(); }
 });
+
+test('deleting payments requires the current version and recalculates the document', async () => {
+  const db = await fixture();
+  try {
+    const start = initial.indexOf('create or replace function public.delete_payment_received_guarded(');
+    const end = initial.indexOf('grant execute on function public.save_payment_received_atomic', start);
+    await db.exec(initial.slice(start, end));
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126140500_payment_version_guard.sql', import.meta.url), 'utf8'));
+    await db.exec(readFileSync(new URL('../../supabase/migrations/20261126141700_payment_delete_version_guard.sql', import.meta.url), 'utf8'));
+    for (const [fn, table, kind] of [['delete_payment_received_guarded','payments_received','invoice'],['delete_payment_made_guarded','payments_made','bill']]) {
+      const version=(await db.query(`select updated_at::text as version from public.${table} where id='P'`)).rows[0].version;
+      await assert.rejects(()=>db.query(`select public.${fn}($1)`,['P']), /PAYMENT_VERSION_REQUIRED/);
+      await assert.rejects(()=>db.query(`select public.${fn}($1,$2)`,['P','2020-01-01T00:00:00Z']), /PAYMENT_VERSION_CONFLICT/);
+      await assert.rejects(()=>db.query(`select public.${fn}($1,$2)`,['P','not-a-date']), /PAYMENT_VERSION_REQUIRED/);
+      await db.exec("select set_config('test.role','sales',false)");
+      await assert.rejects(()=>db.query(`select public.${fn}($1,$2)`,['P',version]), /Only active admin/);
+      await db.exec("select set_config('test.role','admin',false)");
+      assert.equal((await db.query(`select count(*)::int as n from public.${table} where id='P'`)).rows[0].n,1);
+      const deleted=await db.query(`select public.${fn}($1,$2) result`,['P',version]);
+      assert.equal(deleted.rows[0].result.deleted,true);
+      assert.equal(deleted.rows[0].result[kind].id,'A');
+      assert.equal((await db.query(`select count(*)::int as n from public.${table} where id='P'`)).rows[0].n,0);
+    }
+    const log=await db.query('select kind, document_id from public.recalc_log order by kind');
+    assert.deepEqual(log.rows,[{kind:'bill',document_id:'A'},{kind:'invoice',document_id:'A'}]);
+    await assert.rejects(()=>db.query('select public.delete_payment_received_guarded($1,$2)',['FOREIGN','2020-01-01']), /Received payment was not found/);
+  } finally { await db.close(); }
+});

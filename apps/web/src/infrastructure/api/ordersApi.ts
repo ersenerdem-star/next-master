@@ -1122,8 +1122,8 @@ export async function fetchPaymentsReceived(): Promise<LocalPaymentReceived[]> {
   return ((data || []) as unknown as Record<string, unknown>[]).map(mapPaymentReceivedRow);
 }
 
-export async function deletePaymentReceived(paymentId: string): Promise<void> {
-  await callAppRpc("delete_payment_received_guarded", { id: paymentId });
+export async function deletePaymentReceived(paymentId: string, expectedUpdatedAt: string | null): Promise<void> {
+  await callAppRpc("delete_payment_received_guarded", { id: paymentId, expected_updated_at: expectedUpdatedAt || null });
 }
 
 export async function fetchPaymentsReceivedByCustomerNames(names: string[]): Promise<LocalPaymentReceived[]> {
@@ -1161,8 +1161,8 @@ export async function fetchPaymentsMade(): Promise<LocalPaymentMade[]> {
   return ((data || []) as unknown as Record<string, unknown>[]).map(mapPaymentMadeRow);
 }
 
-export async function deletePaymentMade(paymentId: string): Promise<void> {
-  await callAppRpc("delete_payment_made_guarded", { id: paymentId });
+export async function deletePaymentMade(paymentId: string, expectedUpdatedAt: string | null): Promise<void> {
+  await callAppRpc("delete_payment_made_guarded", { id: paymentId, expected_updated_at: expectedUpdatedAt || null });
 }
 
 export async function fetchPaymentsMadeBySupplierNames(names: string[]): Promise<LocalPaymentMade[]> {
