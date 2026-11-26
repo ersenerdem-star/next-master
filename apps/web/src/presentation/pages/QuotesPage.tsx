@@ -1957,14 +1957,17 @@ export function QuotesPage({
       return;
     }
     const workspaceGeneration = salesOrderLoadGenerationRef.current;
-    const operation = ++resyncOperationRef.current;
-    const isCurrent = () => operation === resyncOperationRef.current && isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current);
+    let operation = resyncOperationRef.current;
+    let started = false;
+    const isCurrent = () => started && operation === resyncOperationRef.current && isSalesOrderWorkCurrent(workspaceGeneration, salesOrderLoadGenerationRef.current);
     try {
       if (customerPricingIssue) throw new Error(customerPricingIssue);
       if (!hasCustomerPricingProfile && workbenchMode === "existing" && quoteBuilderLines.some((line) => line.customer_pricing_pending)) {
         throw new Error(locale === "tr" ? "Bu taslağın bekleyen fiyatları için önce müşteriyi seçin." : "Select a customer before refreshing this draft's pending prices.");
       }
       assertWahlerQuantityPricesReady();
+      operation = ++resyncOperationRef.current;
+      started = true;
       resyncingCatalogRef.current = true;
       setLoadingDetail(false);
       setResyncingCatalog(true);
@@ -2035,10 +2038,10 @@ export function QuotesPage({
       if (summary.failed) actionFeedback.fail(message);
       else actionFeedback.succeed(message);
     } catch (caught) {
-      if (!isCurrent()) return;
+      if (started && !isCurrent()) return;
       actionFeedback.fail(caught instanceof Error ? caught.message : t("sales.orders.resyncFailed"));
     } finally {
-      if (operation === resyncOperationRef.current) {
+      if (started && operation === resyncOperationRef.current) {
         resyncingCatalogRef.current = false;
         setResyncingCatalog(false);
       }
