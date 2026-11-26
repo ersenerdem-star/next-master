@@ -876,7 +876,7 @@ export const enMessages = {
     "actions.addNewItem": "Add New Item",
     "actions.addReference": "Add Reference",
     "actions.addToPurchaseDraft": "Add to Purchase Draft",
-    "actions.addToSalesOrder": "Add to Sales Order",
+    "actions.addToSalesOrder": "Add to New Sales Order",
     "actions.cancel": "Cancel",
     "actions.cancelImport": "Cancel Import",
     "actions.clearSearch": "Clear Search",

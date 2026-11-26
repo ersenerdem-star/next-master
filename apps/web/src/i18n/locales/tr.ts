@@ -856,7 +856,7 @@ export const trMessages = {
     "actions.addNewItem": "Yeni Kalem Ekle",
     "actions.addReference": "Referans Ekle",
     "actions.addToPurchaseDraft": "Satın Alma Taslağına Ekle",
-    "actions.addToSalesOrder": "Satış Siparişine Ekle",
+    "actions.addToSalesOrder": "Yeni Satış Siparişine Ekle",
     "actions.cancel": "İptal",
     "actions.cancelImport": "İçe Aktarmayı İptal Et",
     "actions.clearSearch": "Aramayı Temizle",

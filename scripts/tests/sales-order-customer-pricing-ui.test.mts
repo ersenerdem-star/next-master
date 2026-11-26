@@ -409,14 +409,18 @@ test('catalog item handoff waits for in-flight sync and resumes afterwards',asyn
   const oldLine={...unpricedLine(),requestedCode:'OLD',resolvedCode:'OLD',sell_price:73.5};
   const old=fullOrder('old',[oldLine]); const view=await fixture({cache:existingCache(old,[oldLine]),orders:[old]});
   try {
+    view.holdSingleLookup();
     await view.click('sales.orders.resyncFromCatalog');
     await view.queueCatalogHandoff();
     assert.equal(view.prompts.length,0,'the catalog handoff must not interrupt the current sync');
     assert.equal(view.handoffPending(),true);
     await view.resolve(view.resyncRequest,{lines:[{...oldLine,description:'Refreshed'}],preservedOtherPrices:false});
     assert.equal(view.saved.length,1); assert.equal(view.saved[0].id,'old');
-    assert.equal(view.prompts.length,1,'the handoff should resume when synchronization completes');
+    assert.equal(view.prompts.length,0,'saved orders must not be offered as transfer targets');
     assert.equal(view.handoffPending(),false);
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,1,'the handoff should resume when synchronization completes');
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'HANDOFF',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+    assert.deepEqual(view.lineRows().map(row=>row.resolvedCode),['HANDOFF']);
   } finally {await view.close()}
 });
 
@@ -558,5 +562,49 @@ test('catalog handoff waits for active import and runs after the import complete
     assert.ok(view.lineRows().some(row=>row.resolvedCode==='HANDOFF'));
     assert.ok(view.lineRows().some(row=>row.resolvedCode==='IMPORT'));
     assert.equal(view.buttons('Import CSV')[0].props.disabled,false);
+  } finally {await view.close()}
+});
+
+test('catalog handoff cannot choose an existing order even when several share the same number',async()=>{
+  const first={...fullOrder('first'),sales_order_no:'DUPLICATE',customer_name:'Customer one'};
+  const second={...fullOrder('second'),sales_order_no:'DUPLICATE',customer_name:'Customer two'};
+  const view=await fixture({cache:customerlessCache([unpricedLine()]),orders:[first,second]});
+  try {
+    view.holdSingleLookup(); await view.queueCatalogHandoff();
+    assert.equal(view.prompts.length,0,'saved order selection must not be offered');
+    assert.equal(view.calls.filter(c=>c.name==='fetchSalesOrderById').length,0,'no existing order may be loaded');
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'HANDOFF',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+    assert.ok(view.lineRows().some(row=>row.resolvedCode==='HANDOFF'));
+    assert.ok(view.lineRows().some(row=>row.resolvedCode==='0012'),'current new draft must be preserved');
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
+test('catalog handoff does not discard unsaved edits on an existing order when navigation is declined',async()=>{
+  const order=fullOrder('existing'); const changed=[...order.lines,line('UNSAVED')];
+  const view=await fixture({cache:existingCache(order,changed),orders:[order]});
+  try {
+    view.setConfirmResponse(false); view.holdSingleLookup(); await view.queueCatalogHandoff();
+    assert.equal(view.confirms.length,1,'user must be asked to preserve edits');
+    assert.equal(view.saved.length,0);
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,0,'cancelled navigation must not start transfer');
+    assert.deepEqual(view.lineRows().map(row=>row.resolvedCode),['TEST-001','UNSAVED']);
+  } finally {await view.close()}
+});
+
+test('catalog handoff saves confirmed unsaved edits then opens a fresh customerless order',async()=>{
+  const order={...fullOrder('existing'),customer_id:'customer-a',customer_name:'Customer A'}; const changed=[...order.lines,line('UNSAVED')];
+  const cache={...existingCache(order,changed),customerName:'Customer A',customerSelection:'customer-a'};
+  const view=await fixture({cache,orders:[order]});
+  try {
+    view.setConfirmResponse(true); view.holdSingleLookup(); await view.queueCatalogHandoff();
+    assert.equal(view.saved.length,1,'explicit save before leaving preserves the old order');
+    assert.deepEqual(view.saved[0].lines.map((row:any)=>row.resolvedCode),['TEST-001','UNSAVED']);
+    assert.equal(view.calls.filter(c=>c.name==='resolveQuoteLine').length,1);
+    assert.equal(view.calls.find(c=>c.name==='resolveQuoteLine')?.args[0].calculateSellPrice,false,'the prior customer must not be used even while React state resets');
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'HANDOFF',brand:'Synthetic',buy_price:100,sell_price:null},supplierOptions:[]});
+    assert.deepEqual(view.lineRows().map(row=>row.resolvedCode),['HANDOFF']);
+    assert.equal(view.lineRows()[0].sell_price,null,'the previous customer must not price the new order');
+    await view.flushCache(); assert.equal(view.cache().selectedLocalSalesOrderId,'');
   } finally {await view.close()}
 });

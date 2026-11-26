@@ -1126,8 +1126,7 @@ export function QuotesPage({
   useEffect(() => {
     if (pendingCatalogSalesHandledRef.current) return;
     if (resyncingCatalog || importingLines || resolvingLine) return;
-    // Wait until the saved-order list is available so a catalog handoff can
-    // offer every existing draft instead of silently creating a new one.
+    // Wait for the saved-order list so navigation can check unsaved changes.
     if (!localSalesOrdersLoaded) return;
     const pending = consumeCatalogTransfer(PENDING_CATALOG_SALES_ITEM_KEY);
     if (!pending) return;
@@ -1135,37 +1134,24 @@ export function QuotesPage({
     const pendingItem = pending;
 
     async function run() {
-      const draftOrders = localSalesOrders.filter((order) => order.status === "draft");
-      let targetOrder: LocalSalesOrder | null = null;
-      if (draftOrders.length) {
-        const orderChoices = draftOrders
-          .slice(0, 20)
-          .map((order, index) => `${index + 1}. ${order.sales_order_no || order.id}`)
-          .join("\n");
-        const answer = window.prompt(
-          `Existing draft sales orders:\n${orderChoices}\n\nEnter an order number or ID to add ${pendingItem.product_code} to it. Leave blank for a new order.`,
-          draftOrders[0]?.sales_order_no || "",
-        );
-        if (answer === null) return;
-        const normalizedAnswer = answer.trim().toLowerCase();
-        if (normalizedAnswer) {
-          targetOrder = draftOrders.find(
-            (order, index) =>
-              order.id.toLowerCase() === normalizedAnswer ||
-              order.sales_order_no.toLowerCase() === normalizedAnswer ||
-              String(index + 1) === normalizedAnswer,
-          ) || null;
-          if (!targetOrder) {
-            setBuilderStatus(`Draft sales order not found: ${answer.trim()}`);
-            actionFeedback.fail(`Draft sales order not found: ${answer.trim()}`);
-            return;
-          }
+      // A catalog handoff adds one item to a new, unsaved workbench only.
+      // Saved sales orders must be edited manually inside the order itself.
+      if (workbenchMode !== "new" || selectedLocalSalesOrderId || selectedQuoteId) {
+        let opened = false;
+        await confirmSalesOrderNavigation(() => {
+          resetSalesOrderEditor();
+          // The previous customer's React state may not have committed yet.
+          // The new order has no customer and must never use the old price profile.
+          customerPricingContextRef.current = { ...customerPricingContextRef.current, workbenchMode: "new", hasCustomerProfile: false, pricingBlocked: false };
+          opened = true;
+        });
+        if (!opened) {
+          const message = locale === "tr" ? "Katalog aktarımı tamamlanmadı; mevcut sipariş korundu." : "The catalog transfer was not completed; the current order was preserved.";
+          setBuilderStatus(message);
+          actionFeedback.fail(message);
+          return;
         }
-      }
-
-      if (targetOrder) {
-        if (!await loadLocalSalesOrderIntoEditor(targetOrder)) return;
-      } else if (!quoteBuilderLines.length) {
+      } else if (!quoteBuilderLines.length && !salesOrderHasUnsavedChanges) {
         resetSalesOrderEditor();
         setSelectedLocalSalesOrderId("");
         onSelectedSalesOrderChange?.("");
