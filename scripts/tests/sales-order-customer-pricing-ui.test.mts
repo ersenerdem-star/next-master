@@ -79,8 +79,8 @@ const existingCache = (order: ReturnType<typeof fullOrder>, lines = order.lines)
 function content(node: ReactTestInstance | string): string {
   return typeof node === 'string' ? node : node.children.map(child => content(child)).join('');
 }
-async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedSalesOrderId = '', selectedQuoteId = '', holdDetail = false, failDetail = false, holdQuotes = false, holdQuoteDetail = false }: {
-  cache?: Record<string, any>; orders?: Array<ReturnType<typeof fullOrder>>; selectedSalesOrderId?: string; selectedQuoteId?:string; holdDetail?: boolean; failDetail?: boolean; holdQuotes?:boolean; holdQuoteDetail?:boolean;
+async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedSalesOrderId = '', selectedQuoteId = '', holdDetail = false, failDetail = false, holdQuotes = false, holdQuoteDetail = false, failSeen = false, failPostConfirmRefresh = false }: {
+  cache?: Record<string, any>; orders?: Array<ReturnType<typeof fullOrder>>; selectedSalesOrderId?: string; selectedQuoteId?:string; holdDetail?: boolean; failDetail?: boolean; holdQuotes?:boolean; holdQuoteDetail?:boolean; failSeen?:boolean; failPostConfirmRefresh?:boolean;
 } = {}) {
   const globals = globalThis as any;
   const previous = { window: globals.window, document: globals.document, HTMLElement: globals.HTMLElement, fetch: globals.fetch, fixture: globals[fixtureKey], act: globals.IS_REACT_ACT_ENVIRONMENT };
@@ -110,11 +110,25 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   const saved: Array<ReturnType<typeof fullOrder>> = [];
   let storedOrders = [...orders];
   let detailFailure = failDetail;
+  let confirmed = false;
   globals[fixtureKey] = {
     feedback: Object.fromEntries(['begin', 'succeed', 'fail', 'clear'].map(kind => [kind, (text: string) => feedbackEvents.push({ kind, text })])),
     call(name: string, ...args: any[]) {
       calls.push({ name, args });
-      if (name === 'fetchSalesOrderSummaries') return summaryQueue.shift()?.promise ?? Promise.resolve(storedOrders.map(summary));
+      if (name === 'fetchSalesOrderSummaries') return confirmed && failPostConfirmRefresh ? Promise.reject(Error('Synthetic refresh failure')) : summaryQueue.shift()?.promise ?? Promise.resolve(storedOrders.map(summary));
+      if (name === 'callAppRpc') {
+        if (args[0] === 'cloud_sales_order_preserved_supplier_lines') return Promise.resolve({preserved_indices: args[1].input_lines.map((_row:any,index:number)=>index), disabled_indices: []});
+        if (args[0] === 'cloud_current_supplier_price_options_batch') return Promise.resolve(args[1].input_requests.map((_row:any,index:number)=>({request_index:index,has_published_scope:false,options:[]})));
+        throw Error(`Unexpected RPC ${args[0]}`);
+      }
+      if (name === 'confirmSalesOrderWithPurchases') {
+        const source=storedOrders.find(row=>row.id===args[0].id);
+        const savedOrder = {...args[0], source_channel:source?.source_channel || 'internal', portal_submitted_at:source?.portal_submitted_at || null, status:'confirmed', updated_at:'2026-11-26T10:00:00Z', confirmed_at:'2026-11-26T10:00:00Z'};
+        storedOrders = [savedOrder, ...storedOrders.filter(row => row.id !== savedOrder.id)]; confirmed = true;
+        return Promise.resolve({salesOrder:savedOrder, purchaseOrders:[{id:'synthetic-po'}]});
+      }
+      if (name === 'markSalesOrderPortalSeen') return failSeen ? Promise.reject(Error('Synthetic seen failure')) : Promise.resolve(null);
+      if (name === 'createFullSalesInvoices') return Promise.resolve([{id:'synthetic-invoice'}]);
       if (name === 'fetchSalesOrderById') {
         if (firstDetail) return firstDetail.promise;
         if (detailFailure) return Promise.reject(Error('Synthetic detail load failed'));
@@ -607,4 +621,31 @@ test('catalog handoff saves confirmed unsaved edits then opens a fresh customerl
     assert.equal(view.lineRows()[0].sell_price,null,'the previous customer must not price the new order');
     await view.flushCache(); assert.equal(view.cache().selectedLocalSalesOrderId,'');
   } finally {await view.close()}
+});
+
+
+test('confirmation remains successful if the portal marker fails, and invoice uses the server version', async()=>{
+  const order={...fullOrder('portal-postcommit'),source_channel:'portal',portal_submitted_at:'2026-11-26T09:00:00Z'};
+  const view=await fixture({cache:existingCache(order),orders:[order],failSeen:true});
+  try {
+    await view.click('sales.orders.markConfirmed');
+    assert.equal(view.calls.filter(call=>call.name==='confirmSalesOrderWithPurchases').length,1);
+    assert.ok(view.feedbackEvents.some(event=>event.kind==='succeed' && /was confirmed.*could not be refreshed/.test(event.text)),JSON.stringify(view.feedbackEvents));
+    assert.ok(!view.feedbackEvents.some(event=>event.kind==='fail'),JSON.stringify(view.feedbackEvents));
+    await view.click('sales.orders.convertToInvoice');
+    const invoiceCall=view.calls.find(call=>call.name==='createFullSalesInvoices');
+    assert.equal(invoiceCall?.args[1][0].updated_at,'2026-11-26T10:00:00Z');
+  } finally { await view.close(); }
+});
+
+test('confirmation remains successful and invoice prompt stays usable if list refresh fails', async()=>{
+  const order=fullOrder('list-postcommit');
+  const view=await fixture({cache:existingCache(order),orders:[order],failPostConfirmRefresh:true});
+  try {
+    await view.click('sales.orders.markConfirmed');
+    assert.equal(view.calls.filter(call=>call.name==='confirmSalesOrderWithPurchases').length,1);
+    assert.ok(view.feedbackEvents.some(event=>event.kind==='succeed' && /was confirmed.*could not be refreshed/.test(event.text)),JSON.stringify(view.feedbackEvents));
+    assert.ok(!view.feedbackEvents.some(event=>event.kind==='fail'),JSON.stringify(view.feedbackEvents));
+    assert.ok(view.text().includes('sales.orders.convertToInvoiceDescription'));
+  } finally { await view.close(); }
 });

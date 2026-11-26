@@ -3560,19 +3560,32 @@ export function QuotesPage({
       confirmationAttemptRef.current = attempt;
       const { salesOrder: saved, purchaseOrders } = await confirmSalesOrderWithPurchases(attempt.order, attempt.decisionId, selectedLocalSalesOrderId ? salesOrderSourceVersion : null);
       confirmationAttemptRef.current = null;
-      const seenOrder =
-        saved.source_channel === "portal" && saved.portal_submitted_at ? await markSalesOrderPortalSeen(saved.id) : null;
-      const effectiveOrder = seenOrder || saved;
+      // Confirmation and PO creation have already committed. A failed portal
+      // marker or list refresh must never make the user think they failed.
+      let effectiveOrder = saved;
+      let auxiliaryRefreshFailed = false;
+      if (saved.source_channel === "portal" && saved.portal_submitted_at) {
+        try {
+          effectiveOrder = (await markSalesOrderPortalSeen(saved.id)) || saved;
+        } catch {
+          auxiliaryRefreshFailed = true;
+          // The marker may have committed even if its response was lost. Use a
+          // fresh server version for the optional invoice if it is reachable.
+          try { effectiveOrder = await fetchSalesOrderById(saved.id); } catch { /* retain the confirmed server response */ }
+        }
+      }
       setSelectedQuoteId("");
       onSelectedQuoteChange?.("");
       setSalesOrderSourceSnapshot(serializeSalesOrderForDirtyCheck(effectiveOrder));
       setSalesOrderSourceVersion(effectiveOrder.updated_at || "");
-      await refreshLocalSalesOrders(effectiveOrder.id);
+      try { await refreshLocalSalesOrders(effectiveOrder.id); } catch { auxiliaryRefreshFailed = true; }
       setPendingConfirmedOrder(effectiveOrder);
       setInvoicePromptOpen(true);
       setQuoteNo(effectiveOrder.sales_order_no);
       setBuilderStatus(t("sales.orders.confirmedWithPurchaseOrders", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
-      actionFeedback.succeed(t("sales.orders.confirmedWithPurchaseOrdersToast", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
+      actionFeedback.succeed(auxiliaryRefreshFailed
+        ? locale === "tr" ? `Sipariş ${effectiveOrder.sales_order_no} onaylandı ve ${purchaseOrders.length} satın alma siparişi oluşturuldu. Portal durumu veya liste yenilenemedi; sayfayı yenileyip kontrol edin.` : `Order ${effectiveOrder.sales_order_no} was confirmed and ${purchaseOrders.length} purchase orders created. The portal status or list could not be refreshed; reload the page to check.`
+        : t("sales.orders.confirmedWithPurchaseOrdersToast", { salesOrderNo: effectiveOrder.sales_order_no, count: purchaseOrders.length.toLocaleString("en-US") }));
     } catch (caught) {
       actionFeedback.fail(salesConfirmationError(caught, locale) || documentNumberError(caught, locale, t("sales.orders.markConfirmedFailed")));
     } finally {
