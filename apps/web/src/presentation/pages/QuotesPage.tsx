@@ -1952,6 +1952,10 @@ export function QuotesPage({
   }, [salesOrdersNavTick, externalSelectedSalesOrderId, externalSelectedQuoteId, resyncingCatalog]);
 
   async function handleResyncFromCatalog() {
+    if (importingLines || resolvingLine) {
+      actionFeedback.fail(locale === "tr" ? "Satır yüklemesi tamamlanınca katalog eşitlemesini başlatın." : "Wait for line loading before synchronizing the catalog.");
+      return;
+    }
     if (!quoteBuilderLines.length) {
       actionFeedback.fail(t("sales.orders.noLinesToResync"));
       return;
