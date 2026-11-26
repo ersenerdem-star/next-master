@@ -73,6 +73,21 @@ test('single item lookup without customer forwards quantity and never asks price
   assert.equal(calls[0].args.input_requests[0].quantity,17);
 });
 
+test('supplier MOQ and order multiple still adjust quantity when sale pricing is deferred', async()=>{
+  installMocks('Wahler');
+  const originalRpc=globalThis.__pricingIntegration.rpc;
+  globalThis.__pricingIntegration.rpc=async(...args)=>{
+    const rows=await originalRpc(...args);
+    rows[0].options.find(o=>o.supplier_id==='s1').moq=20;
+    rows[0].options.find(o=>o.supplier_id==='s1').order_multiple=5;
+    return rows;
+  };
+  const {batchResolveQuoteImportRows}=await bundle('../../apps/web/src/infrastructure/api/quoteImportApi.ts');
+  const [line]=await batchResolveQuoteImportRows({rows:[{code:'0012',brand:'Wahler',qty:17}],customerType:'A',marginA:10,marginB:15,calculateSellPrice:false});
+  assert.equal(line.qty,20); assert.equal(line.requested_qty,17); assert.equal(line.quantity_adjusted,true);
+  assert.equal(line.buy_price,100); assert.equal(line.sell_price,null);
+});
+
 test('single buy-only lookup does not apply a second replacement after the caller has already resolved the code', async()=>{
   const calls=installMocks();
   globalThis.__pricingIntegration.references=async()=>new Map([['bosch::0012',{old_code:'0012',new_code:'0013',reason:null}]]);
