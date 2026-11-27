@@ -815,3 +815,24 @@ test('bulk choice updates 200 eligible order rows while retaining every customer
     view.lineRows().forEach((row,index)=>{assert.equal(row.supplier_name,'Supplier B');assert.equal(row.buy_price,15);assert.equal(row.sell_price,11+index/100);assert.equal(row.qty,3)});
   } finally {await view.close()}
 });
+
+test('failed supplier offer refresh preserves the selected supplier and both prices',async()=>{
+  const order=fullOrder('supplier-refresh-error',[supplierLine()]);const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    view.holdSingleLookup();await view.click('Current options');await view.reject(view.resolveRequest);
+    assert.equal(view.lineRows()[0].supplier_name,'Supplier A');assert.equal(view.lineRows()[0].buy_price,10);assert.equal(view.lineRows()[0].sell_price,11);
+    assert.ok(view.text().includes('supplier options could not be loaded'));
+  } finally {await view.close()}
+});
+
+test('late supplier offer refresh does not modify another order after navigation',async()=>{
+  const first=fullOrder('refresh-first',[supplierLine()]);
+  const second=fullOrder('refresh-second',[{...supplierLine(),supplier_name:'Supplier A',buy_price:20,sell_price:22}]);
+  const view=await fixture({cache:existingCache(first),orders:[first,second]});
+  try {
+    view.holdSingleLookup();await view.click('Current options');
+    await view.externalOrder(second.id);assert.equal(view.lineRows()[0].buy_price,20);
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Synthetic'},supplierOptions:[supplierOption('Supplier A',12),supplierOption('Supplier B',15)]});
+    assert.equal(view.lineRows()[0].buy_price,20);assert.equal(view.lineRows()[0].sell_price,22);
+  } finally {await view.close()}
+});
