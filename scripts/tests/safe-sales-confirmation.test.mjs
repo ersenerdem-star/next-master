@@ -8,6 +8,7 @@ const baseline=await read('supabase/migrations/20260707_96_sales_purchase_order_
 const vendorMigration=await read('supabase/migrations/20261109104136_purchase_order_vendor_resolution.sql');
 const confirmation=await read('supabase/migrations/20261126135625_safe_sales_confirmation.sql');
 const concurrency=await read('supabase/migrations/20261126135620_optimistic_order_versions.sql');
+const quantityGuard=await read('supabase/migrations/20261127093312_sales_confirmation_quantity_recheck_guard.sql');
 const deletion=await read('supabase/migrations/20261126135630_atomic_order_deletion.sql');
 const salesDelete=await read('supabase/migrations/20260827090000_portal_sales_order_delete_notifications.sql');
 const org='10000000-0000-4000-8000-000000000001', admin='20000000-0000-4000-8000-000000000001';
@@ -46,7 +47,7 @@ async function fixture(t) {
  insert into customers values('${org}','Customer','Customer');select set_config('test.uid','${admin}',false);`);
  for(const fn of ['save_sales_order_atomic','save_purchase_order_atomic']) await db.exec(baseline.match(new RegExp(`create or replace function public\\.${fn}\\([\\s\\S]*?\\n\\$\\$;`,'i'))[0]);
  await db.exec('grant execute on function public.save_purchase_order_atomic(jsonb,text) to authenticated,service_role;');
- await db.exec(vendorMigration);await db.exec(concurrency);await db.exec(confirmation);
+ await db.exec(vendorMigration);await db.exec(concurrency);await db.exec(confirmation);await db.exec(quantityGuard);
  await db.exec(salesDelete.match(/create or replace function public\.delete_sales_order_guarded\([\s\S]*?\n\$\$;/i)[0]);
  await db.exec(baseline.match(/create or replace function public\.delete_purchase_order_guarded\([\s\S]*?\n\$\$;/i)[0]);
  await db.exec('grant all on public.sales_orders,public.purchase_orders to authenticated;');await db.exec(deletion);
@@ -72,6 +73,37 @@ test('explicit alternative supplier controls the purchase order without changing
  assert.equal(result.purchase_orders[0].lines[0].product_code,'000012');
  assert.equal(result.purchase_orders[0].lines[0].buy_price,20);
  assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,1);
+});
+test('pending quantity recheck blocks confirmation and preserves the draft; old clients cannot silently omit it',async t=>{
+ const {db,confirm}=await fixture(t);
+ const pending={...line('Other','00123'),lineId:'line-1',purchase_qty_recheck_required:true};
+ await assert.rejects(confirm(payload('new',[pending])),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
+ assert.equal((await db.query('select count(*)::int n from sales_orders')).rows[0].n,0);
+ assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,0);
+ const draft={...payload('draft',[pending]),status:'draft'};
+ const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
+ const stripped={...pending};delete stripped.purchase_qty_recheck_required;
+ const request={...payload('draft',[stripped]),expected_updated_at:saved.updated_at};
+ await assert.rejects(confirm(request),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
+ const strippedIdentity={...stripped};delete strippedIdentity.lineId;
+ await assert.rejects(confirm({...request,lines:[strippedIdentity]}),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
+ assert.equal((await db.query("select status from sales_orders where id='draft'")).rows[0].status,'draft');
+ const verified={...pending,purchase_qty_recheck_required:false};
+ const result=await confirm({...request,lines:[verified]});
+ assert.equal(result.sales_order.status,'confirmed');assert.equal(result.purchase_orders.length,1);
+ assert.equal((await confirm({...request,lines:[verified]})).replayed,true);
+});
+test('historically confirmed orders with the flag are not rewritten or newly rejected',async t=>{
+ const {db}=await fixture(t);
+ await db.exec(`alter table sales_orders disable trigger sales_confirmation_require_atomic;
+ alter table sales_orders disable trigger sales_confirmation_quantity_price_recheck;
+ insert into sales_orders(id,organization_id,status,lines)values('history','${org}','confirmed','[{"purchase_qty_recheck_required":true}]');
+ alter table sales_orders enable trigger sales_confirmation_require_atomic;
+ alter table sales_orders enable trigger sales_confirmation_quantity_price_recheck;`);
+ await db.exec("update sales_orders set lines='[{\"purchase_qty_recheck_required\":true,\"description\":\"unchanged historical case\"}]' where id='history'");
+ assert.equal((await db.query("select status from sales_orders where id='history'")).rows[0].status,'confirmed');
+ const acl=await db.query("select has_function_privilege('authenticated','sales_confirmation_private.require_quantity_price_recheck()','execute') as allowed");
+ assert.equal(acl.rows[0].allowed,false);
 });
 test('failed purchase save rolls back sales, other purchases and receipt',async t=>{
  const {db,confirm}=await fixture(t);await db.exec(`create function public.fail_other() returns trigger language plpgsql as $$begin if new.supplier_name='Other' then raise exception 'simulated purchase failure'; end if; return new; end$$;create trigger fail_other before insert on purchase_orders for each row execute function public.fail_other();`);
