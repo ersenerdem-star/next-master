@@ -9,6 +9,9 @@ const vendorMigration=await read('supabase/migrations/20261109104136_purchase_or
 const confirmation=await read('supabase/migrations/20261126135625_safe_sales_confirmation.sql');
 const concurrency=await read('supabase/migrations/20261126135620_optimistic_order_versions.sql');
 const quantityGuard=await read('supabase/migrations/20261127094451_sales_confirmation_quantity_recheck_guard.sql');
+const customerPricingGuard=await read('supabase/migrations/20261013140020_sales_order_active_customer_pricing_guard.sql');
+const originalMarginGuard=await read('supabase/migrations/20261013140022_sales_order_confirmed_current_margin_guard.sql');
+const supplierChoiceMarginGuard=await read('supabase/migrations/20261127141700_preserve_supplier_choice_margin.sql');
 const deletion=await read('supabase/migrations/20261126135630_atomic_order_deletion.sql');
 const salesDelete=await read('supabase/migrations/20260827090000_portal_sales_order_delete_notifications.sql');
 const org='10000000-0000-4000-8000-000000000001', admin='20000000-0000-4000-8000-000000000001';
@@ -55,6 +58,49 @@ async function fixture(t) {
  const confirm=async (p=payload(),d=decision)=>(await db.query('select public.confirm_sales_order_with_purchases_safe($1::jsonb,$2::uuid) as result',[JSON.stringify(p),d])).rows[0].result;
  return {db,confirm};
 }
+async function installPricingGuards(db) {
+ await db.exec(`alter table customers add column id uuid, add column price_list_type text,
+   add column price_list_margin_percent numeric, add column custom_fields text not null default '';
+ alter table sales_orders add column customer_id uuid;
+ create table customer_price_lists(id uuid primary key,organization_id uuid not null references organizations(id),
+   list_type text,margin_percent numeric,is_active boolean,created_at timestamptz default now(),updated_at timestamptz default now());
+ update customers set id='50000000-0000-4000-8000-000000000001',price_list_type='A';
+ insert into customer_price_lists(id,organization_id,list_type,margin_percent,is_active)
+ values('60000000-0000-4000-8000-000000000001','${org}','A',10,true);`);
+ await db.exec(customerPricingGuard); await db.exec(originalMarginGuard); await db.exec(supplierChoiceMarginGuard);
+}
+test('atomic confirmation applies the real margin trigger to supplier choices and preserves sale prices',async t=>{
+ const {db,confirm}=await fixture(t); await installPricingGuards(db);
+ const customer='50000000-0000-4000-8000-000000000001';
+ const choice=(code,buy,basis,sell)=>({...line('Other',code),buy_price:buy,sell_price:sell,
+  supplier_override_keep_sell_price:true,customer_price_basis_buy_price:basis,
+  customer_price_basis_context_key:JSON.stringify([customer,'A',10])});
+ const choices=[choice('0003',2.89,2.86,3.15),choice('0004',7.31,7.30,8.03),choice('0005',9.16,9.04,9.94)];
+ const result=await confirm({...payload('margin-choice',choices),customer_type:'A'});
+ assert.equal(result.sales_order.status,'confirmed'); assert.equal(result.purchase_orders.length,1);
+ assert.deepEqual(result.sales_order.lines.map(x=>x.sell_price),[3.15,8.03,9.94]);
+ assert.deepEqual(result.purchase_orders[0].lines.map(x=>x.buy_price),[2.89,7.31,9.16]);
+ const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
+  [JSON.stringify({...payload('margin-draft',choices),customer_type:'A',status:'draft'})])).rows[0].result.sales_order;
+ const existing=await confirm({...payload('margin-draft',choices),customer_type:'A',expected_updated_at:saved.updated_at},
+  '40000000-0000-4000-8000-000000000002');
+ assert.equal(existing.sales_order.status,'confirmed');
+ assert.deepEqual(existing.sales_order.lines.map(x=>x.sell_price),[3.15,8.03,9.94]);
+ assert.deepEqual(existing.purchase_orders[0].lines.map(x=>x.buy_price),[2.89,7.31,9.16]);
+ let rejectionDecision=10;
+ const rejected=async(id,item,message)=>assert.rejects(confirm({...payload(id,[item]),customer_type:'A'},
+  `40000000-0000-4000-8000-${String(rejectionDecision++).padStart(12,'0')}`),message);
+ await rejected('string-flag',{...choices[0],supplier_override_keep_sell_price:'true'},/margin changed/i);
+ await rejected('missing-basis',{...choices[0],customer_price_basis_buy_price:null},/price basis is invalid/i);
+ await rejected('invalid-basis',{...choices[0],customer_price_basis_buy_price:'NaN'},/price basis is invalid/i);
+ await rejected('zero-basis',{...choices[0],customer_price_basis_buy_price:0},/price basis is invalid/i);
+ await rejected('wrong-sale',{...choices[0],sell_price:3.14},/margin changed/i);
+ await rejected('wrong-customer',{...choices[0],customer_price_basis_context_key:JSON.stringify(['other','A',10])},/pricing profile changed/i);
+ await rejected('wrong-margin',{...choices[0],customer_price_basis_context_key:JSON.stringify([customer,'A',11])},/pricing profile changed/i);
+ await rejected('wrong-buy',{...choices[0],buy_price:0},/SALES_CONFIRMATION_PRICE_INVALID|valid positive prices/i);
+ await db.query("update customer_price_lists set margin_percent=12 where list_type='A'");
+ await rejected('changed-margin',choices[0],/pricing profile changed/i);
+});
 test('atomic confirmation groups aliases, preserves leading zeros, prices and replay',async t=>{
  const {db,confirm}=await fixture(t);const value=payload();const result=await confirm(value);
  assert.equal(result.sales_order.status,'confirmed');assert.equal(result.purchase_orders.length,2);
