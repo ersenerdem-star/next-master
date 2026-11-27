@@ -11,6 +11,7 @@ import { catalogStorageImportTargetEnabled } from "./_shared/catalog-import-targ
 const ALLOWED_RPCS = new Set([
   "report_supplier_catalog_metadata",
   "report_supplier_comparison_offers",
+  "report_supplier_comparison_note_indicators",
   "save_manual_supplier_price",
   "resolve_purchase_order_vendors",
   "sales_order_purchase_analysis_options",
@@ -135,6 +136,7 @@ const SUPERADMIN_RPCS = new Set([
 const OPERATIONS_RPCS = new Set([
   "report_supplier_catalog_metadata",
   "report_supplier_comparison_offers",
+  "report_supplier_comparison_note_indicators",
   "assert_legacy_supplier_price_write_allowed",
   "begin_catalog_import",
   "begin_catalog_import_storage",

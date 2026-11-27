@@ -6,6 +6,9 @@ import { PGlite } from '@electric-sql/pglite';
 const migration = await readFile(new URL('../../supabase/migrations/20261127102812_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
 const exportMigration = await readFile(new URL('../../supabase/migrations/20261127115259_supplier_comparison_export_offers.sql', import.meta.url), 'utf8');
 const exportNotesMigration = await readFile(new URL('../../supabase/migrations/20261127131813_supplier_comparison_export_notes.sql', import.meta.url), 'utf8');
+const noteIndicatorMigration = await readFile(new URL('../../supabase/migrations/20261127141139_supplier_report_note_indicators.sql', import.meta.url), 'utf8');
+const usageGateMigration = await readFile(new URL('../../supabase/migrations/20261127141137_supplier_manual_usage_gate_consistency.sql', import.meta.url), 'utf8');
+const manualOverlayMigration = await readFile(new URL('../../supabase/migrations/20261112133448_manual_supplier_price_overlay.sql', import.meta.url), 'utf8');
 const org='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 const brand='33333333-3333-4333-8333-333333333333';
@@ -170,4 +173,63 @@ test('batch exports retain the note of each effective supplier price',async t=>{
   await db.exec(`reset role;set role service_role`);
   assert.equal((await db.query(`select jsonb_array_length(public.cloud_catalog_master_export_offers($1,$2,$3::text[])) n`,[org,brand,['W11025']])).rows[0].n,3);
   await db.exec(`reset role`);
+});
+
+test('indicators include notes from any current supplier without leaking another organization',async t=>{
+  const db=await fixture(t);
+  await db.exec(`create function public.get_admin_price_list_export_version(uuid,uuid) returns text language sql stable as $$select 'v1'::text$$`);
+  await db.exec(exportMigration); await db.exec(exportNotesMigration); await db.exec(noteIndicatorMigration);
+  await db.query(`insert into suppliers values($1,$3,'Cheapest',true),($2,$3,'Other',true),($4,$3,'Disabled',false)`,[id(1),id(2),org,id(3)]);
+  await db.query(`insert into supplier_prices values
+    ($1,$4,$5,$6,'P001','P001',1,current_date,null,1,1,null,null,true,'EUR'),
+    ($2,$4,$5,$7,'P001','P001',2,current_date,'other offer note',1,1,null,null,true,'EUR'),
+    ($3,$4,$5,$8,'P002','P002',3,current_date,'disabled note',1,1,null,null,true,'EUR')`,
+    [id(101),id(102),id(103),org,brand,id(1),id(2),id(3)]);
+  const read=()=>db.query(`select public.report_supplier_comparison_note_indicators($1,$2::text[]) v`,[brand,['P001','P002','00/123']]);
+  assert.deepEqual((await read()).rows[0].v,{'P001':true,'P002':false,'00/123':false});
+  await assert.rejects(db.query(`select public.report_supplier_comparison_note_indicators($1,$2::text[])`,[id(999),['P001']]),/BRAND_INVALID/);
+  await assert.rejects(db.query(`select public.report_supplier_comparison_note_indicators($1,$2::text[])`,[brand,Array(51).fill('P001')]),/INPUT_INVALID/);
+  await db.exec(`set role authenticated`);
+  assert.equal((await read()).rows[0].v.P001,true);
+  await db.exec(`reset role;set role anon`); await assert.rejects(read(),/permission denied/); await db.exec(`reset role`);
+  await db.exec(`select set_config('test.reports','false',false)`); await assert.rejects(read(),/ACCESS_DENIED/);
+});
+
+test('manual price availability uses the independent price usage flag in both order readers',async t=>{
+  const db=await fixture(t);
+  await db.exec(`alter table brands add column normalized_name text; update brands set normalized_name=upper(name);
+    alter table suppliers add column is_active boolean not null default true;
+    alter table supplier_prices add column description text;
+    alter table supplier_price_release_rows add column description text;
+    alter table supplier_manual_price_internal.entries add column description text;
+    create schema supplier_price_validation_internal;
+    create function supplier_price_validation_internal.canonical_automotive_brand_key(text,text) returns text language sql immutable as $$select upper($1)$$;`);
+  const core=manualOverlayMigration.slice(manualOverlayMigration.indexOf('CREATE OR REPLACE FUNCTION public.cloud_current_supplier_commercial_options_core'),manualOverlayMigration.indexOf('-- The pointer changes in the same transaction'));
+  const batch=manualOverlayMigration.slice(manualOverlayMigration.indexOf('CREATE OR REPLACE FUNCTION public.cloud_current_supplier_price_options_batch'),manualOverlayMigration.indexOf('-- Service snapshots preserve exact supplier/SKU overrides.'));
+  await db.exec(core); await db.exec(batch);
+  await db.query(`insert into suppliers(id,organization_id,name,price_usage_enabled,is_active) values($1,$3,'Archived but priced',true,false),($2,$3,'Disabled',false,false)`,[id(1),id(2),org]);
+  await db.query(`insert into supplier_manual_price_internal.entries(id,organization_id,brand_id,supplier_id,product_code,exact_code,buy_price,valid_from,notes,moq,order_multiple,active) values
+    ($1,$3,$4,$5,'00123','00123',6,current_date,'manual note',1,1,true),
+    ($2,$3,$4,$6,'00123','00123',1,current_date,'disabled',1,1,true)`,[id(101),id(102),org,brand,id(1),id(2)]);
+  const coreRead=()=>db.query(`select supplier_id,buy_price,notes from public.cloud_current_supplier_commercial_options_core($1,'00123','Mann')`,[org]);
+  assert.equal((await coreRead()).rows.length,0,'baseline exposes the inconsistent extra archive gate');
+  await db.exec(usageGateMigration);
+  let result=(await coreRead()).rows; assert.equal(result.length,1); assert.equal(result[0].supplier_id,id(1)); assert.equal(Number(result[0].buy_price),6);
+  assert.equal((await db.query(`select * from public.cloud_current_supplier_commercial_options_core($1,'00123','Mann')`,[other])).rows.length,0);
+  const batchResult=(await db.query(`select * from public.cloud_current_supplier_price_options_batch($1::jsonb)`,[JSON.stringify([{code:'00123',brand:'Mann'}])])).rows[0];
+  assert.equal(batchResult.has_published_scope,true); assert.equal(batchResult.options.length,1);assert.equal(batchResult.options[0].supplier_id,id(1));
+  await db.query(`update suppliers set price_usage_enabled=false where id=$1`,[id(1)]);
+  assert.equal((await coreRead()).rows.length,0);
+  const disabled=(await db.query(`select * from public.cloud_current_supplier_price_options_batch($1::jsonb)`,[JSON.stringify([{code:'00123',brand:'Mann'}])])).rows[0];
+  assert.equal(disabled.has_published_scope,false); assert.deepEqual(disabled.options,[]);
+  // Legacy and published price sources keep their existing price/ordering and
+  // the manual overlay still replaces the same supplier's published offer.
+  await db.query(`update suppliers set price_usage_enabled=true where id=$1`,[id(1)]);
+  await db.query(`insert into suppliers(id,organization_id,name,price_usage_enabled,is_active) values($1,$3,'Legacy',true,true),($2,$3,'Published',true,true)`,[id(3),id(4),org]);
+  await db.query(`insert into supplier_prices(id,organization_id,brand_id,supplier_id,normalized_code,product_code,buy_price,valid_from,is_active,currency) values($1,$2,$3,$4,'00123','00123',7,current_date,true,'EUR')`,[id(103),org,brand,id(3)]);
+  await db.query(`insert into supplier_current_price_pointers values($1,$2,$3,$4,$5),($1,$2,$6,$7,$8)`,[org,brand,id(4),id(501),id(502),id(1),id(503),id(504)]);
+  await db.query(`insert into supplier_price_publications values($1,$2,$3,$4,$5,'published'),($6,$7,$3,$8,$5,'published')`,[id(502),id(501),org,id(4),brand,id(504),id(503),id(1)]);
+  await db.query(`insert into supplier_price_release_rows(id,release_id,normalized_code,product_code,buy_price,valid_from,row_status,currency) values($1,$2,'00123','00123',8,current_date,'accepted','EUR'),($3,$4,'00123','00123',9,current_date,'accepted','EUR')`,[id(105),id(501),id(106),id(503)]);
+  result=(await coreRead()).rows;
+  assert.deepEqual(result.map(r=>[r.supplier_id,Number(r.buy_price)]),[[id(1),6],[id(3),7],[id(4),8]]);
 });
