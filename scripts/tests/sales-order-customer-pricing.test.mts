@@ -66,3 +66,36 @@ test('an invalid customer pricing setup cannot silently fall back to a default p
   assert.equal(line.sell_price,null);
   assert.equal(line.supplierOptions[0].sell_price,null);
 });
+
+test('changing procurement supplier preserves the actual customer sale price through repeated repricing', () => {
+  const alternative = makeLine({ supplier_name:'B', buy_price:130, sell_price:108.75,
+    supplier_override_keep_sell_price:true, customer_price_basis_buy_price:100,
+    selectedSupplierKey:'B-1', supplierOptions:[
+      {supplier_name:'Supplier',buy_price:100,sell_price:110,price_date:null,notes:null},
+      {supplier_name:'B',buy_price:130,sell_price:143,price_date:null,notes:null},
+    ],
+  });
+  const customer = ctx({hasCustomerProfile:true,customerId:'customer-a'});
+  const [updated] = applySalesOrderCustomerPricing([alternative],customer);
+  assert.equal(updated.buy_price,130); assert.equal(updated.sell_price,108.75);
+  assert.equal(updated.manual_sell_price,false);
+  assert.strictEqual(applySalesOrderCustomerPricing([updated],customer)[0],updated);
+  const [other] = applySalesOrderCustomerPricing([updated],ctx({hasCustomerProfile:true,customerId:'customer-b',customerType:'B'}));
+  assert.equal(other.sell_price,115); assert.equal(other.buy_price,130);
+});
+
+test('supplier choice before customer selection uses the original customer-price basis after save and reopen', () => {
+  const alternative = makeLine({ supplier_name:'B', buy_price:130, sell_price:null,
+    customer_pricing_pending:true, supplier_override_keep_sell_price:true,
+    customer_price_basis_buy_price:100, selectedSupplierKey:'B-1',
+    supplierOptions:[{supplier_name:'Supplier',buy_price:100,sell_price:null,price_date:null,notes:null},
+      {supplier_name:'B',buy_price:130,sell_price:null,price_date:null,notes:null}],
+  });
+  const [pending] = applySalesOrderCustomerPricing([alternative],ctx());
+  assert.equal(pending.sell_price,null);
+  const persisted = JSON.parse(JSON.stringify(pending)) as QuoteBuilderLine;
+  const [priced] = applySalesOrderCustomerPricing([persisted],ctx({workbenchMode:'existing',hasCustomerProfile:true,customerId:'customer-a'}));
+  assert.equal(priced.sell_price,110); assert.equal(priced.buy_price,130);
+  const [unknown] = applySalesOrderCustomerPricing([{...alternative,customer_price_basis_buy_price:null}],ctx({hasCustomerProfile:true}));
+  assert.equal(unknown.sell_price,null);
+});

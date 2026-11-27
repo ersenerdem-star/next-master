@@ -68,6 +68,12 @@ export type QuoteBuilderLine = {
   sell_price: number | null;
   c_sell_price: number | null;
   manual_sell_price?: boolean;
+  /** An explicit procurement choice must not reprice the customer's sale. */
+  supplier_override_keep_sell_price?: boolean;
+  /** Purchase-price basis used for customer pricing before that choice. */
+  customer_price_basis_buy_price?: number | null;
+  /** Identifies the customer price context for a preserved sale price. */
+  customer_price_basis_context_key?: string | null;
   /** This new line was saved before a customer price profile was selected. */
   customer_pricing_pending?: boolean;
   price_date: string;

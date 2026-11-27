@@ -360,7 +360,7 @@ async function assertCurrentPricesBeforeConfirmation(
         || String(current.supplier_name || "").trim().toLowerCase() !== selectedSupplierName) {
         throw staleLine(line);
       }
-      if (!line.manual_sell_price) {
+      if (!line.manual_sell_price && !line.supplier_override_keep_sell_price) {
         const expectedSell = markupMoney(currentBuy, customerType === "B" ? marginB : marginA);
         if (roundMoney(storedSell) !== expectedSell) throw staleLine(line);
       }
@@ -1004,6 +1004,7 @@ export function QuotesPage({
     workbenchMode, hasCustomerProfile: hasCustomerPricingProfile,
     customerType: effectiveCustomerType,
     marginA: effectiveMarginA, marginB: effectiveMarginB, pricingBlocked: Boolean(customerPricingIssue),
+    customerId: selectedCustomerProfile?.id ?? null,
   };
   const customerPricingContextRef = useRef(customerPricingContext);
   customerPricingContextRef.current = customerPricingContext;
