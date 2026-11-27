@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { fetchCloudMasterFast, fetchCloudMasterGloballySorted, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
+import { fetchCloudMasterFast, fetchCloudMasterGloballySorted, fetchCloudMasterCursor, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
 import { enrichSupplierReportCatalog } from "../../infrastructure/api/supplierReportCatalogApi";
 import { fetchSupplierComparisonNoteIndicators } from "../../infrastructure/api/supplierComparisonNoteIndicatorsApi";
 import { downloadExportJob, startMasterExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
@@ -37,6 +37,8 @@ export function MasterPage() {
   const [scope, setScope] = useState("priced");
   const [page, setPage] = useState(1);
   const [globalSort, setGlobalSort] = useState<{key:string;direction:"asc"|"desc"}|null>(null);
+  const cursorPages = useRef(new Map<number,{afterCode:string;expectedVersion:string|null}>([[1,{afterCode:"",expectedVersion:null}]]));
+  const [cursorStale, setCursorStale] = useState(false);
   const [marginA, setMarginA] = useState(0.1);
   const [marginB, setMarginB] = useState(0.15);
   const [rows, setRows] = useState<MasterPreviewRow[]>([]);
@@ -54,6 +56,7 @@ export function MasterPage() {
   const offerKey = (row: MasterRow) => JSON.stringify([brandId, row.product_code, row.product_id]);
 
   useEffect(() => { setExpandedOfferKey(null); }, [brandId, submittedSearch, scope, page, searchRevision, globalSort]);
+  useEffect(() => { cursorPages.current = new Map([[1,{afterCode:"",expectedVersion:null}]]); setCursorStale(false); }, [brandId, scope, submittedSearch, searchRevision, globalSort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,9 +137,20 @@ export function MasterPage() {
           marginA,
           marginB,
         };
-        const result = globalSort && scope === "priced"
-          ? await fetchCloudMasterGloballySorted({ ...request, sort: globalSort.key, direction: globalSort.direction })
-          : await fetchCloudMasterFast(request);
+        let result: MasterPreviewRow[];
+        if (globalSort && scope === "priced") {
+          result = await fetchCloudMasterGloballySorted({ ...request, sort: globalSort.key, direction: globalSort.direction });
+        } else if (scope === "priced" && !submittedSearch.trim()) {
+          const cursor = cursorPages.current.get(page);
+          if (!cursor) throw new Error(locale === "tr" ? "Sayfa sırası doğrulanamadı. Raporu yeniden başlatın." : "The page cursor could not be verified. Restart the report.");
+          const next = await fetchCloudMasterCursor({ ...request, ...cursor });
+          if (cancelled) return;
+          cursorPages.current.set(page,{...cursor,expectedVersion:next.sourceVersion});
+          if (next.nextCode) cursorPages.current.set(page+1,{afterCode:next.nextCode,expectedVersion:next.sourceVersion});
+          result = next.rows;
+        } else {
+          result = await fetchCloudMasterFast(request);
+        }
         if (cancelled) return;
         // Retrieve exact catalog details and note presence for this visible page.
         let complete: typeof result;
@@ -151,6 +165,7 @@ export function MasterPage() {
         }
         if (!cancelled) {
           setRows(complete);
+          setCursorStale(false);
           if (searchingRef.current) {
             const nextTotal = result[0]?.total_count ?? result.length;
             actionFeedback.succeed(result[0]?.total_count_is_estimate || result[0]?.total_count_is_unknown
@@ -163,7 +178,12 @@ export function MasterPage() {
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          const message = caught instanceof Error && (caught as Error & {code?:string}).code === "SORT_SCOPE_TOO_LARGE"
+          const code = caught instanceof Error ? (caught as Error & {code?:string}).code : "";
+          setCursorStale(code === "SUPPLIER_CURSOR_STALE");
+          const message = code === "SUPPLIER_CURSOR_STALE"
+            ? locale === "tr" ? "Tedarikçi fiyatları değişti. Yeni verilerle ilk sayfadan başlayın."
+              : "Supplier prices changed. Restart from the first page with current data."
+            : code === "SORT_SCOPE_TOO_LARGE"
             ? locale === "tr" ? "Bu markanın tamamını sıralamak için arka plan hazırlığı gerekiyor. Şimdilik tam parça numarasıyla arayın veya sıralamayı kaldırın."
               : "This brand needs background preparation for global sorting. Search by exact part number or clear the sort for now."
             : caught instanceof Error ? caught.message : r("master.errors.requestFailed");
@@ -424,6 +444,9 @@ export function MasterPage() {
           {globalSort ? <Button variant="secondary" className="button--compact" onClick={() => { setPage(1); setGlobalSort(null); }}>
             {locale === "tr" ? "Sıralamayı kaldır" : "Clear sort"}
           </Button> : null}
+          {cursorStale ? <Button variant="secondary" className="button--compact" onClick={() => { setPage(1); setSearchRevision((current) => current+1); }}>
+            {locale === "tr" ? "İlk sayfadan yenile" : "Restart from first page"}
+          </Button> : null}
           {error ? <div className="procurement-error-state">{error}</div> : null}
         </div>
         <div className="section-card__body">
@@ -452,10 +475,9 @@ export function MasterPage() {
                 {locale === "tr" ? "Önceki" : "Previous"}
               </Button>
               <span role="status">{locale === "tr" ? `Sayfa ${page}` : `Page ${page}`}</span>
-              <Button variant="secondary" className="button--compact" disabled={loadingRows || rows.length < 50 || (globalSort ? page * 50 >= total : scope === "priced" && page >= 100)} onClick={() => setPage((current) => current + 1)}>
+              <Button variant="secondary" className="button--compact" disabled={loadingRows || rows.length < 50 || (globalSort ? page * 50 >= total : scope === "priced" && !!submittedSearch.trim() && page >= 100)} onClick={() => setPage((current) => current + 1)}>
                 {locale === "tr" ? "Sonraki" : "Next"}
               </Button>
-              {scope === "priced" && !globalSort && page >= 100 && rows.length === 50 ? <span className="info-text">{locale === "tr" ? "Bu görünümde ilk 5.000 ürün gösterilebilir. Diğer ürünler için parça numarasıyla arayın." : "This view can show the first 5,000 products. Search by part number for other products."}</span> : null}
             </div>
           ) : null}
         </div>

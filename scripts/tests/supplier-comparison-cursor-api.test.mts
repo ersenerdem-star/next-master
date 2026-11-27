@@ -1,0 +1,13 @@
+import test, { after } from 'node:test';
+import assert from 'node:assert/strict';
+import {build} from 'esbuild';
+import {mkdtemp,rm} from 'node:fs/promises';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const dir=await mkdtemp(resolve('node_modules/.supplier-cursor-api-')),out=resolve(dir,'api.mjs');
+await build({stdin:{contents:`export {fetchCloudMasterCursor} from './apps/web/src/infrastructure/api/masterApi.ts';`,resolveDir:process.cwd(),loader:'ts'},outfile:out,bundle:true,platform:'node',format:'esm',packages:'external',plugins:[{name:'fixture',setup(b){b.onResolve({filter:/\/(appRpcApi|supabaseClient|organizationApi)$/},args=>({path:args.path.split('/').at(-1)!,namespace:'mock'}));b.onLoad({filter:/.*/,namespace:'mock'},({path})=>({loader:'js',contents:path==='appRpcApi'?`export const callAppRpc=(...a)=>globalThis.__supplierCursorTest(...a);`:path==='organizationApi'?`export const getCurrentOrgId=()=>'';`:`export const supabaseClient={};`}))}}]});
+const {fetchCloudMasterCursor}=await import(pathToFileURL(out).href);after(async()=>rm(dir,{recursive:true,force:true}));
+const params={brandId:'brand',brand:'Mann',scope:'priced',search:'',afterCode:'001/20',expectedVersion:'v1',pageSize:50};
+test('passes exact cursor and version; returns next page with unknown total',async()=>{let calls:any[]=[];(globalThis as any).__supplierCursorTest=async(...a:any[])=>{calls.push(a);return {source_version:'v1',rows:[{product_code:'001/21',cursor_code:'001/21',total_count:null}]}};
+ const r=await fetchCloudMasterCursor(params);assert.deepEqual(calls[0],['report_supplier_comparison_cursor',{input_brand_id:'brand',input_after_code:'001/20',input_expected_version:'v1',input_page_size:50,input_margin_a:.1,input_margin_b:.15}]);assert.equal(r.nextCode,'001/21');assert.equal(r.rows[0].total_count_is_unknown,true);});
+test('rejects changed versions, duplicate cursors and malformed pages',async()=>{for(const x of [{stale:true},{source_version:'v2',rows:[]},{source_version:'v1',rows:[{cursor_code:'001/20'}]},{source_version:'v1',rows:[{cursor_code:'X'},{cursor_code:'X'}]},{source_version:'v1',rows:[{}]},{source_version:'',rows:[]},null]){(globalThis as any).__supplierCursorTest=async()=>x;await assert.rejects(fetchCloudMasterCursor(params));}});

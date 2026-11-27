@@ -659,6 +659,26 @@ export async function fetchCloudMasterGloballySorted(params: MasterParams & { so
   return normalizeFastMasterRows(data.rows);
 }
 
+export async function fetchCloudMasterCursor(params: MasterParams & { afterCode: string; expectedVersion: string | null }): Promise<{ rows: MasterPreviewRow[]; nextCode: string | null; sourceVersion: string }> {
+  if (!params.brandId || params.scope !== "priced" || params.search.trim()) throw new Error("A brand and unfiltered priced scope are required.");
+  const data = await callAppRpc<{ stale?: boolean; source_version?: string; rows?: (MasterRow & {cursor_code?:unknown})[] }>("report_supplier_comparison_cursor", {
+    input_brand_id: params.brandId, input_after_code: params.afterCode, input_expected_version: params.expectedVersion,
+    input_page_size: params.pageSize ?? 50, input_margin_a: params.marginA ?? 0.1, input_margin_b: params.marginB ?? 0.15,
+  });
+  if (data?.stale) throw Object.assign(new Error("Supplier prices changed while the report was open. Restart from the first page."), {code:"SUPPLIER_CURSOR_STALE"});
+  if (!data || !Array.isArray(data.rows) || data.rows.length > (params.pageSize ?? 50) || typeof data.source_version !== "string" || !data.source_version
+    || (params.expectedVersion && data.source_version !== params.expectedVersion)
+    || data.rows.some((row) => !row || typeof row.cursor_code !== "string" || !row.cursor_code.trim() || row.cursor_code.length>256)) {
+    throw new Error("Supplier comparison page could not be verified.");
+  }
+  if (new Set(data.rows.map((row) => row.cursor_code)).size !== data.rows.length || data.rows.some((row) => row.cursor_code === params.afterCode)) {
+    throw new Error("Supplier comparison cursor did not advance uniquely.");
+  }
+  const nextCode=data.rows.length ? String(data.rows[data.rows.length-1].cursor_code) : null;
+  if (nextCode && nextCode === params.afterCode) throw new Error("Supplier comparison cursor did not advance.");
+  return { rows: normalizeFastMasterRows(data.rows), nextCode, sourceVersion:data.source_version };
+}
+
 async function fetchCloudMasterExportPage({
   search,
   brand,
