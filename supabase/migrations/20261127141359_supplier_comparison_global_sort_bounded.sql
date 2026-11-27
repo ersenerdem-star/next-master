@@ -32,6 +32,13 @@ begin
   end if;
   select b.name into v_brand from public.brands b where b.id=input_brand_id and b.organization_id=v_org;
   if v_brand is null then raise exception 'SUPPLIER_COMPARISON_BRAND_INVALID' using errcode='22023'; end if;
+  -- The legacy-only reader supports substring/OEM/description search while
+  -- published/manual scope is exact SKU. Never silently narrow that legacy
+  -- result set to an exact code when global sorting is requested.
+  if v_exact is not null
+    and not exists(select 1 from public.supplier_current_price_pointers p where p.organization_id=v_org and p.brand_id=input_brand_id)
+    and not exists(select 1 from supplier_manual_price_internal.entries m where m.organization_id=v_org and m.brand_id=input_brand_id and m.active and m.valid_from<=current_date)
+  then return jsonb_build_object('search_not_supported',true,'rows','[]'::jsonb); end if;
   if v_exact is null then
     select coalesce(sum(coalesce(r.accepted_rows,100001)),0) into v_estimate
       from public.supplier_current_price_pointers p

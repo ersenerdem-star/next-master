@@ -76,3 +76,7 @@ test('manual-only candidates are bounded and merged in exact code order',async t
  const first=(await db.query(`select public.report_supplier_comparison_cursor($1,'',null,50,.1,.15) data`,[brand])).rows[0].data;assert.equal(first.rows.length,50);assert.equal(first.rows[0].product_code,'M0001');assert.equal(first.rows.at(-1).product_code,'M0050');
  const second=(await db.query(`select public.report_supplier_comparison_cursor($1,'M0050','v1',50,.1,.15) data`,[brand])).rows[0].data;assert.equal(second.rows[0].product_code,'M0051');assert.equal(second.rows.at(-1).product_code,'M0100');
 });
+test('legacy-only substring and OEM search never silently narrows to an exact SKU during sorting',async t=>{const db=await fixture(t);
+ await db.query(`insert into supplier_prices values(md5('filter')::uuid,$1,$2,$3,'P001','P001','Oil Filter',2,current_date,null,null,true,'EUR')`,[org,brand,a]);
+ const r=(await db.query(`select public.report_supplier_comparison_sorted($1,'Filter','bestPrice','asc',1,50,.1,.15) data`,[brand])).rows[0].data;assert.equal(r.search_not_supported,true);assert.deepEqual(r.rows,[]);
+});
