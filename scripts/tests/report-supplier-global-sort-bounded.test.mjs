@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 const sql=await readFile(new URL('../../supabase/migrations/20261127143625_supplier_comparison_global_sort_bounded.sql',import.meta.url),'utf8');
 const cursorSql=await readFile(new URL('../../supabase/migrations/20261127143632_supplier_comparison_cursor.sql',import.meta.url),'utf8');
+const cursorOrderFix=await readFile(new URL('../../supabase/migrations/20261127145000_supplier_comparison_cursor_c_order.sql',import.meta.url),'utf8');
 const org='11111111-1111-4111-8111-111111111111',brand='33333333-3333-4333-8333-333333333333',a='aaaaaaaa-aaaa-4aaa-8aaa-000000000001',b='aaaaaaaa-aaaa-4aaa-8aaa-000000000002';
 async function fixture(t){const db=new PGlite();t.after(()=>db.close());await db.exec(`
 create role anon;create role authenticated;create role service_role;create schema auth;
@@ -98,4 +99,17 @@ test('both sorted and cursor reject yesterday’s version even when source recor
  const sorted=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',2,50,.1,.15,$2) data`,[brand,versions.yesterday])).rows[0].data;
  const cursor=(await db.query(`select public.report_supplier_comparison_cursor($1,'D1',$2,50,.1,.15) data`,[brand,versions.yesterday])).rows[0].data;
  assert.equal(sorted.stale,true);assert.deepEqual(sorted.rows,[]);assert.equal(cursor.stale,true);assert.deepEqual(cursor.rows,[]);
+});
+
+
+test('published cursor uses C ordering on either side of page boundary for punctuation and leading zeros',async t=>{const db=await fixture(t);await db.exec(cursorSql);await db.exec(cursorOrderFix);
+ const release='aaaaaaaa-aaaa-4aaa-8aaa-000000000010',publication='aaaaaaaa-aaaa-4aaa-8aaa-000000000011';
+ await db.query(`insert into supplier_current_price_pointers values($1,$2,$3,$4,$5)`,[org,brand,a,release,publication]);
+ await db.query(`insert into supplier_price_publications values($1,$2,$3,$4,$5,'published')`,[publication,release,org,a,brand]);
+ await db.query('insert into supplier_price_releases (id,accepted_rows,organization_id,supplier_id,brand_id) values($1,120,$2,$3,$4)',[release,org,a,brand]);
+ await db.query(`insert into supplier_price_release_rows select n,$1,code,code,'Filter',n,current_date,null,null,'accepted','EUR' from (select n, case n % 4 when 0 then 'A+' when 1 then 'A-' when 2 then 'A.' else 'A/' end || lpad(n::text,4,'0') code from generate_series(1,120)n) x`,[release]);
+ const expected=(await db.query(`select normalized_code from supplier_price_release_rows where release_id=$1 order by normalized_code collate "C"`,[release])).rows.map(x=>x.normalized_code);
+ let after='',version=null,actual=[];for(let page=0;page<4;page++){const result=(await db.query(`select public.report_supplier_comparison_cursor($1,$2,$3,50,.1,.15) data`,[brand,after,version])).rows[0].data;version=result.source_version;actual.push(...result.rows.map(x=>x.product_code));if(result.rows.length<50)break;after=result.rows.at(-1).cursor_code;}
+ assert.equal(actual.length,120);assert.deepEqual(actual,expected);assert.equal(new Set(actual).size,120);
+ assert.match(cursorOrderFix,/select distinct r\.normalized_code collate "C" as normalized_code/);assert.match(cursorOrderFix,/order by r\.normalized_code collate "C"/);
 });
