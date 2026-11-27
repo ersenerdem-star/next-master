@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudMasterFast, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
 import { downloadExportJob, startMasterExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
@@ -41,6 +41,8 @@ export function MasterPage() {
   const [loadingRows, setLoadingRows] = useState(false);
   const [error, setError] = useState("");
   const [searching, setSearching] = useState(false);
+  const searchingRef = useRef(false);
+  const [searchRevision, setSearchRevision] = useState(0);
   const [exportingMaster, setExportingMaster] = useState(false);
 
   const selectedBrand = brands.find((item) => item.id === brandId) || null;
@@ -103,6 +105,12 @@ export function MasterPage() {
     async function run() {
       if (!brandId || !brandName) {
         setRows([]);
+        setLoadingRows(false);
+        if (searchingRef.current) {
+          searchingRef.current = false;
+          setSearching(false);
+          actionFeedback.fail(r("master.errors.selectBrandFirst"));
+        }
         return;
       }
 
@@ -119,11 +127,27 @@ export function MasterPage() {
           marginA,
           marginB,
         });
-        if (!cancelled) setRows(result);
+        if (!cancelled) {
+          setRows(result);
+          if (searchingRef.current) {
+            const nextTotal = result[0]?.total_count ?? result.length;
+            actionFeedback.succeed(result[0]?.total_count_is_estimate || result[0]?.total_count_is_unknown
+              ? r("master.meta.rowsShown", { shown: result.length.toLocaleString("en-US") })
+              : r("master.feedback.rowsLoaded", { count: nextTotal.toLocaleString("en-US") }));
+            searchingRef.current = false;
+            setSearching(false);
+          }
+        }
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          setError(caught instanceof Error ? caught.message : r("master.errors.requestFailed"));
+          const message = caught instanceof Error ? caught.message : r("master.errors.requestFailed");
+          setError(message);
+          if (searchingRef.current) {
+            actionFeedback.fail(message);
+            searchingRef.current = false;
+            setSearching(false);
+          }
         }
       } finally {
         if (!cancelled) setLoadingRows(false);
@@ -134,20 +158,7 @@ export function MasterPage() {
     return () => {
       cancelled = true;
     };
-  }, [brandId, brandName, scope, submittedSearch, marginA, marginB, page]);
-
-  useEffect(() => {
-    if (!searching || loadingRows) return;
-    const nextTotal = rows[0]?.total_count ?? rows.length;
-    if (error) {
-      actionFeedback.fail(error);
-    } else {
-      actionFeedback.succeed(rows[0]?.total_count_is_estimate || rows[0]?.total_count_is_unknown
-        ? r("master.meta.rowsShown", { shown: rows.length.toLocaleString("en-US") })
-        : r("master.feedback.rowsLoaded", { count: nextTotal.toLocaleString("en-US") }));
-    }
-    setSearching(false);
-  }, [searching, loadingRows, error, rows, actionFeedback]);
+  }, [brandId, brandName, scope, submittedSearch, marginA, marginB, page, searchRevision]);
 
   const total = rows[0]?.total_count ?? rows.length;
   const totalIsEstimate = rows[0]?.total_count_is_estimate === true;
@@ -304,10 +315,16 @@ export function MasterPage() {
   }
 
   function handleSearch() {
+    if (!brandId || !brandName) {
+      actionFeedback.fail(r("master.errors.selectBrandFirst"));
+      return;
+    }
+    searchingRef.current = true;
     setSearching(true);
     actionFeedback.begin(r("master.feedback.searching", { target: search.trim() || brandName || r("values.allItems") }));
     setPage(1);
     setSubmittedSearch(search);
+    setSearchRevision((current) => current + 1);
   }
 
   return (
