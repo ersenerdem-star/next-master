@@ -946,11 +946,11 @@ test('catalog transfer marks a valid new supplier price verified and does not ma
   }
 });
 
-test('CSV order import requests quantity-sensitive supplier prices',async()=>{
+test('CSV order import preserves its existing customer pricing basis',async()=>{
   const view=await fixture({cache:customerlessCache([]),orders:[]});
   try {
     await view.startImport();const call=view.calls.find(call=>call.name==='batchResolveQuoteImportRows');
-    assert.equal(call?.args[0].useQuantityPrice,true);
+    assert.notEqual(call?.args[0].useQuantityPrice,true);
     await view.resolve(view.importRequest,[unpricedLine()]);
   } finally {await view.close()}
 });
@@ -967,4 +967,15 @@ test('quote mapping marks verification only when saved purchase price agrees wit
       const query=view.calls.find(call=>call.name==='resolveQuoteLine');assert.equal(query?.args[0].quantity,2);
     } finally {await view.close()}
   }
+});
+
+test('CSV after customer selection keeps the established customer price basis',async()=>{
+  const view=await fixture({cache:customerlessCache([]),orders:[]});
+  try {
+    await view.selectCustomer('customer-a');await view.startImport();
+    const call=view.calls.find(call=>call.name==='batchResolveQuoteImportRows');
+    assert.notEqual(call?.args[0].useQuantityPrice,true);assert.equal(call?.args[0].customerType,'A');
+    await view.resolve(view.importRequest,[{...unpricedLine(),sell_price:null,customer_pricing_pending:true}]);
+    assert.equal(view.lineRows()[0].buy_price,100);assert.equal(view.lineRows()[0].sell_price,110);
+  } finally {await view.close()}
 });

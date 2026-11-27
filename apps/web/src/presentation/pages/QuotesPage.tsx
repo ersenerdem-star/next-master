@@ -2962,7 +2962,6 @@ export function QuotesPage({
         marginA: customerPricingContextRef.current.marginA,
         marginB: customerPricingContextRef.current.marginB,
         calculateSellPrice: customerPricingContextRef.current.hasCustomerProfile && !customerPricingContextRef.current.pricingBlocked,
-        useQuantityPrice: true,
       });
       if (!isCurrent()) break;
       processedRows += batch.length;
