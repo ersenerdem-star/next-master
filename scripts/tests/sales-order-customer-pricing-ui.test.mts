@@ -774,3 +774,10 @@ test('supplier selected before a customer stays selected across draft save and r
     await reopened.selectCustomer('customer-a');assert.equal(reopened.lineRows()[0].sell_price,11);assert.equal(reopened.lineRows()[0].buy_price,15);
   } finally {await reopened.close()}
 });
+
+test('a stored zero sales price remains zero when a different supplier is chosen',async()=>{
+  const freeLine={...supplierLine(),sell_price:0,manual_sell_price:false};
+  const order=fullOrder('supplier-free',[freeLine]); const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {await chooseSupplier(view,'Supplier B-1');assert.equal(view.lineRows()[0].sell_price,0);assert.equal(view.lineRows()[0].buy_price,15);}
+  finally {await view.close()}
+});
