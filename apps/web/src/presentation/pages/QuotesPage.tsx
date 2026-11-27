@@ -854,6 +854,10 @@ export function QuotesPage({
   const [quotes, setQuotes] = useState<QuoteSummary[]>([]);
   const [localSalesOrders, setLocalSalesOrders] = useState<LocalSalesOrder[]>([]);
   const [localSalesOrdersLoaded, setLocalSalesOrdersLoaded] = useState(false);
+  // Requests started before a confirmed delete can return an old list later.
+  // Keep those responses from resurrecting a deleted row in this workspace.
+  const deletedSalesOrderIdsRef = useRef(new Set<string>());
+  const deletingSalesOrdersRef = useRef(false);
   const cachedSalesOrderRestoreId = initialWorkspaceCache?.salesOrdersView === "detail" &&
     !initialWorkspaceCache.quoteBuilderLines?.length ? initialWorkspaceCache.selectedLocalSalesOrderId || "" : "";
   const cachedSalesOrderRestoreRef = useRef(cachedSalesOrderRestoreId);
@@ -1016,7 +1020,7 @@ export function QuotesPage({
       try {
         const salesOrderRows = await fetchSalesOrderSummaries();
         if (!cancelled) {
-          setLocalSalesOrders(salesOrderRows);
+          setLocalSalesOrders(salesOrderRows.filter((row) => !deletedSalesOrderIdsRef.current.has(row.id)));
           setLocalSalesOrdersLoaded(true);
         }
       } catch {
@@ -1050,7 +1054,7 @@ export function QuotesPage({
       try {
         const brandSummaryRows = await fetchSalesOrderBrandSummaries();
         if (!cancelled) {
-          setSalesOrderBrandsById(Object.fromEntries(brandSummaryRows.map((row) => [row.id, row.brands])));
+          setSalesOrderBrandsById(Object.fromEntries(brandSummaryRows.filter((row) => !deletedSalesOrderIdsRef.current.has(row.id)).map((row) => [row.id, row.brands])));
         }
       } catch {
         if (!cancelled) setSalesOrderBrandsById({});
@@ -2304,6 +2308,9 @@ export function QuotesPage({
     } catch {
       listRefreshFailed = true;
     }
+    // A delete may have committed while this save's list refresh was in flight.
+    // Do not reopen the deleted order or replace the delete success message.
+    if (deletedSalesOrderIdsRef.current.has(saved.id)) return null;
     setQuoteNo(saved.sales_order_no);
     setBuilderStatus(t("sales.orders.draftSavedAs", { salesOrderNo: saved.sales_order_no }) + (listRefreshFailed
       ? locale === "tr" ? " Liste yenilenemedi; sipariş kaydedildi. Listeyi tekrar açabilirsiniz." : " The order was saved, but the list could not refresh. You can reopen the list."
@@ -3225,12 +3232,13 @@ export function QuotesPage({
 
   async function refreshLocalSalesOrders(nextSelectedId?: string, committedOrder?: LocalSalesOrder) {
     const nextSalesOrders = await fetchSalesOrderSummaries();
-    setLocalSalesOrders(committedOrder ? mergeSavedSalesOrder(nextSalesOrders, committedOrder) : nextSalesOrders);
+    const visibleOrders = nextSalesOrders.filter((order) => !deletedSalesOrderIdsRef.current.has(order.id));
+    setLocalSalesOrders(committedOrder && !deletedSalesOrderIdsRef.current.has(committedOrder.id) ? mergeSavedSalesOrder(visibleOrders, committedOrder) : visibleOrders);
     const nextBrandSummaries = await fetchSalesOrderBrandSummaries().catch(() => null);
     if (nextBrandSummaries) {
-      setSalesOrderBrandsById(Object.fromEntries(nextBrandSummaries.map((row) => [row.id, row.brands])));
+      setSalesOrderBrandsById(Object.fromEntries(nextBrandSummaries.filter((row) => !deletedSalesOrderIdsRef.current.has(row.id)).map((row) => [row.id, row.brands])));
     }
-    if (nextSelectedId) {
+    if (nextSelectedId && !deletedSalesOrderIdsRef.current.has(nextSelectedId)) {
       setSelectedLocalSalesOrderId(nextSelectedId);
     }
     void Promise.all([fetchPurchaseOrderSalesLinkSummaries(), fetchInvoiceSalesLinkSummaries()])
@@ -3256,6 +3264,7 @@ export function QuotesPage({
   }
 
   async function handleDeleteSalesOrders(orderIds: string[]) {
+    if (deletingSalesOrdersRef.current) return;
     const uniqueIds = Array.from(new Set(orderIds.filter(Boolean)));
     if (!uniqueIds.length) {
       actionFeedback.fail(t("sales.orders.noSalesOrdersSelected"));
@@ -3278,19 +3287,28 @@ export function QuotesPage({
     }
 
     try {
+      deletingSalesOrdersRef.current = true;
       actionFeedback.begin(t("sales.orders.deleting", { count: uniqueIds.length.toLocaleString("en-US") }));
       const selected = uniqueIds.map((id) => localSalesOrders.find((row) => row.id === id));
       if (selected.some((row) => !row?.updated_at)) throw new Error("Siparişin sürümü bulunamadı. Listeyi yenileyip tekrar deneyin.");
       await deleteSalesOrders(selected.map((row) => ({id: row!.id, updated_at: row!.updated_at!})));
-      await refreshLocalSalesOrders();
+      uniqueIds.forEach((id) => deletedSalesOrderIdsRef.current.add(id));
+      setLocalSalesOrders((current) => current.filter((order) => !deletedSalesOrderIdsRef.current.has(order.id)));
+      setSalesOrderBrandsById((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !deletedSalesOrderIdsRef.current.has(id))));
       setSelectedLocalSalesOrderIds((current) => current.filter((orderId) => !uniqueIds.includes(orderId)));
       if (uniqueIds.includes(selectedLocalSalesOrderId)) {
+        invalidateSalesOrderAsyncWork();
         setSelectedLocalSalesOrderId("");
-        closeSalesOrderEditor();
+        onSelectedSalesOrderChange?.("");
+        setSalesOrdersView("list");
+        setPdfView(false);
+        setBuilderStatus("");
       }
       actionFeedback.succeed(t("sales.orders.deleted", { count: uniqueIds.length.toLocaleString("en-US") }));
     } catch (caught) {
       actionFeedback.fail(orderConcurrencyError(caught, locale, t("sales.orders.deleteFailed")));
+    } finally {
+      deletingSalesOrdersRef.current = false;
     }
   }
 

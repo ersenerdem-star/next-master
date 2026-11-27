@@ -85,18 +85,19 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
   const storage = new Map<string, string>([['next-master-sales-order-workspace', JSON.stringify(cache)]]);
   const store = { getItem: (key: string) => storage.get(key) ?? null, setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) };
   const timers = new Map<number, () => void>(); let timerId = 0;
-  const confirms: string[] = [];
+  const confirms: string[] = []; let confirmResult = false;
   const browser = Object.assign(new EventTarget(), {
     localStorage: store, sessionStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
     setTimeout(callback: () => void) { const id = ++timerId; timers.set(id, callback); return id; },
     clearTimeout(id: number) { timers.delete(id); },
-    confirm(text: string) { confirms.push(text); return false; },
+    confirm(text: string) { confirms.push(text); return confirmResult; },
     prompt() { throw Error('Unexpected prompt'); },
   });
   globals.window = browser; globals.document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   globals.HTMLElement = class {};
   globals.fetch = () => { throw Error('Unexpected real network access'); }; globals.IS_REACT_ACT_ENVIRONMENT = true;
   const summaryQueue: Deferred[] = [];
+  const deleteQueue: Deferred[] = [];
   const firstDetail = holdDetail ? deferred() : null;
   const calls: Array<{ name: string; args: any[] }> = [];
   const feedbackEvents: Array<{ kind: string; text: string }> = [];
@@ -119,6 +120,13 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
         saved.push(order); storedOrders = [order, ...storedOrders.filter(row => row.id !== order.id)];
         return Promise.resolve(order);
       }
+      if (name === 'deleteSalesOrders') {
+        const ids = new Set(args[0].map((row: {id: string}) => row.id));
+        const request = deleteQueue.shift();
+        if (request) return request.promise.then(() => { storedOrders = storedOrders.filter(order => !ids.has(order.id)); });
+        storedOrders = storedOrders.filter(order => !ids.has(order.id));
+        return Promise.resolve();
+      }
       if (name === 'fetchCompanyProfiles') return Promise.resolve([{ id: 'seller', companyName: 'Synthetic seller' }]);
       if (name === 'fetchCustomers') return Promise.resolve([{ id: 'customer', display_name: 'Synthetic customer', company_name: 'Synthetic customer', price_list_type: 'A' }]);
       if (name === 'findCustomerByNameInList') return args[0].find((customer: any) => customer.id === args[1] || customer.display_name === args[1]) || null;
@@ -139,9 +147,12 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
     text: () => content(renderer.root),
     buttons: (label: string) => renderer.root.findAllByType('button').filter(button => content(button) === label),
     lineRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.wrapClassName === 'sales-lines-table').flatMap(node => node.props.rows),
+    orderRows: () => renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.onRowClick).flatMap(node => node.props.rows),
     cache: () => JSON.parse(storage.get('next-master-sales-order-workspace') || 'null'),
     setDetailFailure(failed: boolean) { detailFailure = failed; },
+    setConfirm(value: boolean) { confirmResult = value; },
     holdSummary() { const request = deferred(); summaryQueue.push(request); return request; },
+    holdDelete() { const request = deferred(); deleteQueue.push(request); return request; },
     async click(label: string) {
       const button = renderer.root.findAllByType('button').find(button => content(button) === label);
       assert.ok(button, `Missing rendered button ${label}`); assert.ok(!button.props.disabled, `Disabled rendered button ${label}`);
@@ -151,6 +162,13 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       const row = renderer.root.findAllByType('tr').find(row => row.props.onClick && content(row).includes(`SO-${id}`));
       assert.ok(row, `Missing rendered order row ${id}`);
       await act(async () => { row.props.onClick({ target: null }); });
+    },
+    async deleteRow(index: number) {
+      const table = renderer.root.findAll(node => typeof node.type === 'function' && node.type.name === 'DataTable' && node.props.onRowClick)[0];
+      assert.ok(table, 'Expected sales-order table');
+      const buttons = table.findAllByType('button').filter(button => content(button) === 'common.delete');
+      assert.ok(buttons[index], `Missing delete button for row ${index}`);
+      await act(async () => { buttons[index].props.onClick({ stopPropagation() {} }); });
     },
     async resolve(request: Deferred, value: any) { await act(async () => { request.resolve(value); }); },
     async reject(request: Deferred) { await act(async () => { request.reject(Error('Synthetic list refresh failed')); }); },
@@ -309,5 +327,59 @@ test('a stale-version failure keeps unsaved lines and tells the user to reopen',
     assert.equal(view.lineRows()[0].qty, 3);
     assert.ok(view.feedbackEvents.some(event => event.kind === 'fail' && /reopen/i.test(event.text)));
     assert.equal(view.saved.length, 0);
+  } finally { await view.close(); }
+});
+
+test('successful delete removes only that id immediately and does not download all order lines', async () => {
+  const first = fullOrder('first');
+  const second = { ...fullOrder('second'), sales_order_no: first.sales_order_no };
+  const view = await fixture({ cache: { ...draftCache(), salesOrdersView: 'list' }, orders: [first, second] });
+  try {
+    view.setConfirm(true);
+    const pending = view.holdDelete();
+    const summaryCalls = view.calls.filter(call => call.name === 'fetchSalesOrderSummaries').length;
+    const brandCalls = view.calls.filter(call => call.name === 'fetchSalesOrderBrandSummaries').length;
+    await view.deleteRow(0);
+    assert.deepEqual(view.orderRows().map(order => order.id), [first.id, second.id], 'do not remove anything before the server confirms');
+    await view.deleteRow(0);
+    assert.equal(view.calls.filter(call => call.name === 'deleteSalesOrders').length, 1, 'repeated clicks while the request is pending must not repeat the delete');
+    await view.resolve(pending, undefined);
+    assert.deepEqual(view.orderRows().map(order => order.id), [second.id], 'same-number order must remain');
+    assert.equal(view.calls.filter(call => call.name === 'fetchSalesOrderSummaries').length, summaryCalls);
+    assert.equal(view.calls.filter(call => call.name === 'fetchSalesOrderBrandSummaries').length, brandCalls, 'successful deletion needs no full brand/line download');
+    assert.deepEqual(view.calls.filter(call => call.name === 'deleteSalesOrders').at(-1)?.args[0], [{id: first.id, updated_at: first.updated_at}]);
+    assert.ok(view.feedbackEvents.some(event => event.kind === 'succeed' && /sales.orders.deleted/.test(event.text)));
+  } finally { await view.close(); }
+});
+
+test('failed delete retains the order and shows a failure', async () => {
+  const order = fullOrder('must-remain');
+  const view = await fixture({ cache: { ...draftCache(), salesOrdersView: 'list' }, orders: [order] });
+  try {
+    view.setConfirm(true); const pending = view.holdDelete();
+    await view.deleteRow(0); await view.reject(pending);
+    assert.deepEqual(view.orderRows().map(row => row.id), [order.id]);
+    assert.ok(view.feedbackEvents.some(event => event.kind === 'fail'));
+    assert.equal(view.feedbackEvents.filter(event => event.kind === 'succeed' && /sales.orders.deleted/.test(event.text)).length, 0);
+  } finally { await view.close(); }
+});
+
+test('a list request begun before deletion cannot bring the deleted order back', async () => {
+  const first = fullOrder('old-snapshot');
+  const second = { ...fullOrder('still-here'), sales_order_no: first.sales_order_no };
+  const view = await fixture({ cache: existingCache(first, []), orders: [first, second] });
+  try {
+    view.setConfirm(true);
+    const oldRefresh = view.holdSummary();
+    await view.click('sales.orders.saveDraft');
+    assert.equal(view.calls.filter(call => call.name === 'upsertSalesOrder').length, 1);
+    await view.click('sales.orders.exit');
+    await view.deleteRow(0);
+    assert.deepEqual(view.orderRows().map(row => row.id), [second.id]);
+    await view.resolve(oldRefresh, [summary(first), summary(second)]);
+    assert.deepEqual(view.orderRows().map(row => row.id), [second.id]);
+    await view.flushCache();
+    assert.notEqual(view.cache()?.selectedLocalSalesOrderId, first.id, 'late save refresh must not reselect the deleted order');
+    assert.match(view.feedbackEvents.filter(event => event.kind === 'succeed').at(-1)?.text || '', /sales.orders.deleted/, 'a late save response must not claim the deleted order is saved');
   } finally { await view.close(); }
 });
