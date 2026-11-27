@@ -781,3 +781,24 @@ test('a stored zero sales price remains zero when a different supplier is chosen
   try {await chooseSupplier(view,'Supplier B-1');assert.equal(view.lineRows()[0].sell_price,0);assert.equal(view.lineRows()[0].buy_price,15);}
   finally {await view.close()}
 });
+
+test('quantity-tier supplier change requires fresh offer for adjusted quantity before confirmation',async()=>{
+  const tier={...supplierLine(),brand:'Wahler',supplierOptions:[supplierOption('Supplier A',10,{applied_min_quantity:1}),supplierOption('Supplier B',15,{moq:5,order_multiple:2,applied_min_quantity:1})]};
+  const order=fullOrder('tier-supplier',[tier]);const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    view.setConfirmResponse(true);await chooseSupplier(view,'Supplier B-1');
+    assert.equal(view.lineRows()[0].qty,6);assert.equal(view.lineRows()[0].sell_price,11);assert.equal(view.lineRows()[0].purchase_qty_recheck_required,true);
+    await view.click('sales.orders.markConfirmed');
+    assert.equal(view.calls.filter(call=>call.name==='confirmSalesOrderWithPurchases').length,0);
+    assert.ok(view.feedbackEvents.some(event=>event.kind==='fail' && /quantity tier changed/i.test(event.text)));
+    view.holdSingleLookup();await view.click('Current options');
+    assert.equal(view.calls.find(call=>call.name==='resolveQuoteLine')?.args[0].quantity,6);
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Wahler'},supplierOptions:[supplierOption('Supplier A',10,{applied_min_quantity:1}),supplierOption('Supplier B',18,{moq:5,order_multiple:2,applied_min_quantity:6})]});
+    assert.equal(view.lineRows()[0].buy_price,15);assert.equal(view.lineRows()[0].purchase_qty_recheck_required,true);
+    await chooseSupplier(view,'Supplier B-2');assert.equal(view.lineRows()[0].buy_price,18);assert.equal(view.lineRows()[0].sell_price,11);
+    assert.equal(view.lineRows()[0].purchase_qty_recheck_required,false);
+    await view.click('sales.orders.markConfirmed');
+    const confirmCall=view.calls.find(call=>call.name==='confirmSalesOrderWithPurchases');assert.ok(confirmCall);
+    assert.equal(confirmCall.args[0].lines[0].buy_price,18);assert.equal(confirmCall.args[0].lines[0].sell_price,11);
+  } finally {await view.close()}
+});

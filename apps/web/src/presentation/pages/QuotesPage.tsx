@@ -2264,6 +2264,8 @@ export function QuotesPage({
             order_multiple: option.order_multiple ?? null,
             supplier_name: option.supplier_name,
             supplierOptions: priced.supplierOptions,
+            supplier_options_qty: adjustment.corrected,
+            purchase_qty_recheck_required: false,
             selectedSupplierKey: `${option.supplier_name}-${optionIndex}`,
             buy_price: option.buy_price,
             sell_price: item.manual_sell_price || (item.supplier_override_keep_sell_price && item.sell_price != null) ? item.sell_price : deferPrice ? null : priced.c_sell_price ?? option.sell_price,
@@ -2329,11 +2331,14 @@ export function QuotesPage({
     const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
     if (!selected || nextKey === item.selectedSupplierKey) return item;
     const adjustment = normalizeOrderQuantity(item.qty, selected);
+    const quantitySensitive = isWahlerBrand(item.brand) || selected.applied_min_quantity != null;
     return {
       ...item,
       supplier_override_keep_sell_price: true,
       customer_price_basis_buy_price: Object.prototype.hasOwnProperty.call(item, "customer_price_basis_buy_price")
         ? item.customer_price_basis_buy_price : item.buy_price,
+      purchase_qty_recheck_required: quantitySensitive && (adjustment.adjusted
+        || (item.purchase_qty_recheck_required === true && item.supplier_options_qty !== item.qty)),
       selectedSupplierKey: nextKey,
       qty: adjustment.corrected,
       requested_qty: adjustment.adjusted ? adjustment.requested : null,
@@ -2365,7 +2370,9 @@ export function QuotesPage({
       if (!selected || item.qty !== currentLine.qty || item.selectedSupplierKey !== currentLine.selectedSupplierKey) return item;
       return applySupplierOption(item, nextKey);
     }));
-    setBuilderStatus(t("sales.orders.supplierChoiceSaveDraft"));
+    setBuilderStatus(t("sales.orders.supplierChoiceSaveDraft") + (preview.adjusted && (isWahlerBrand(currentLine.brand) || nextOption.applied_min_quantity != null)
+      ? locale === "tr" ? " Adet kademesi için güncel seçenekleri yenileyin." : " Refresh current options to verify the quantity-tier price."
+      : ""));
   }
 
   const bulkSupplierOptions = useMemo(() => {
@@ -2405,7 +2412,8 @@ export function QuotesPage({
       if (!choice || item.qty !== choice.line.qty || item.selectedSupplierKey !== choice.line.selectedSupplierKey) return item;
       return applySupplierOption(item, choice.key);
     }));
-    setBuilderStatus(locale === "tr" ? `${choices.length} satırın tedarikçisi değiştirildi; satış birim fiyatları korundu. Taslağı kaydedin.` : `Supplier changed on ${choices.length} lines; sales unit prices were kept. Save the draft.`);
+    const tierChanges = changes.filter(choice => isWahlerBrand(choice.line.brand) || choice.line.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === choice.key)?.applied_min_quantity != null).length;
+    setBuilderStatus(locale === "tr" ? `${choices.length} satırın tedarikçisi değiştirildi; satış birim fiyatları korundu. Taslağı kaydedin.${tierChanges ? ` ${tierChanges} satırda adet kademesi için güncel seçenekleri yenileyin.` : ""}` : `Supplier changed on ${choices.length} lines; sales unit prices were kept. Save the draft.${tierChanges ? ` Refresh options on ${tierChanges} quantity-tier lines.` : ""}`);
   }
 
   async function refreshLineSupplierOptions(row: QuoteBuilderLine) {
@@ -2456,7 +2464,9 @@ export function QuotesPage({
       setQuoteBuilderLines(currentLines => currentLines.map(item => {
         if (item.lineId !== row.lineId || item.selectedSupplierKey !== originalKey || item.supplier_name !== row.supplier_name
           || item.buy_price !== row.buy_price || item.qty !== row.qty || confirmationSku(item.resolvedCode || item.requestedCode) !== confirmationSku(code)) return item;
-        return { ...item, supplierOptions: nextOptions, selectedSupplierKey: nextKey };
+        return { ...item, supplierOptions: nextOptions, selectedSupplierKey: nextKey,
+          supplier_options_qty: row.qty,
+          purchase_qty_recheck_required: item.purchase_qty_recheck_required && !isSameOffer };
       }));
       setBuilderStatus(locale === "tr" ? `${code}: ${supplierOptions.length} güncel seçenek bulundu; mevcut alış ve satış fiyatı korundu. Seçiminizi yapabilirsiniz.` : `${code}: ${supplierOptions.length} current options found; purchase and sales prices were kept. Choose an option to update the supplier.`);
     } catch {
@@ -2612,6 +2622,7 @@ export function QuotesPage({
                 );
               })}
             </select>
+            {row.purchase_qty_recheck_required ? <div className="warning-text" role="status">{locale === "tr" ? "Adet kademesi değişti; güncel seçenekleri yenileyin ve fiyatı seçin." : "Quantity tier changed; refresh options and select the price."}</div> : null}
             {currentLocalSalesOrder?.status !== "confirmed" ? <button type="button" className="button button--secondary button--compact" disabled={Boolean(refreshingSupplierLines[row.lineId]) || savingDraft || confirmingOrder}
               onClick={() => void refreshLineSupplierOptions(row)} aria-label={`${row.resolvedCode || row.requestedCode} ${locale === "tr" ? "güncel tedarikçileri getir" : "load current suppliers"}`}>
               {refreshingSupplierLines[row.lineId] ? (locale === "tr" ? "Aranıyor…" : "Loading…") : (locale === "tr" ? "Güncel seçenekler" : "Current options")}
@@ -3663,6 +3674,10 @@ export function QuotesPage({
       assertWahlerQuantityPricesReady();
       setConfirmingOrder(true);
       actionFeedback.begin(t("sales.orders.confirmingAndCreatingPurchaseOrders", { salesOrderNo: quoteNo || t("sales.orders.salesOrder") }));
+      const quantityPricePending = quoteBuilderLines.find(line => line.purchase_qty_recheck_required);
+      if (quantityPricePending) throw new Error(locale === "tr"
+        ? `${quantityPricePending.resolvedCode || quantityPricePending.requestedCode} için adet kademesi değişti. Güncel seçenekleri yenileyip fiyatı seçin.`
+        : `The quantity tier changed for ${quantityPricePending.resolvedCode || quantityPricePending.requestedCode}. Refresh options and select the current price.`);
       await assertCurrentPricesBeforeConfirmation(quoteBuilderLines, workbenchMode === "new" && hasCustomerPricingProfile ? effectiveCustomerType : customerType, effectiveMarginA, effectiveMarginB, currency, selectedLocalSalesOrderId || undefined, selectedCustomerProfile?.id ?? null, resolvedCustomerName);
       const order = buildSalesOrderPayload("confirmed");
       salesOrderTotals(order.lines, order.shipping_cost, order.discount_amount, true);

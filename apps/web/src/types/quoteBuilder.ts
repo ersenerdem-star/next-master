@@ -76,6 +76,10 @@ export type QuoteBuilderLine = {
   customer_price_basis_buy_price?: number | null;
   /** Identifies the customer price context for a preserved sale price. */
   customer_price_basis_context_key?: string | null;
+  /** Quantity used to load the current supplier alternatives. */
+  supplier_options_qty?: number | null;
+  /** Quantity-sensitive supplier price must be rechecked before confirmation. */
+  purchase_qty_recheck_required?: boolean;
   /** This new line was saved before a customer price profile was selected. */
   customer_pricing_pending?: boolean;
   price_date: string;
