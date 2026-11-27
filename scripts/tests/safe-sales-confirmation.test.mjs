@@ -85,14 +85,41 @@ test('pending quantity recheck blocks confirmation and preserves the draft; old 
  const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
  const stripped={...pending};delete stripped.purchase_qty_recheck_required;
  const request={...payload('draft',[stripped]),expected_updated_at:saved.updated_at};
- await assert.rejects(confirm(request),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
+ await assert.rejects(confirm(request),/SALES_DRAFT_QUANTITY_RECHECK_REQUIRED/);
  const strippedIdentity={...stripped};delete strippedIdentity.lineId;
- await assert.rejects(confirm({...request,lines:[strippedIdentity]}),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
+ await assert.rejects(confirm({...request,lines:[strippedIdentity]}),/SALES_DRAFT_QUANTITY_RECHECK_REQUIRED/);
+ await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb)',[JSON.stringify({...draft,lines:[stripped],expected_updated_at:saved.updated_at})]),/SALES_DRAFT_QUANTITY_RECHECK_REQUIRED/);
+ assert.equal((await db.query("select lines from sales_orders where id='draft'")).rows[0].lines[0].purchase_qty_recheck_required,true);
  assert.equal((await db.query("select status from sales_orders where id='draft'")).rows[0].status,'draft');
  const verified={...pending,purchase_qty_recheck_required:false};
- const result=await confirm({...request,lines:[verified]});
+ const refreshed=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
+  [JSON.stringify({...draft,lines:[verified],expected_updated_at:saved.updated_at})])).rows[0].result.sales_order;
+ assert.equal(refreshed.lines[0].purchase_qty_recheck_required,false);
+ const confirmedRequest={...request,lines:[verified],expected_updated_at:refreshed.updated_at};
+ const result=await confirm(confirmedRequest);
  assert.equal(result.sales_order.status,'confirmed');assert.equal(result.purchase_orders.length,1);
- assert.equal((await confirm({...request,lines:[verified]})).replayed,true);
+ assert.equal((await confirm(confirmedRequest)).replayed,true);
+});
+test('deleting an unresolved line from a draft is allowed',async t=>{
+ const {db}=await fixture(t);
+ const pending={...line('Other','00123'),lineId:'line-1',purchase_qty_recheck_required:true};
+ const valid={...line('Other','00456'),lineId:'line-2'};
+ const draft={...payload('remove-line',[pending,valid]),status:'draft'};
+ const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
+ const result=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
+  [JSON.stringify({...draft,lines:[valid],expected_updated_at:saved.updated_at})])).rows[0].result.sales_order;
+ assert.equal(result.lines.length,1);assert.equal(result.lines[0].resolvedCode,'00456');
+});
+test('large draft checks unresolved flags without losing any rows',{timeout:120000},async t=>{
+ const {db}=await fixture(t);
+ const rows=Array.from({length:10000},(_,index)=>({...line('Other',String(index).padStart(6,'0')),lineId:`row-${index}`,purchase_qty_recheck_required:true}));
+ const draft={...payload('large-draft',rows),status:'draft'};
+ const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
+ const modified=rows.map((item,index)=>index===rows.length-1?(({purchase_qty_recheck_required,...rest})=>rest)(item):item);
+ await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb)',
+  [JSON.stringify({...draft,lines:modified,expected_updated_at:saved.updated_at})]),/SALES_DRAFT_QUANTITY_RECHECK_REQUIRED/);
+ const row=(await db.query("select jsonb_array_length(lines)::int as n,lines->9999->'purchase_qty_recheck_required' as flagged from sales_orders where id='large-draft'")).rows[0];
+ assert.equal(row.n,10000);assert.equal(row.flagged,true);
 });
 test('historically confirmed orders with the flag are not rewritten or newly rejected',async t=>{
  const {db}=await fixture(t);

@@ -2,7 +2,7 @@
 export function salesConfirmationError(error: unknown, locale: string): string | null {
   const message = error instanceof Error ? error.message : "";
   const tr = locale === "tr";
-  if (message.includes("SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED")) return tr
+  if (message.includes("SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED") || message.includes("SALES_DRAFT_QUANTITY_RECHECK_REQUIRED")) return tr
     ? "Adet kademesi değişen bir satır var. Güncel tedarikçi seçeneklerini yenileyip fiyatı seçin; sonra siparişi onaylayın."
     : "A line's quantity tier changed. Refresh supplier options and select the current price before confirming.";
   if (message.includes("SALES_CONFIRMATION_HAS_DOCUMENTS")) return tr

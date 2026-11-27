@@ -4,6 +4,11 @@ import { orderConcurrencyError } from "./orderConcurrencyError";
 export function documentNumberError(error: unknown, locale: string, fallback: string): string {
   const message = error instanceof Error ? error.message
     : error && typeof error === "object" && "message" in error ? String(error.message || "") : "";
+  if (message.includes("SALES_DRAFT_QUANTITY_RECHECK_REQUIRED")) {
+    return locale === "tr"
+      ? "Siparişi yeniden açın; adet kademesi için güncel tedarikçi seçeneklerini yenileyin. Kaydedilmemiş değişiklikler ekranda duruyor."
+      : "Reopen the order and refresh supplier quantity-tier options. Your unsaved edits remain on screen.";
+  }
   if (/\b(?:SALES|PURCHASE)_ORDER_(?:STALE_VERSION|VERSION_REQUIRED)\b/.test(message)) {
     return orderConcurrencyError(error, locale, fallback);
   }
