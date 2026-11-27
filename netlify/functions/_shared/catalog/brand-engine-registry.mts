@@ -3,6 +3,7 @@ import {wilminkSupportDefinition} from './wilmink-sources.mjs';
 import {normalizeBrandKey} from './brand-standardization.mts';
 import {resolveTecAllianceBrandEntry} from './tecalliance-brand-registry.mts';
 import {resolveCatalogSyncPlan} from './catalog-sync-provider.mts';
+import {SKF_OFFICIAL_CATALOGUE} from './skf-official-provider.mjs';
 import {SCHAEFFLER_ENGINE,isSchaefflerBrand} from './schaeffler-family.mts';
 const knownOfficialSources:Record<string,{sourceKey:string;sourceUrl:string;family:string;access?:string}>={
  vag:{family:'vag',sourceKey:'vag_partslink24_authorized',sourceUrl:'https://www.partslink24.com/',access:'authorization_required'},
@@ -29,7 +30,7 @@ export function brandEngineDefinition(brand:string){
  if(key==='denso')return {brand,family:'denso',sourceKey:'denso_official_v1',sourceUrl:'https://www.denso-am.eu/catalog/pv',reader:true,workflow:'brand'};
  if(key==='dayco')return {brand,family:'dayco',sourceKey:'dayco_official',sourceUrl:'https://www.dayco.com/emea-en/catalog/',reader:true,workflow:'brand'};
  if(key==='delphi')return {brand,...knownOfficialSources.delphi,reader:true,workflow:'brand'};
- if(key==='skf')return {brand,family:'skf_automotive',sourceKey:'skf_official_product_v1',sourceUrl:'https://automotive.skf.com/eur/en/product-catalogue',reader:true,workflow:'brand'};
+ if(key==='skf')return {brand,family:'skf_automotive',sourceKey:'skf_official_product_v1',sourceUrl:SKF_OFFICIAL_CATALOGUE,reader:true,workflow:'brand'};
  if(key==='bosch')return {brand,family:'bosch',sourceKey:'mira_legacy_bosch',sourceUrl:'https://www.boschaftermarket.com/',reader:true,workflow:'brand'};
  if(['mann','mannfilter'].includes(key))return {brand,family:'mann',sourceKey:'mira_legacy_mann',sourceUrl:'https://www.mann-filter.com/en/catalog.html',reader:true,workflow:'brand'};
  if(tec)return {brand,family:'tecalliance',sourceKey:tec.preferredProviderKey,sourceUrl:tec.preferredSourceUrl,reader:true,workflow:'brand'};

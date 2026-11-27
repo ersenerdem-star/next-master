@@ -1,8 +1,9 @@
 import {officialGrossWeightKg} from './official-weight.mjs';
-const HOST='automotive.skf.com',BASE='https://'+HOST;
+const BASE='https://www.skfvertevo.com';
+export const SKF_OFFICIAL_CATALOGUE=BASE+'/eur/en/product-catalogue';
 const text=v=>typeof v==='string'?v.trim():'';
 export const exactSkfCode=v=>text(v).replace(/\s+/g,'').toUpperCase();
-const productUrl=code=>BASE+'/eur/en/product-catalogue/'+encodeURIComponent(exactSkfCode(code));
+const productUrl=code=>SKF_OFFICIAL_CATALOGUE+'/'+encodeURIComponent(exactSkfCode(code));
 const list=v=>Array.isArray(v)?v:[];
 function jsonLd(html){
  const nodes=[];
@@ -23,7 +24,7 @@ export function mapSkfOfficialPage(html,code){
  if(!matches.length)throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
  if(matches.length!==1)throw Error('OFFICIAL_EXACT_MATCH_AMBIGUOUS');
  const p=matches[0],brand=typeof p.brand==='string'?p.brand:p.brand?.name;
- if(text(brand).toUpperCase()!=='SKF'||!samePage(p.url,url))throw Error('SKF_PRODUCT_IDENTITY_INVALID');
+ if(!['SKF','SKF VERTEVO'].includes(text(brand).toUpperCase())||!samePage(p.url,url))throw Error('SKF_PRODUCT_IDENTITY_INVALID');
  if(p.name&&exactSkfCode(p.name)!==normalized)throw Error('SKF_PRODUCT_IDENTITY_INVALID');
  const properties=list(p.additionalProperty).filter(x=>x&&typeof x==='object'),fields={};
  // A product-bound breadcrumb gives the explicit short type on SKF pages.

@@ -1,15 +1,15 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {mapSkfOfficialPage,fetchSkfSupplierCatalogFields} from '../../netlify/functions/_shared/catalog/skf-official-provider.mjs';
-const url='https://automotive.skf.com/eur/en/product-catalogue/VKBA906';
-const article={"@type":"Product",sku:'VKBA906',name:'VKBA 906',url,brand:{name:'SKF'},description:'Product-specific description',additionalProperty:[{name:'Width',value:'37 mm'},{name:'Inner Diameter',value:'35 mm'},{name:'Weight',value:'0.62 kg'}]};
-const breadcrumb={"@type":"BreadcrumbList",itemListElement:[{name:'Wheel Bearing Kit',item:'https://automotive.skf.com/eur/en/product-catalogue?type=kit'},{name:'VKBA 906',item:url}]};
+const url='https://www.skfvertevo.com/eur/en/product-catalogue/VKBA906';
+const article={"@type":"Product",sku:'VKBA906',name:'VKBA 906',url,brand:{name:'SKF Vertevo'},description:'Product-specific description',additionalProperty:[{name:'Width',value:'37 mm'},{name:'Inner Diameter',value:'35 mm'},{name:'Weight',value:'0.62 kg'}]};
+const breadcrumb={"@type":"BreadcrumbList",itemListElement:[{name:'Wheel Bearing Kit',item:'https://www.skfvertevo.com/eur/en/product-catalogue?type=kit'},{name:'VKBA 906',item:url}]};
 const page=(...items)=>items.map(x=>'<script type="application/ld+json">'+JSON.stringify(x)+'</script>').join('');
 test('SKF source-bound exact article and breadcrumb type produce measured dimensions, not inferred weight or origin',()=>{
  const r=mapSkfOfficialPage(page(article,breadcrumb),'VKBA 906');assert.equal(r.code,'VKBA906');assert.equal(r.fields.description,'Wheel Bearing Kit');assert.deepEqual(r.fields.dimensions,{width_mm:37,inner_diameter_mm:35});
  for(const field of ['weight_kg','origin','hs_code','ean','oem_no','vehicle','vehicle_model','market_segment'])assert.equal(r.fields[field],undefined);
 });
 test('only an exact SKF product on the same official article page is admitted',()=>{
- for(const p of [{...article,sku:'VKBA-906'},{...article,brand:{name:'FAG'}},{...article,url:'https://spareto.com/eur/en/product-catalogue/VKBA906'},{...article,url:url+'?different=1'},{...article,url:url.replace('906','907')},{...article,name:'VKBA907'}])assert.throws(()=>mapSkfOfficialPage(page(p),'VKBA906'));
+ for(const p of [{...article,sku:'VKBA-906'},{...article,brand:{name:'FAG'}},{...article,url:url.replace('www.skfvertevo.com','automotive.skf.com')},{...article,url:'https://spareto.com/eur/en/product-catalogue/VKBA906'},{...article,url:url+'?different=1'},{...article,url:url.replace('906','907')},{...article,name:'VKBA907'}])assert.throws(()=>mapSkfOfficialPage(page(p),'VKBA906'));
  assert.throws(()=>mapSkfOfficialPage(page(article,article),'VKBA906'),/AMBIGUOUS/);
  assert.throws(()=>mapSkfOfficialPage(page({'@type':'Organization',name:'SKF'}),'VKBA906'),/NOT_FOUND/);
 });
