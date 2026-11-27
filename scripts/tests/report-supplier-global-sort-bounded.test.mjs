@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {PGlite} from '@electric-sql/pglite';
 const sql=await readFile(new URL('../../supabase/migrations/20261127143625_supplier_comparison_global_sort_bounded.sql',import.meta.url),'utf8');
 const cursorSql=await readFile(new URL('../../supabase/migrations/20261127143632_supplier_comparison_cursor.sql',import.meta.url),'utf8');
-const cursorOrderFix=await readFile(new URL('../../supabase/migrations/20261127145000_supplier_comparison_cursor_c_order.sql',import.meta.url),'utf8');
+const cursorOrderFix=await readFile(new URL('../../supabase/migrations/20261127143854_supplier_comparison_cursor_c_order.sql',import.meta.url),'utf8');
 const org='11111111-1111-4111-8111-111111111111',brand='33333333-3333-4333-8333-333333333333',a='aaaaaaaa-aaaa-4aaa-8aaa-000000000001',b='aaaaaaaa-aaaa-4aaa-8aaa-000000000002';
 async function fixture(t){const db=new PGlite();t.after(()=>db.close());await db.exec(`
 create role anon;create role authenticated;create role service_role;create schema auth;
