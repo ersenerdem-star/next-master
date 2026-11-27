@@ -10,7 +10,7 @@ function database({active=false,pending=row,expired=null}={}){
  const calls=[];
  let queryNumber=0;
  const builder={
-  eq(){return this;},in(){return this;},gt(){return this;},lt(){return this;},order(){return this;},
+  eq(){return this;},or(){return this;},in(){return this;},gt(){return this;},lt(){return this;},order(){return this;},
   limit(){queryNumber++;
    const data=queryNumber===1?(active?[row]:[]):queryNumber===2?(pending?[pending]:[]):(expired?[expired]:[]);
    return Promise.resolve({data,error:null});
@@ -49,7 +49,7 @@ test('paused ZF lifecycle job resumes and dispatches to fixed portal',async()=>{
 
 test('after reviewed packages, scheduler creates one next package and dispatches it',async()=>{
  let jobQuery=0,sent=0,rpcCount=0;
- const chain=data=>({eq(){return this;},in(){return this;},gt(){return this;},lt(){return this;},order(){return this;},limit(){return Promise.resolve({data,error:null});}});
+ const chain=data=>({eq(){return this;},or(){return this;},in(){return this;},gt(){return this;},lt(){return this;},order(){return this;},limit(){return Promise.resolve({data,error:null});}});
  const db={
   from(table){return {select(){return table==='catalog_external_sources'?chain([{organization_id:org}]):chain((++jobQuery,[]));}};},
   rpc(name,args){assert.equal(name,'enqueue_next_catalog_zf_lifecycle_job');assert.equal(args.input_org,org);rpcCount++;

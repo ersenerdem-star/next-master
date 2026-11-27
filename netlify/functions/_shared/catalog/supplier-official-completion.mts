@@ -11,14 +11,16 @@ import {normalizeBrandKey} from './brand-standardization.mts';
 import {CATALOG_FIELDS,exactCatalogCode} from './supplier-enrichment-plan.mjs';
 import {catalogLifecycleReview} from './catalog-completion-review.mjs';
 
+type SourceFetch = {fetchImpl?:typeof fetch};
+
 export function supplierOfficialProvider(brand:string){
  const key=normalizeBrandKey(brand);
- if(key==='denso')return {key:'denso_official',fetch:fetchDensoSupplierCatalogFields};
- if(key==='delphi')return {key:'delphi_official_catalog',fetch:fetchDelphiOfficialFields};
- if(key==='skf')return {key:'skf_automotive_official',fetch:fetchSkfSupplierCatalogFields};
- if(['sachs','lemforder','zf','trw','boge','wabco','lemfoerder'].includes(key))return {key:'zf',fetch:(code:string)=>fetchZfSupplierCatalogFields(brand,code)};
- if(key==='bosch')return {key:'bosch',fetch:fetchBoschSupplierCatalogFields};
- if(['mann','mannfilter'].includes(key))return {key:'mann',fetch:fetchMannSupplierCatalogFields};
+ if(key==='denso')return {key:'denso_official',budgetGroup:'denso',fetch:(code:string,options?:SourceFetch)=>fetchDensoSupplierCatalogFields(code,20000,options?.fetchImpl)};
+ if(key==='delphi')return {key:'delphi_official_catalog',budgetGroup:'delphi',fetch:fetchDelphiOfficialFields};
+ if(key==='skf')return {key:'skf_automotive_official',budgetGroup:'skf',fetch:(code:string,options?:SourceFetch)=>fetchSkfSupplierCatalogFields(code,20000,options?.fetchImpl)};
+ if(['sachs','lemforder','zf','trw','boge','wabco','lemfoerder'].includes(key))return {key:'zf',budgetGroup:'zf',fetch:(code:string,options?:SourceFetch)=>fetchZfSupplierCatalogFields(brand,code,15000,options?.fetchImpl)};
+ if(key==='bosch')return {key:'bosch',budgetGroup:'bosch',fetch:(code:string,options?:SourceFetch)=>fetchBoschSupplierCatalogFields(code,12000,options?.fetchImpl)};
+ if(['mann','mannfilter'].includes(key))return {key:'mann',budgetGroup:'mann',fetch:(code:string,options?:SourceFetch)=>fetchMannSupplierCatalogFields(code,12000,options?.fetchImpl)};
  const entry=resolveTecAllianceBrandEntry(brand);
  if(entry)return {key:entry.preferredProviderKey,budgetGroup:'tecalliance' as const,
   fetch:(code:string,options?:{fetchImpl?:typeof fetch})=>fetchTecAllianceSupplierCatalogFields(brand,code,entry.sync,12000,options?.fetchImpl)};

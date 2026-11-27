@@ -1,4 +1,5 @@
 import {readZfOfficialProduct} from './zf-aftermarket-sync.mts';
+import {budgetedCatalogFetch,CatalogSourceDeferred,deferCatalogSourceJob} from './source-request-budget.mts';
 import {requireZfBrand,exactZfCode} from './zf-product-identity.mjs';
 export const ZF_SOURCE='zf_group_official_v2';
 export function assertZfSource(source,brand,{apply=false}={}){
@@ -28,7 +29,10 @@ export async function collectZfObservation({brand,code,before,readArticle=readZf
 export async function runZfJob({db,organizationId,jobId,fetchImpl=fetch,readArticle=readZfOfficialProduct,maxMs=10*60*1000,requestDelayMs=1100}){
  const rpc=async(name,args)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const job=await rpc('claim_catalog_zf_job',{input_org:organizationId,input_job:jobId});if(!job)return{claimed:false};
- const started=Date.now();const heartbeat=()=>rpc('heartbeat_catalog_zf_job',{input_org:organizationId,input_job:jobId,input_token:job.lease_token});
+ const started=Date.now();
+ const scope={input_org:organizationId,input_job:jobId,input_token:job.lease_token};
+ const heartbeat=()=>rpc('heartbeat_catalog_zf_job',scope);
+ const request=budgetedCatalogFetch(db,'zf',fetchImpl);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',ZF_SOURCE).single();
  const brand=await db.from('brands').select('id').eq('organization_id',organizationId).eq('name',job.manifest.brand).single();
  for(let index=job.next_index;index<job.total_items;index++){
@@ -50,7 +54,7 @@ export async function runZfJob({db,organizationId,jobId,fetchImpl=fetch,readArti
      fetchImpl:async(url,init)=>{
       if(Date.now()-started>maxMs)throw Error('ZF_TIME_WINDOW');
       if(requestDelayMs)await new Promise(resolve=>setTimeout(resolve,requestDelayMs));await heartbeat();
-      return fetchImpl(url,init);
+      return request(url,init);
      }});
     await save();
    }
@@ -61,6 +65,7 @@ export async function runZfJob({db,organizationId,jobId,fetchImpl=fetch,readArti
    await save(job.mode==='publish'?'completed':'reviewed',true,pause?'paused':null);
    if(pause)return{claimed:true,status:'paused'};
   }catch(error){
+   if(error instanceof CatalogSourceDeferred)return deferCatalogSourceJob(db,scope,error,'defer_catalog_zf_source_request');
    const message=String(error?.message||'ZF_REQUEST_FAILED').slice(0,350);
    const status=message==='ZF_TIME_WINDOW'?'paused':'failed';
    try{await save('failed',false,status,`${job.manifest.brand} / ${item.product_code}: ${message}`);}catch{/* A lost lease cannot overwrite another owner. */}

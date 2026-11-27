@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {WILMINK_SUPPORT_SCAN,wilminkSource} from './wilmink-sources.mjs';
 import {catalogRowFailure} from './catalog-row-failures.mjs';
 import {WILMINK_SCAN,parseWilminkBrandPage,parseWilminkProduct,readWilminkHtml,wilminkReview} from './wilmink-kolbenschmidt.mjs';
+import {budgetedCatalogFetch,CatalogSourceDeferred,deferCatalogSourceJob} from './source-request-budget.mts';
 import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 
 export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,readHtml=readWilminkHtml}:any){
@@ -11,10 +12,11 @@ export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,re
  // single discovery package contains many product pages.
  const requestIntervalMs=Math.max(1000,Math.min(15000,Number(process.env.WILMINK_REQUEST_INTERVAL_MS||1500)));
  let lastReadAt=0;
+ const fetchImpl=budgetedCatalogFetch(db,'wilmink');
  const read=async(url:string)=>{
   const wait=Math.max(0,requestIntervalMs-(Date.now()-lastReadAt));
   if(wait)await new Promise(resolve=>setTimeout(resolve,wait));
-  const result=await readHtml(url,{brand:config.brand});
+  const result=await readHtml(url,{brand:config.brand,fetchImpl});
   lastReadAt=Date.now();
   return result;
  };
@@ -58,7 +60,7 @@ export async function runWilminkDiscovery({db,organizationId,job,maxMs=210000,re
    await save();}
   const result=await rpc(support?'complete_catalog_wilmink_support':'complete_catalog_wilmink_discovery',{...scope,input_page:checkpoint.page,input_products:checkpoint.captured});
   return {status:'reviewed',...result};
- }catch(e:any){const message=String(e.message||'WILMINK_DISCOVERY_FAILED').slice(0,200),transient=/HTTP_(429|5\d\d)|timeout|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;
+ }catch(e:any){if(e instanceof CatalogSourceDeferred)return deferCatalogSourceJob(db,scope,e);const message=String(e.message||'WILMINK_DISCOVERY_FAILED').slice(0,200),transient=/HTTP_(429|5\d\d)|timeout|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;
   await save(transient?'paused':'failed',message).catch(()=>{});return {status:transient?'paused':'failed',error:message};}
 }
 
@@ -66,5 +68,5 @@ export function wilminkProvider(db:any,organizationId:string,brandId:string,bran
  const current=await db.from('catalog_products').select('id,product_code').eq('organization_id',organizationId).eq('brand_id',brandId).eq('normalized_code',code.replace(/[^a-z0-9]/gi,'').toUpperCase());if(current.error)throw Error(current.error.message);
  const exact=(current.data||[]).filter((p:any)=>exactCatalogCode(p.product_code)===exactCatalogCode(code));if(exact.length!==1)throw Error('CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS');
  const receipt=await db.from('catalog_product_source_records').select('source_url').eq('organization_id',organizationId).eq('catalog_product_id',exact[0].id).eq('source_key',config.sourceKey).order('retrieved_at',{ascending:false}).limit(1).maybeSingle();if(receipt.error)throw Error(receipt.error.message);if(!receipt.data)throw Error('WILMINK_SOURCE_INDEX_MISSING');
- return parseWilminkProduct(await readWilminkHtml(receipt.data.source_url),{sourceUrl:receipt.data.source_url,expectedCode:code,expectedBrand:config.brand});
+ return parseWilminkProduct(await readWilminkHtml(receipt.data.source_url,{brand:config.brand,fetchImpl:budgetedCatalogFetch(db,'wilmink')}),{sourceUrl:receipt.data.source_url,expectedCode:code,expectedBrand:config.brand});
  }};}

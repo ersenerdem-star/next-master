@@ -53,9 +53,9 @@ const KNOWN_MANUFACTURER_PATTERNS = [
   { label: "Jeep", pattern: /\bJEEP\b/ },
 ];
 
-export async function fetchBoschSupplierCatalogFields(productCode:string,requestTimeoutMs=12000) {
+export async function fetchBoschSupplierCatalogFields(productCode:string,requestTimeoutMs=12000,fetchImpl:typeof fetch=fetch) {
   const exact=(v:unknown)=>String(v??'').replace(/\s+/g,'').toUpperCase();
-  const detail=await fetchBoschDetail(productCode,requestTimeoutMs,{accept404:true});
+  const detail=await fetchBoschDetail(productCode,requestTimeoutMs,{accept404:true,fetchImpl});
   if(!detail?.productNumber||exact(detail.productNumber)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
   return {code:exact(productCode),sourceUrl:`${BOSCH_API_BASE_URL}/${BOSCH_LOCALE_PATH}/search-details/${encodeURIComponent(detail.productNumber)}`,
     fields:{description:extractBoschDescription(detail,null,null),ean:extractBoschEan(detail,null,null),oem_no:extractBoschOemNumbers(detail)}};
@@ -527,7 +527,7 @@ function countPrefixes(values: string[], length: number) {
   return counts;
 }
 
-async function fetchBoschDetail(productNumber: string, requestTimeoutMs: number, options: { accept404: boolean }) {
+async function fetchBoschDetail(productNumber: string, requestTimeoutMs: number, options: { accept404: boolean; fetchImpl?: typeof fetch }) {
   const url = new URL(`${BOSCH_API_BASE_URL}/${BOSCH_LOCALE_PATH}/search-details/${encodeURIComponent(normalizeCode(productNumber))}`);
   url.searchParams.set("queryPIM", "true");
   url.searchParams.set("catalogId", BOSCH_CATALOG_ID);
@@ -722,11 +722,11 @@ function normalizeVehicleMakerName(value: string) {
     .trim();
 }
 
-async function fetchJson(url: string, requestTimeoutMs: number, options?: { accept404?: boolean }) {
+async function fetchJson(url: string, requestTimeoutMs: number, options?: { accept404?: boolean; fetchImpl?: typeof fetch }) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch(url, {
+    const response = await (options?.fetchImpl??fetch)(url, {
       headers: requestHeaders,
       signal: controller.signal,
     });

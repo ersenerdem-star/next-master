@@ -15,15 +15,16 @@ export function requireZfDispatch(req:Request,key:string,job:string,org:string){
 
 export async function dispatchZfLifecycle({db,target,send=fetch,now=Date.now}:any){
  const current=await db.from('catalog_zf_jobs').select('id,status,lease_expires_at')
-  .eq('manifest->>scope','lifecycle').eq('status','running').gt('lease_expires_at',new Date(now()).toISOString()).limit(1);
+  .or('manifest->>scope.eq.lifecycle,source_retry_after.not.is.null').eq('status','running').gt('lease_expires_at',new Date(now()).toISOString()).limit(1);
  if(current.error)throw Error('ZF_DISPATCH_ACTIVE_CHECK_FAILED');
  if(current.data?.length)return {status:'busy'};
  const pending=await db.from('catalog_zf_jobs').select('id,organization_id,status,created_at')
-  .eq('manifest->>scope','lifecycle').in('status',['queued','paused'])
+  .or('manifest->>scope.eq.lifecycle,source_retry_after.not.is.null').in('status',['queued','paused'])
+  .or(`source_retry_after.is.null,source_retry_after.lte.${new Date(now()).toISOString()}`)
   .order('created_at',{ascending:true}).limit(1);
  if(pending.error)throw Error('ZF_DISPATCH_PENDING_CHECK_FAILED');
  const expired=await db.from('catalog_zf_jobs').select('id,organization_id,status,created_at')
-  .eq('manifest->>scope','lifecycle').eq('status','running')
+  .or('manifest->>scope.eq.lifecycle,source_retry_after.not.is.null').eq('status','running')
   .lt('lease_expires_at',new Date(now()).toISOString())
   .order('created_at',{ascending:true}).limit(1);
  if(expired.error)throw Error('ZF_DISPATCH_EXPIRED_CHECK_FAILED');

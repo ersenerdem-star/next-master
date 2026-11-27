@@ -500,8 +500,8 @@ async function fetchOfficialListMap(kind: "discontinued" | "new", requestTimeout
   return rows;
 }
 
-export async function fetchMannSupplierCatalogFields(productCode:string,requestTimeoutMs=12000) {
-  const product=await fetchProductDirect(productCode,requestTimeoutMs);
+export async function fetchMannSupplierCatalogFields(productCode:string,requestTimeoutMs=12000,fetchImpl:typeof fetch=fetch) {
+  const product=await fetchProductDirect(productCode,requestTimeoutMs,fetchImpl);
   const designation=product?attributesToMap(product.attributes).sales_designation:'';
   const exact=(v:unknown)=>String(v??'').replace(/\s+/g,'').toUpperCase();
   if(!designation||exact(designation)!==exact(productCode))throw Error('OFFICIAL_EXACT_MATCH_NOT_FOUND');
@@ -570,10 +570,10 @@ async function resolveOfficialProduct(row: any, requestTimeoutMs: number, provid
   };
 }
 
-async function fetchProductDirect(productCode: string, requestTimeoutMs: number) {
+async function fetchProductDirect(productCode: string, requestTimeoutMs: number, fetchImpl:typeof fetch=fetch) {
   const compact = normalizeCode(productCode);
   if (!compact) return null;
-  const data = await fetchGraphql(PRODUCT_BY_SKU_QUERY, { sku: `${compact}_MANN-FILTER` }, requestTimeoutMs);
+  const data = await fetchGraphql(PRODUCT_BY_SKU_QUERY, { sku: `${compact}_MANN-FILTER` }, requestTimeoutMs, fetchImpl);
   const item = data?.products?.items?.[0] || null;
   return item?.urlKey ? normalizeOfficialProduct(item) : null;
 }
@@ -922,11 +922,11 @@ function normalizeReferenceProducts(items: any[]) {
   );
 }
 
-async function fetchGraphql(query: string, variables: Record<string, unknown>, requestTimeoutMs: number) {
+async function fetchGraphql(query: string, variables: Record<string, unknown>, requestTimeoutMs: number, fetchImpl:typeof fetch=fetch) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
   try {
-    const response = await fetch(MANN_GRAPHQL_ENDPOINT, {
+    const response = await fetchImpl(MANN_GRAPHQL_ENDPOINT, {
       method: "POST",
       headers: requestHeaders,
       signal: controller.signal,

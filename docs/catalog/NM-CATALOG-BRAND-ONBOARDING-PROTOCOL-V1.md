@@ -65,6 +65,16 @@ the canonical reread passed.
   vehicle requests. The shared clock resumes due Elring budget waits only
   when the existing source gate allows it. The Elring bulk publication hold
   remains in force during bounded review.
+- The existing exact-product workers use provider groups for Bosch, Delphi,
+  Denso, Knorr-Bremse, MANN, SKF, Schaeffler and ZF. Knorr discovery shares
+  its exact-product allowance. ZF lifecycle and supplier review share one
+  allowance across the ZF brands. Wilmink listing, product and secondary
+  reviews share one allowance. Spareto corrections and supplier secondary
+  reviews share the existing Spareto group with Monroe and Knorr.
+- New groups start at 60 requests per UTC hour, spaced at least two seconds
+  apart. These are local operating caps. A paused source keeps its existing
+  authorization requirements. This coverage describes queue workers, separate
+  from legacy manual bulk import and evidence-file ingestion.
 
 ## Kolbenschmidt / Wilmink distributor engine — 2026-10-21
 

@@ -1,5 +1,6 @@
 import {fetchExactSparetoSecondary} from './spareto-secondary-provider.mjs';
 import {planSparetoReviewedCorrection,SPARETO_CORRECTION_SOURCE,SPARETO_CORRECTION_ADAPTER} from './spareto-reviewed-correction.mjs';
+import {budgetedCatalogFetch,CatalogSourceDeferred,deferCatalogSourceJob} from './source-request-budget.mts';
 import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 
 export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=210000,transportWaitMs=125000,wait=(ms:number)=>new Promise(r=>setTimeout(r,ms)),fetchSecondary=fetchExactSparetoSecondary}:any){
@@ -29,7 +30,7 @@ export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=2
     if(exact.length!==1)observation={brand:job.manifest.brand,code:exactCatalogCode(item.product_code),unavailable:'CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS',observedAt:new Date().toISOString()};
     else{
      try{
-      const secondary=await fetchSecondary({brand:job.manifest.brand,code:item.product_code,expectedEan:exact[0].ean});
+      const secondary=await fetchSecondary({brand:job.manifest.brand,code:item.product_code,expectedEan:exact[0].ean},{fetchImpl:budgetedCatalogFetch(db,'spareto')});
       observation={...secondary,sourceKey:SPARETO_CORRECTION_SOURCE,before:exact[0],proposal:planSparetoReviewedCorrection({brand:job.manifest.brand,code:item.product_code,before:exact[0],observation:secondary})};
      }catch(e:any){
       // An absent, ambiguous or mismatched product is a per-item outcome;
@@ -46,6 +47,7 @@ export async function runClaimedSparetoCorrection({db,organizationId,job,maxMs=2
    await save(true,pause?'paused':null);processed++;
    if(pause)return {status:'paused',processed};
   }catch(e:any){
+   if(e instanceof CatalogSourceDeferred)return deferCatalogSourceJob(db,scope,e);
    const message=String(e.message||'CORRECTION_FAILED').slice(0,180);
    const transient=/HTTP[_ ]?(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network|^terminated$/i.test(message)&&Number(job.retry_attempts||0)<4;
    await save(false,transient?'paused':'failed',message).catch(()=>{});

@@ -82,3 +82,45 @@ test('approved Elring dispatcher signatures cannot authorize the generic route',
   assert.doesNotThrow(() => requireBrandDispatch(req,key,job,org,lane));
   assert.throws(() => requireBrandDispatch(req,key,job,org), /BRAND_DISPATCH_DENIED/);
 });
+
+test('existing exact readers share their provider quota across entry points', async () => {
+  const {brandOfficialProvider}=await import('../../netlify/functions/_shared/catalog/brand-official-provider.mts');
+  const {supplierOfficialProvider}=await import('../../netlify/functions/_shared/catalog/supplier-official-completion.mts');
+  const groups={Bosch:'bosch',Delphi:'delphi',Denso:'denso',Mann:'mann',SKF:'skf',Sachs:'zf',Lemforder:'zf',TRW:'zf'} as const;
+  for(const [brand,group] of Object.entries(groups)){
+    assert.equal(supplierOfficialProvider(brand)?.budgetGroup,group,brand);
+    assert.equal(brandOfficialProvider(brand)?.budgetGroup,group,brand);
+  }
+  for(const brand of ['INA','LUK','FAG'])assert.equal(brandOfficialProvider(brand)?.budgetGroup,'schaeffler');
+  assert.equal(brandOfficialProvider('Knorr-Bremse')?.budgetGroup,'knorr_bremse');
+});
+
+test('individual provider readers use the injected transport before making a request', async () => {
+  const {brandOfficialProvider}=await import('../../netlify/functions/_shared/catalog/brand-official-provider.mts');
+  const examples={Bosch:'1987302874',Delphi:'LP1708',Denso:'DCP02005',Mann:'HU 719/7 x',SKF:'VKBA 3643',
+    Lemforder:'25975 01',INA:'530 0538 10','Knorr-Bremse':'K031740N00'};
+  for(const [brand,code] of Object.entries(examples)){
+    let requests=0;
+    const provider=brandOfficialProvider(brand);
+    assert.ok(provider,brand);
+    await assert.rejects(provider.fetch(code,{fetchImpl:async()=>{
+      requests++;
+      throw new CatalogSourceDeferred(retryAt);
+    }}),CatalogSourceDeferred,brand);
+    assert.equal(requests,1,brand);
+  }
+});
+
+test('a supplier Spareto budget wait preserves the isolated review lease and stops claiming rows', async () => {
+  const {runSupplierSecondaryReviews}=await import('../../netlify/functions/_shared/catalog/supplier-secondary-worker.mts');
+  const calls: Array<[string,Record<string,unknown>]>=[];
+  const result=await runSupplierSecondaryReviews({
+    firstClaim:{id:'row',token:'lease',brand:'Denso',code:'DCP02005'},
+    async rpc(name:string,args:Record<string,unknown>){calls.push([name,args]);},
+    async fetchSecondary(){throw new CatalogSourceDeferred(retryAt);},
+  });
+  assert.equal(result.processed,0);
+  assert.deepEqual(calls,[['defer_supplier_catalog_secondary_source_request',{
+    input_id:'row',input_token:'lease',input_retry_at:retryAt,
+  }]]);
+});
