@@ -1,3 +1,4 @@
+import {validateVagSparetoItem} from './_shared/catalog/vag-spareto-review.mts';
 import type {Config} from '@netlify/functions';
 import {createClient} from '@supabase/supabase-js';
 import {requireCallerProfile} from './_shared/auth.mts';
@@ -34,6 +35,16 @@ export default async(req:Request)=>{
  }
  if(!readAllowed)return json({error:'OFFICIAL_ENGINE_NOT_CONFIGURED'},409);
  const action=body?.action;
+ if(action==='start'&&def.family==='vag_spareto_review'){
+  let products;
+  try{
+   if(!Array.isArray(body.products)||body.products.length<1||body.products.length>3)throw Error('VAG_SPARETO_ITEM_INVALID');
+   products=body.products.map((p:any)=>validateVagSparetoItem(p?.code,p?.sourceUrl));
+  }catch{return json({error:'VAG_SPARETO_ITEM_INVALID'},400);}
+  const result=await db.rpc('start_catalog_vag_spareto_review',{input_org:org,input_actor:caller.profile.id,input_key:body.requestId,input_products:products});
+  if(result.error)return json({error:result.error.message},400);
+  return json({job:result.data,dispatchPending:true},202);
+ }
  if(action==='discover'&&def.family==='knorr_bremse'){
   const result=await db.rpc('start_catalog_knorr_discovery',{input_org:org,input_actor:caller.profile.id,input_key:body.requestId,input_page:body.page??0});if(result.error)return json({error:result.error.message},400);return json({job:result.data,dispatchPending:true},202);
  }

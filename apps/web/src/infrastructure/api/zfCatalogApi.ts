@@ -16,6 +16,6 @@ export const getZfStatus=(brand:string,jobId?:string):Promise<ZfStatus>=>request
 export const actOnZfJob=(brand:string,body:{action:'start'|'startLifecycle'|'startNextLifecycle'|'resume'|'publish';jobId?:string;codes?:string[];requestId?:string}):Promise<{job:ZfJob;dispatchPending:boolean}>=>request(brand,'POST',{...body,brand});
 
 export const getBrandEngineStatus=(brand:string,jobId?:string,sourceKey?:string):Promise<ZfStatus>=>request(brand,'GET',undefined,jobId,'brand',sourceKey);
-export const actOnBrandEngineJob=(brand:string,body:{action:'start'|'resume'|'publish'|'discover';jobId?:string;codes?:string[];requestId?:string;urls?:string[]},sourceKey?:string):Promise<{job:ZfJob;dispatchPending:boolean}>=>request(brand,'POST',{...body,brand,sourceKey},undefined,'brand',sourceKey);
+export const actOnBrandEngineJob=(brand:string,body:{action:'start'|'resume'|'publish'|'discover';jobId?:string;codes?:string[];requestId?:string;urls?:string[];products?:Array<{code:string;sourceUrl:string}>},sourceKey?:string):Promise<{job:ZfJob;dispatchPending:boolean}>=>request(brand,'POST',{...body,brand,sourceKey},undefined,'brand',sourceKey);
 export type CatalogEngineEntry={brand:string;family:string;engineName?:string;sourceUrl:string;sourceKey:string|null;reader:boolean;workflow:string;status:string};
 export const listBrandEngines=async():Promise<CatalogEngineEntry[]> => (await request('','GET',undefined,undefined,'brand')).brands;

@@ -430,7 +430,18 @@ market-specific availability. The July 2026 terms, section 6
 (`https://legal.lexcom.de/legaldocs/partslink24-tos/-/10/en/partslink24-tos.html`),
 restrict automated extraction and integration. Record VAG as
 `authorized_access_required`, with **no working reader or new subscription**.
-Licensed data-file/API availability remains unverified. Porsche Classic's
+Licensed data-file/API availability remains unverified.
+
+VAG can additionally run a Spareto review package of up to three explicit
+Volkswagen AG product pages. The job binds each supplied code to a current VAG
+supplier publication at admission, checks the exact code and displayed
+manufacturer on the product page, and uses the shared Spareto request group.
+The queue stores attributed evidence for internal review. It never infers an
+individual marque, creates a catalog product, publishes a lifecycle change,
+or updates catalog identifiers or prices. Brand-filtered listing URLs cannot
+be admitted to this lane.
+
+Porsche Classic's
 public model PDFs cover a limited historical subset, not the whole VAG scope.
 
 Deferred final review includes VAG, Febi/Swag/Blue Print authorization,

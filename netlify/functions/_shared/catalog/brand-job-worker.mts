@@ -15,6 +15,7 @@ import {SPARETO_CORRECTION_ADAPTER} from './spareto-reviewed-correction.mjs';
 import {readWilminkHtml,WILMINK_SCAN,safeWilminkObservation} from './wilmink-kolbenschmidt.mjs';
 import {runWilminkDiscovery,wilminkProvider} from './wilmink-discovery-worker.mts';
 import {budgetedCatalogFetch,CatalogSourceDeferred,deferCatalogSourceJob} from './source-request-budget.mts';
+import {readVagSparetoObservation,VAG_SPARETO_ADAPTER} from './vag-spareto-review.mts';
 import {catalogRowFailure} from './catalog-row-failures.mjs';
 export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=brandOfficialProvider,fetchSecondary=fetchExactSparetoSecondary,fetchSecondaryPage=fetchSparetoSecondaryPage,fetchWilmink=fetchKnorrWilminkReview,delayMs=1100}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
@@ -27,6 +28,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
+ const vagReview=def.family==='vag_spareto_review';
  const officialBudgetGroup=provider?.budgetGroup;
  const officialFetch=officialBudgetGroup?budgetedCatalogFetch(db,officialBudgetGroup):undefined;
  const monroeCandidate=monroe&&job.manifest.adapter===MONROE_DISCOVERY_REVIEW_ADAPTER;
@@ -43,13 +45,27 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const save=(state='observed',advance=false,endStatus:any=null,error:any=null)=>rpc('checkpoint_catalog_brand_job',{...scope,input_index:index,input_observation:observation,input_checkpoint:checkpoint,input_state:state,input_advance:advance,input_end_status:endStatus,input_error:error});
  try{
  if(job.manifest.source_key!==def.sourceKey)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');
- if(source.error||brand.error||!provider)throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');assertBrandEngineSource(source.data,job.manifest.brand,{publish:job.mode==='publish',sourceKey:def.sourceKey});
+ if(source.error||brand.error||(!provider&&!vagReview))throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');assertBrandEngineSource(source.data,job.manifest.brand,{publish:job.mode==='publish',sourceKey:def.sourceKey});
  if(monroeCandidate&&job.mode!=='stage')throw Error('MONROE_DISCOVERY_REVIEW_ONLY');
  if(monroeFitment&&source.data.metadata?.monroe_background_fitment_only!==true)throw Error('MONROE_AUTOMATIC_FITMENT_REVOKED');
  if(monroeImageOnly&&source.data.metadata?.monroe_background_image_only!==true)throw Error('MONROE_AUTOMATIC_APPLICATION_REVOKED');
  if(knorrAutomatic&&(source.data.metadata?.automatic_apply!==true||source.data.metadata?.automatic_application_policy!=='knorr-official-missing-only.v1'))throw Error('KNORR_AUTOMATIC_APPLICATION_REVOKED');
  if(automatic&&source.data.metadata?.automatic_apply!==true)throw Error('WILMINK_AUTOMATIC_APPLICATION_REVOKED');
  await rpc('heartbeat_catalog_brand_job',scope);
+ if(vagReview){
+  const input=job.manifest.products?.[index];
+  if(job.mode!=='stage'||job.manifest.adapter!==VAG_SPARETO_ADAPTER||job.total_items>3||input?.code!==item.product_code)throw Error('VAG_SPARETO_REVIEW_ONLY');
+  if(!observation){
+   try{observation=await readVagSparetoObservation(input,budgetedCatalogFetch(db,'spareto'));}
+   catch(error:any){
+    const reason=catalogRowFailure(error)||(/^SPARETO_(EXACT_IDENTITY_MISMATCH|PRODUCT_(IDENTITY|BOUNDARY)_MISSING|EAN_IDENTITY_CONFLICT|HTTP_404|RESPONSE_TOO_LARGE)$/.test(error.message)?error.message:null);
+    if(!reason)throw error;
+    observation={brand:'VAG',code:item.product_code,before:{},fields:{},replacements:[],unavailable:reason,canonicalWrite:false};
+   }
+  }
+  await save('reviewed',true);
+  continue;
+ }
  if(!observation){
  if(job.mode!=='stage')throw Error('BRAND_REVIEW_RECEIPT_MISSING');
  const current=await db.from('catalog_products').select('id,product_code,'+CATALOG_FIELDS.join(',')+(monroe?',image_url':'')).eq('organization_id',organizationId).eq('brand_id',brand.data.id).eq('normalized_code',item.product_code.replace(/[^a-z0-9]/gi,'').toUpperCase());

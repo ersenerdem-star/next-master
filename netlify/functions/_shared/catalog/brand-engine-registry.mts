@@ -1,3 +1,4 @@
+import {VAG_SPARETO_SOURCE} from './vag-spareto-review.mts';
 import {MONROE_TECALLIANCE_SOURCE,MONROE_TECALLIANCE_URL} from './tecalliance-sync.mts';
 import {wilminkSupportDefinition} from './wilmink-sources.mjs';
 import {normalizeBrandKey} from './brand-standardization.mts';
@@ -41,6 +42,8 @@ export function brandEngineDefinition(brand:string){
 }
 export function brandEngineForSource(brand:string,sourceKey?:string){
  const primary=brandEngineDefinition(brand);if(!sourceKey||sourceKey===primary.sourceKey)return primary;
+ if(brand==='VAG'&&sourceKey===VAG_SPARETO_SOURCE)return {brand,family:'vag_spareto_review',engineName:'Spareto · Volkswagen AG',sourceKey,
+  sourceUrl:'https://spareto.com/',reader:true,workflow:'brand',authority:'secondary'};
  const helper=wilminkSupportDefinition(brand,sourceKey);if(!helper)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');return helper;
 }
 export function assertBrandEngineSource(source:any,brand:string,{publish=false,sourceKey=undefined as string|undefined}={}){
@@ -48,6 +51,7 @@ export function assertBrandEngineSource(source:any,brand:string,{publish=false,s
  if(def.family==='schaeffler'&&source?.metadata?.server_access_verified!==true)throw Error('SCHAEFFLER_OFFICIAL_SERVER_ACCESS_REQUIRED');
  if(!def.reader||def.workflow!=='brand'||source?.source_key!==def.sourceKey||!source.is_active||!['allowed','internal_review_required'].includes(source.license_posture)
   ||source.credential_boundary!=='none'||source.rate_limit_posture!=='bounded'||source.metadata?.brand_engine_read_allowed!==true||!source.metadata?.allowed_brands?.includes(brand))throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');
+ if(def.family==='vag_spareto_review'&&(publish||source.robots_posture!=='allowed'||source.metadata?.exact_product_review_only!==true))throw Error('VAG_SPARETO_REVIEW_ONLY');
  if(publish&&(source.metadata?.brand_engine_enrichment_allowed!==true||!source.metadata?.approval_actor||!source.metadata?.publication_approval_reference))throw Error('OFFICIAL_ENGINE_PUBLICATION_NOT_APPROVED');
  return def;
 }
