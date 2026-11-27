@@ -802,3 +802,16 @@ test('quantity-tier supplier change requires fresh offer for adjusted quantity b
     assert.equal(confirmCall.args[0].lines[0].buy_price,18);assert.equal(confirmCall.args[0].lines[0].sell_price,11);
   } finally {await view.close()}
 });
+
+test('bulk choice updates 200 eligible order rows while retaining every customer sale price and quantity',async()=>{
+  const rows=Array.from({length:200},(_,index)=>({...supplierLine(),lineId:`bulk-${index}`,requestedCode:`SKU-${index}`,resolvedCode:`SKU-${index}`,sell_price:11+index/100}));
+  const order=fullOrder('bulk-200',rows);const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    const bulk=view.renderer.root.findAllByType('select').find(node=>node.props['aria-label']==='Bulk supplier');assert.ok(bulk);
+    await act(async()=>bulk.props.onChange({target:{value:'supplier b'}}));view.setConfirmResponse(true);
+    await view.click('Apply to eligible lines');
+    assert.match(view.confirms.at(-1) || '',/200 eligible lines/);
+    assert.equal(view.lineRows().length,200);
+    view.lineRows().forEach((row,index)=>{assert.equal(row.supplier_name,'Supplier B');assert.equal(row.buy_price,15);assert.equal(row.sell_price,11+index/100);assert.equal(row.qty,3)});
+  } finally {await view.close()}
+});
