@@ -7,9 +7,10 @@ declare
  previous_status text;
  previous_lines jsonb;
  item jsonb;
+ previous_ids jsonb := '{}'::jsonb;
  missing_by_id jsonb := '{}'::jsonb;
  missing_any_by_code jsonb := '{}'::jsonb;
- missing_idless_by_code jsonb := '{}'::jsonb;
+ missing_unknown_by_code jsonb := '{}'::jsonb;
  code_key text;
  line_id text;
 begin
@@ -44,10 +45,16 @@ begin
  if previous_status='draft' and jsonb_typeof(previous_lines)='array' and exists(
   select 1 from jsonb_array_elements(previous_lines) p(value)
    where p.value->'purchase_qty_recheck_required'='true'::jsonb) then
+  -- A pre-existing different row with the same SKU must not be confused with
+  -- an old editor regenerating IDs. Build the original ID set in one pass.
+  select coalesce(jsonb_object_agg(nullif(p.value->>'lineId',''),true)
+   filter(where nullif(p.value->>'lineId','') is not null),'{}'::jsonb)
+   into previous_ids from jsonb_array_elements(previous_lines) p(value);
   select coalesce(jsonb_object_agg(n.line_id,true) filter (where n.line_id is not null),'{}'::jsonb),
    coalesce(jsonb_object_agg(n.code_key,true),'{}'::jsonb),
-   coalesce(jsonb_object_agg(n.code_key,true) filter (where n.line_id is null),'{}'::jsonb)
-   into missing_by_id,missing_any_by_code,missing_idless_by_code
+   coalesce(jsonb_object_agg(n.code_key,true) filter
+    (where n.line_id is null or not(previous_ids ? n.line_id)),'{}'::jsonb)
+   into missing_by_id,missing_any_by_code,missing_unknown_by_code
   from (select nullif(l.value->>'lineId','') as line_id,
     jsonb_build_array(l.value->'brand',l.value->'resolvedCode',l.value->'requestedCode')::text as code_key
    from jsonb_array_elements(new.lines) l(value)
@@ -57,7 +64,7 @@ begin
    where value->'purchase_qty_recheck_required'='true'::jsonb loop
    line_id:=nullif(item->>'lineId','');
    code_key:=jsonb_build_array(item->'brand',item->'resolvedCode',item->'requestedCode')::text;
-   if (line_id is not null and (missing_by_id ? line_id or missing_idless_by_code ? code_key))
+   if (line_id is not null and (missing_by_id ? line_id or missing_unknown_by_code ? code_key))
       or (line_id is null and missing_any_by_code ? code_key) then
     raise exception 'SALES_DRAFT_QUANTITY_RECHECK_REQUIRED: Siparişi yeniden açın; adet kademesi için tedarikçi seçeneklerini yenileyin. / Reopen the order and refresh the supplier quantity-tier options.' using errcode='P0001';
    end if;

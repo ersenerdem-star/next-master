@@ -110,6 +110,25 @@ test('deleting an unresolved line from a draft is allowed',async t=>{
   [JSON.stringify({...draft,lines:[valid],expected_updated_at:saved.updated_at})])).rows[0].result.sales_order;
  assert.equal(result.lines.length,1);assert.equal(result.lines[0].resolvedCode,'00456');
 });
+test('regenerated line identities cannot erase the flag but a distinct existing same-SKU row may remain',async t=>{
+ const {db}=await fixture(t);
+ const base=line('Other','000123');
+ const pending={...base,lineId:'A',purchase_qty_recheck_required:true};
+ const existing={...base,lineId:'B'};
+ const draft={...payload('same-sku',[pending,existing]),status:'draft'};
+ const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
+ const reidentified={...base,lineId:'C'};
+ await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb)',
+  [JSON.stringify({...draft,lines:[reidentified,existing],expected_updated_at:saved.updated_at})]),/SALES_DRAFT_QUANTITY_RECHECK_REQUIRED/);
+ const remaining=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
+  [JSON.stringify({...draft,lines:[existing],expected_updated_at:saved.updated_at})])).rows[0].result.sales_order;
+ assert.equal(remaining.lines.length,1);assert.equal(remaining.lines[0].lineId,'B');
+ const other={...payload('new-same-sku',[pending]),status:'draft'};
+ const savedOther=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(other)])).rows[0].result.sales_order;
+ const created=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
+  [JSON.stringify({...other,lines:[{...reidentified,purchase_qty_recheck_required:false}],expected_updated_at:savedOther.updated_at})])).rows[0].result.sales_order;
+ assert.equal(created.lines[0].lineId,'C');assert.equal(created.lines[0].purchase_qty_recheck_required,false);
+});
 test('large draft checks unresolved flags without losing any rows',{timeout:120000},async t=>{
  const {db}=await fixture(t);
  const rows=Array.from({length:10000},(_,index)=>({...line('Other',String(index).padStart(6,'0')),lineId:`row-${index}`,purchase_qty_recheck_required:true}));
