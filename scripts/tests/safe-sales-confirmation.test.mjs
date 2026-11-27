@@ -61,6 +61,18 @@ test('atomic confirmation groups aliases, preserves leading zeros, prices and re
  assert.equal((await confirm(value)).replayed,true);await assert.rejects(confirm({...value,customer_name:'changed'}),/SALES_CONFIRMATION_DECISION_MISMATCH/);
  assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,2);
 });
+test('explicit alternative supplier controls the purchase order without changing the sale price',async t=>{
+ const {db,confirm}=await fixture(t);
+ const selected={...line('Other','000012'),buy_price:20,sell_price:15,supplier_override_keep_sell_price:true,customer_price_basis_buy_price:10.125};
+ const result=await confirm(payload('chosen-supplier',[selected]));
+ assert.equal(result.sales_order.lines[0].sell_price,15);
+ assert.equal(result.sales_order.lines[0].buy_price,20);
+ assert.equal(result.purchase_orders.length,1);
+ assert.equal(result.purchase_orders[0].vendor_id,second);
+ assert.equal(result.purchase_orders[0].lines[0].product_code,'000012');
+ assert.equal(result.purchase_orders[0].lines[0].buy_price,20);
+ assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,1);
+});
 test('failed purchase save rolls back sales, other purchases and receipt',async t=>{
  const {db,confirm}=await fixture(t);await db.exec(`create function public.fail_other() returns trigger language plpgsql as $$begin if new.supplier_name='Other' then raise exception 'simulated purchase failure'; end if; return new; end$$;create trigger fail_other before insert on purchase_orders for each row execute function public.fail_other();`);
  await assert.rejects(confirm(),/simulated purchase failure/);
