@@ -73,10 +73,13 @@ test("a changed ranking shows all current offers instead of hiding an unrelated 
   await act(async () => renderer!.unmount());
 });
 
-test("one or two suppliers do not consume space with an extra-offer control", async () => {
+test("stale two-supplier summary can discover a newly added third supplier", async () => {
+  (globalThis as any).__supplierReportTest = { load: async () => [offer("1", "First", 3.89), offer("2", "Second", 4.05), offer("3", "New supplier", 4.96)] };
   let renderer: ReturnType<typeof create>;
   await act(async () => { renderer = create(createElement(AdditionalSupplierOffers, { brandId: "brand-id", row: { ...baseRow, supplier_count: 2 } })); });
-  assert.equal(renderer!.toJSON(), null);
+  assert.match(content(renderer!.root), /Güncel tedarikçileri kontrol et/);
+  await act(async () => renderer!.root.findByType("button").props.onClick());
+  assert.match(content(renderer!.root), /New supplier/);
   await act(async () => renderer!.unmount());
 });
 
