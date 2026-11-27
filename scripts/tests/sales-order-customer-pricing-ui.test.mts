@@ -746,3 +746,31 @@ test('bulk supplier choice only applies uniquely matched supplier offers, with q
     assert.deepEqual(view.lineRows().map(row=>row.sell_price),[11,12,13]);assert.deepEqual(view.lineRows().map(row=>row.qty),[3,3,6]);
   } finally {await view.close()}
 });
+
+test('new order with a customer keeps the same customer sale price after selecting a different supplier',async()=>{
+  const fresh={...supplierLine(),customer_pricing_pending:false};
+  const cache={...draftCache(),customerName:'Customer A',customerSelection:'customer-a',quoteBuilderLines:[fresh]};
+  const view=await fixture({cache,orders:[]});
+  try {
+    assert.equal(view.lineRows()[0].sell_price,11);
+    await chooseSupplier(view,'Supplier B-1');
+    assert.equal(view.lineRows()[0].buy_price,15);assert.equal(view.lineRows()[0].sell_price,11);
+    assert.equal(view.lineRows()[0].supplier_override_keep_sell_price,true);
+  } finally {await view.close()}
+});
+
+test('supplier selected before a customer stays selected across draft save and reopen',async()=>{
+  const fresh={...supplierLine(),sell_price:null,customer_pricing_pending:true};
+  const cache={...draftCache(),customerName:'',customerSelection:'',quoteBuilderLines:[fresh]};
+  const view=await fixture({cache,orders:[]});let savedOrder:any;
+  try {
+    await chooseSupplier(view,'Supplier B-1');assert.equal(view.lineRows()[0].sell_price,null);
+    await view.click('sales.orders.saveDraft');savedOrder=view.saved.at(-1);
+    assert.equal(savedOrder.lines[0].supplier_name,'Supplier B');assert.equal(savedOrder.lines[0].sell_price,null);
+  } finally {await view.close()}
+  const reopened=await fixture({cache:{...existingCache(savedOrder),customerName:'',customerSelection:''},orders:[savedOrder]});
+  try {
+    assert.equal(reopened.lineRows()[0].supplier_name,'Supplier B');assert.equal(reopened.lineRows()[0].sell_price,null);
+    await reopened.selectCustomer('customer-a');assert.equal(reopened.lineRows()[0].sell_price,11);assert.equal(reopened.lineRows()[0].buy_price,15);
+  } finally {await reopened.close()}
+});
