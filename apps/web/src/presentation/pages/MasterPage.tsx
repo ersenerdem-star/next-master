@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
-import { fetchCloudMasterFast, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
+import { fetchCloudMasterFast, fetchCloudMasterGloballySorted, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
 import { enrichSupplierReportCatalog } from "../../infrastructure/api/supplierReportCatalogApi";
 import { fetchSupplierComparisonNoteIndicators } from "../../infrastructure/api/supplierComparisonNoteIndicatorsApi";
 import { downloadExportJob, startMasterExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
@@ -36,6 +36,7 @@ export function MasterPage() {
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [scope, setScope] = useState("priced");
   const [page, setPage] = useState(1);
+  const [globalSort, setGlobalSort] = useState<{key:string;direction:"asc"|"desc"}|null>(null);
   const [marginA, setMarginA] = useState(0.1);
   const [marginB, setMarginB] = useState(0.15);
   const [rows, setRows] = useState<MasterPreviewRow[]>([]);
@@ -52,7 +53,7 @@ export function MasterPage() {
   const brandName = selectedBrand?.name || "";
   const offerKey = (row: MasterRow) => JSON.stringify([brandId, row.product_code, row.product_id]);
 
-  useEffect(() => { setExpandedOfferKey(null); }, [brandId, submittedSearch, scope, page, searchRevision]);
+  useEffect(() => { setExpandedOfferKey(null); }, [brandId, submittedSearch, scope, page, searchRevision, globalSort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -123,7 +124,7 @@ export function MasterPage() {
       setLoadingRows(true);
       setError("");
       try {
-        const result = await fetchCloudMasterFast({
+        const request = {
           search: submittedSearch,
           brand: brandName,
           brandId,
@@ -132,10 +133,12 @@ export function MasterPage() {
           pageSize: 50,
           marginA,
           marginB,
-        });
+        };
+        const result = globalSort && scope === "priced"
+          ? await fetchCloudMasterGloballySorted({ ...request, sort: globalSort.key, direction: globalSort.direction })
+          : await fetchCloudMasterFast(request);
         if (cancelled) return;
-        // The fast priced report only carries supplier metadata. Retrieve
-        // exact catalog details for this visible page before reporting success.
+        // Retrieve exact catalog details and note presence for this visible page.
         let complete: typeof result;
         try {
           const [enriched, noteIndicators] = await Promise.all([
@@ -160,7 +163,10 @@ export function MasterPage() {
       } catch (caught) {
         if (!cancelled) {
           setRows([]);
-          const message = caught instanceof Error ? caught.message : r("master.errors.requestFailed");
+          const message = caught instanceof Error && (caught as Error & {code?:string}).code === "SORT_SCOPE_TOO_LARGE"
+            ? locale === "tr" ? "Bu markanın tamamını sıralamak için arka plan hazırlığı gerekiyor. Şimdilik tam parça numarasıyla arayın veya sıralamayı kaldırın."
+              : "This brand needs background preparation for global sorting. Search by exact part number or clear the sort for now."
+            : caught instanceof Error ? caught.message : r("master.errors.requestFailed");
           setError(message);
           if (searchingRef.current) {
             actionFeedback.fail(message);
@@ -177,7 +183,7 @@ export function MasterPage() {
     return () => {
       cancelled = true;
     };
-  }, [brandId, brandName, scope, submittedSearch, marginA, marginB, page, searchRevision]);
+  }, [brandId, brandName, scope, submittedSearch, marginA, marginB, page, searchRevision, globalSort]);
 
   const total = rows[0]?.total_count ?? rows.length;
   const totalIsEstimate = rows[0]?.total_count_is_estimate === true;
@@ -381,7 +387,7 @@ export function MasterPage() {
           />
           <div className="smart-filter-bar__selects">
             <Select label={r("fields.brand")} value={brandId} options={brandOptions} onChange={(value) => { setPage(1); setBrandId(value); }} />
-            <Select label={r("master.fields.scope")} value={scope} options={scopeOptions} onChange={(value) => { setPage(1); setScope(value); }} />
+            <Select label={r("master.fields.scope")} value={scope} options={scopeOptions} onChange={(value) => { setPage(1); setGlobalSort(null); setScope(value); }} />
           </div>
           <Button onClick={handleSearch} busy={searching} busyLabel={r("busy.searching")}>
             {r("actions.search")}
@@ -415,9 +421,13 @@ export function MasterPage() {
                     : r("master.meta.rowsShown", { shown: summary.rowsShown.toLocaleString("en-US") })}
             </p>
           </div>
+          {globalSort ? <Button variant="secondary" className="button--compact" onClick={() => { setPage(1); setGlobalSort(null); }}>
+            {locale === "tr" ? "Sıralamayı kaldır" : "Clear sort"}
+          </Button> : null}
           {error ? <div className="procurement-error-state">{error}</div> : null}
         </div>
         <div className="section-card__body">
+          {scope === "catalog" ? <p className="info-text">{locale === "tr" ? "Katalog kapsamı için marka genelinde sıralama henüz hazır değil." : "Global sorting is not yet available for catalog scope."}</p> : null}
           {loadingRows ? (
             <div className="procurement-loading-state" role="status">
               <span className="procurement-loading-state__label">{r("master.loading.buildingSupplierComparison")}</span>
@@ -427,9 +437,11 @@ export function MasterPage() {
           ) : (
             <DataTable
               rows={rows}
-              columns={columns}
+              columns={scope === "priced" ? columns : columns.map(({sortValue: _sortValue, ...column}) => column)}
               className="decision-table"
               wrapClassName="decision-table-wrap"
+              externalSort={globalSort}
+              onExternalSort={(next) => { setPage(1); setGlobalSort(next); }}
               renderRowDetails={(row: MasterRow) => expandedOfferKey === offerKey(row) ? <SupplierOffersPanel key={offerKey(row)} brandId={brandId} row={row} /> : null}
               emptyText={!brandId ? r("master.empty.selectBrandOrSearch") : r("master.empty.noComparisons")}
             />
@@ -440,10 +452,10 @@ export function MasterPage() {
                 {locale === "tr" ? "Önceki" : "Previous"}
               </Button>
               <span role="status">{locale === "tr" ? `Sayfa ${page}` : `Page ${page}`}</span>
-              <Button variant="secondary" className="button--compact" disabled={loadingRows || rows.length < 50 || (scope === "priced" && page >= 100)} onClick={() => setPage((current) => current + 1)}>
+              <Button variant="secondary" className="button--compact" disabled={loadingRows || rows.length < 50 || (globalSort ? page * 50 >= total : scope === "priced" && page >= 100)} onClick={() => setPage((current) => current + 1)}>
                 {locale === "tr" ? "Sonraki" : "Next"}
               </Button>
-              {scope === "priced" && page >= 100 && rows.length === 50 ? <span className="info-text">{locale === "tr" ? "Bu görünümde ilk 5.000 ürün gösterilebilir. Diğer ürünler için parça numarasıyla arayın." : "This view can show the first 5,000 products. Search by part number for other products."}</span> : null}
+              {scope === "priced" && !globalSort && page >= 100 && rows.length === 50 ? <span className="info-text">{locale === "tr" ? "Bu görünümde ilk 5.000 ürün gösterilebilir. Diğer ürünler için parça numarasıyla arayın." : "This view can show the first 5,000 products. Search by part number for other products."}</span> : null}
             </div>
           ) : null}
         </div>

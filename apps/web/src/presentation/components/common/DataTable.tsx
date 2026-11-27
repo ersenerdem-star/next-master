@@ -19,6 +19,8 @@ type DataTableProps<T> = {
   wrapClassName?: string;
   rowKey?: (row: T, index: number) => string | number;
   renderRowDetails?: (row: T) => ReactNode;
+  externalSort?: { key: string; direction: "asc" | "desc" } | null;
+  onExternalSort?: (sort: { key: string; direction: "asc" | "desc" } | null) => void;
 };
 
 function getStableRowKey<T>(row: T, index: number) {
@@ -37,6 +39,8 @@ export function DataTable<T>({
   wrapClassName = "",
   rowKey,
   renderRowDetails,
+  externalSort,
+  onExternalSort,
 }: DataTableProps<T>) {
   const { t,locale } = useI18n();
   const ui=useInterfaceText();
@@ -46,7 +50,7 @@ export function DataTable<T>({
   const resolvedEmptyText = emptyText ?? t("common.noRowsFound");
 
   const sortedRows = useMemo(() => {
-    if (!sortKey || !sortDirection) return rows;
+    if (onExternalSort || !sortKey || !sortDirection) return rows;
     const column = columns.find((item) => item.key === sortKey);
     if (!column?.sortValue) return rows;
     const nextRows = [...rows];
@@ -59,10 +63,16 @@ export function DataTable<T>({
       return leftText > rightText ? 1 : -1;
     });
     return nextRows;
-  }, [columns, rows, sortDirection, sortKey]);
+  }, [columns, rows, sortDirection, sortKey, onExternalSort]);
 
   function handleHeaderClick(column: Column<T>) {
     if (!column.sortValue) return;
+    if (onExternalSort) {
+      if (externalSort?.key !== column.key) onExternalSort({key:column.key,direction:"asc"});
+      else if (externalSort.direction === "asc") onExternalSort({key:column.key,direction:"desc"});
+      else onExternalSort(null);
+      return;
+    }
     if (sortKey !== column.key) {
       setSortKey(column.key);
       setSortDirection("asc");
@@ -99,16 +109,16 @@ export function DataTable<T>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key}>
+              <th key={column.key} aria-sort={onExternalSort && externalSort?.key === column.key ? (externalSort.direction === "asc" ? "ascending" : "descending") : undefined}>
                 {column.sortValue ? (
                   <button
                     type="button"
-                    className={`data-table__sort-button${sortKey === column.key && sortDirection === "asc" ? " active" : ""}`}
+                    className={`data-table__sort-button${onExternalSort ? (externalSort?.key === column.key ? " active" : "") : (sortKey === column.key && sortDirection === "asc" ? " active" : "")}`}
                     onClick={() => handleHeaderClick(column)}
                   >
                     <span>{headerText(column.header)}</span>
                     <span className="data-table__sort-indicator" aria-hidden="true">
-                      {sortKey === column.key && sortDirection === "asc" ? "↑" : "↕"}
+                      {onExternalSort ? (externalSort?.key === column.key ? (externalSort.direction === "asc" ? "↑" : "↓") : "↕") : (sortKey === column.key && sortDirection === "asc" ? "↑" : "↕")}
                     </span>
                   </button>
                 ) : (

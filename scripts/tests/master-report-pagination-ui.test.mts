@@ -25,11 +25,11 @@ const row=(brand:string,page:number,index:number)=>({product_id:null,product_cod
 function text(node:ReactTestInstance|string):string{return typeof node==='string'?node:node.children.map(x=>text(x)).join('')}
 function deferred(){let resolve!:(value:any)=>void;let reject!:(reason:any)=>void;const promise=new Promise((r,j)=>{resolve=r;reject=j});return{promise,resolve,reject}}
 async function fixture(allPages=false){
- const calls:any[]=[]; const events:any[]=[]; let pending:any=null; let pendingOffer:any=null; let pendingCatalog:any=null;
- (globalThis as any)[key]={feedback:{begin(s:any){events.push(['begin',s])},succeed(s:any){events.push(['succeed',s])},fail(s:any){events.push(['fail',s])},clear(){}},call(name:string,...args:any[]){calls.push({name,args});if(name==='fetchCloudBrands')return Promise.resolve([{id:'mann',name:'Mann'},{id:'bosch',name:'Bosch'}]);if(name==='fetchPriceListSettings')return Promise.resolve([]);if(name==='enrichSupplierReportCatalog'){if(pendingCatalog){const d=pendingCatalog;pendingCatalog=null;return d.promise}return Promise.resolve(args[1])}if(name==='fetchSupplierComparisonNoteIndicators')return Promise.resolve(Object.fromEntries(args[1].map((code:string)=>[code,code==='HASOTHERNOTE'])));if(name==='fetchSupplierComparisonOffers'){if(pendingOffer){const d=pendingOffer;pendingOffer=null;return d.promise}return Promise.resolve([])}if(name==='fetchCloudMasterFast'){if(pending){const d=pending;pending=null;return d.promise}const p=args[0];return Promise.resolve(Array.from({length:!allPages&&p.page===3?4:50},(_,i)=>row(p.brand,p.page,i)))}return Promise.resolve(null)}};
+ const calls:any[]=[]; const events:any[]=[]; let pending:any=null; let pendingOffer:any=null; let pendingCatalog:any=null; let sortedTooLarge=false;
+ (globalThis as any)[key]={feedback:{begin(s:any){events.push(['begin',s])},succeed(s:any){events.push(['succeed',s])},fail(s:any){events.push(['fail',s])},clear(){}},call(name:string,...args:any[]){calls.push({name,args});if(name==='fetchCloudBrands')return Promise.resolve([{id:'mann',name:'Mann'},{id:'bosch',name:'Bosch'}]);if(name==='fetchPriceListSettings')return Promise.resolve([]);if(name==='enrichSupplierReportCatalog'){if(pendingCatalog){const d=pendingCatalog;pendingCatalog=null;return d.promise}return Promise.resolve(args[1])}if(name==='fetchSupplierComparisonNoteIndicators')return Promise.resolve(Object.fromEntries(args[1].map((code:string)=>[code,code==='HASOTHERNOTE'])));if(name==='fetchSupplierComparisonOffers'){if(pendingOffer){const d=pendingOffer;pendingOffer=null;return d.promise}return Promise.resolve([])}if(name==='fetchCloudMasterGloballySorted'){if(sortedTooLarge)return Promise.reject(Object.assign(new Error('too large'),{code:'SORT_SCOPE_TOO_LARGE'}));const p=args[0];return Promise.resolve([{...row(p.brand,p.page,0),product_id:'a',product_code:'A001',total_count:2,total_count_is_estimate:false},{...row(p.brand,p.page,1),product_id:'z',product_code:'Z001',total_count:2,total_count_is_estimate:false}])}if(name==='fetchCloudMasterFast'){if(pending){const d=pending;pending=null;return d.promise}const p=args[0];return Promise.resolve(Array.from({length:!allPages&&p.page===3?4:50},(_,i)=>row(p.brand,p.page,i)))}return Promise.resolve(null)}};
  let renderer:any;await act(async()=>{renderer=create(createElement(MasterPage))});
  const button=(label:string)=>renderer.root.findAllByType('button').find((b:any)=>text(b)===label);
- return{renderer,calls,events,button,hold(){pending=deferred();return pending},holdOffer(){pendingOffer=deferred();return pendingOffer},holdCatalog(){pendingCatalog=deferred();return pendingCatalog},async click(label:string){const b=button(label);assert.ok(b,`missing button ${label}`);await act(async()=>b.props.onClick())},async close(){await act(async()=>renderer.unmount())}};
+ return{renderer,calls,events,button,failGlobalSort(){sortedTooLarge=true},hold(){pending=deferred();return pending},holdOffer(){pendingOffer=deferred();return pendingOffer},holdCatalog(){pendingCatalog=deferred();return pendingCatalog},async click(label:string){const b=button(label);assert.ok(b,`missing button ${label}`);await act(async()=>b.props.onClick())},async close(){await act(async()=>renderer.unmount())}};
 }
 
 test('catalog enrichment finishes before success and late prior-brand metadata cannot replace current rows',async()=>{
@@ -193,7 +193,7 @@ test('repeating a search closes details so stale offers cannot remain visible',a
  }finally{await v.close()}
 });
 
-test('expanded supplier details follow their product when the table is sorted',async()=>{
+test('sorting requests the whole-brand server and returns to the first page',async()=>{
  const v=await fixture();try{
   const pending=v.hold();await v.click('Sonraki');
   await act(async()=>pending.resolve([
@@ -204,8 +204,17 @@ test('expanded supplier details follow their product when the table is sorted',a
   await act(async()=>target.props.onClick());
   const productHeader=v.renderer.root.findAllByType('th')[0].findByType('button');
   await act(async()=>productHeader.props.onClick());
-  const rows=v.renderer.root.findAllByType('tr');const detailIndex=rows.findIndex((r:any)=>r.props.className==='data-table__details-row');
-  assert.ok(detailIndex>0);assert.match(text(rows[detailIndex-1]),/Z001/);assert.match(text(rows[detailIndex]),/Z001/);
-  assert.match(text(rows[detailIndex-2]),/A001/);
+  const sortedCall=v.calls.filter((x:any)=>x.name==='fetchCloudMasterGloballySorted').at(-1);assert.ok(sortedCall);assert.equal(sortedCall.args[0].sort,'product');assert.equal(sortedCall.args[0].direction,'asc');assert.equal(sortedCall.args[0].page,1);
+  const rows=v.renderer.root.findAllByType('tr');assert.equal(rows.filter((r:any)=>r.props.className==='data-table__details-row').length,0);assert.match(text(rows[1]),/A001/);assert.match(text(rows[2]),/Z001/);
+ }finally{await v.close()}
+});
+
+
+test('large brands fail explicitly and allow clear sort, without local partial ordering',async()=>{
+ const v=await fixture();try{
+  v.failGlobalSort();const n=v.calls.filter((x:any)=>x.name==='fetchCloudMasterFast').length;
+  const header=v.renderer.root.findAllByType('th')[2].findByType('button');await act(async()=>header.props.onClick());
+  assert.match(text(v.renderer.root),/arka plan hazırlığı gerekiyor/);assert.equal(v.calls.filter((x:any)=>x.name==='fetchCloudMasterFast').length,n);
+  await v.click('Sıralamayı kaldır');assert.equal(v.calls.filter((x:any)=>x.name==='fetchCloudMasterFast').length,n+1);
  }finally{await v.close()}
 });
