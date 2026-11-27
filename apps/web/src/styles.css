@@ -13666,3 +13666,13 @@ body {
 .portal-brand-choice__actions { display: flex; justify-content: flex-end; gap: 10px; }
 .portal-brand-choice__actions button { padding: 10px 16px; }
 @media (max-width: 600px) { .portal-brand-choice__rows label { grid-template-columns: 1fr; } }
+
+.additional-supplier-offers { margin-top: 6px; min-width: 200px; max-width: 300px; }
+.additional-supplier-offers__toggle { padding: 0; border: 0; background: transparent; color: #0868bd; font-size: 12px; font-weight: 700; text-align: left; cursor: pointer; }
+.additional-supplier-offers__toggle:focus-visible { outline: 2px solid #137bd1; outline-offset: 3px; }
+.additional-supplier-offers__panel { margin-top: 8px; padding: 10px; border: 1px solid #dae5f1; border-radius: 8px; background: #f7fbff; color: #263b58; font-size: 12px; line-height: 1.4; }
+.additional-supplier-offers__notice { margin: 0 0 8px; color: #8a5014; }
+.additional-supplier-offers__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.additional-supplier-offers__list li + li { border-top: 1px solid #dae5f1; padding-top: 8px; }
+.additional-supplier-offers__primary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
+.additional-supplier-offers__terms { display: flex; flex-wrap: wrap; gap: 2px 8px; color: #526c88; margin-top: 3px; overflow-wrap: anywhere; }

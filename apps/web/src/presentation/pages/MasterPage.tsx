@@ -21,6 +21,7 @@ import {
   formatMasterNumber,
 } from "../components/master/MasterIntelligenceComponents";
 import { CompactFilterBar, PageHeader, PageShell } from "../components/common/VisualPrimitives";
+import { AdditionalSupplierOffers } from "../components/master/AdditionalSupplierOffers";
 import { useI18n } from "../../i18n/I18nProvider";
 
 export function MasterPage() {
@@ -217,6 +218,7 @@ export function MasterPage() {
           <div className="second-supplier-cell">
             <span className="second-supplier-cell__name">{row.second_supplier_name || r("master.values.noSecondSupplier")}</span>
             <MoneyCell value={row.second_price} muted={row.second_price == null} />
+            <AdditionalSupplierOffers key={`${brandId}:${row.product_code}:${row.cheapest_supplier}:${row.cheapest_price}:${row.second_supplier_name}:${row.second_price}`} brandId={brandId} row={row} />
           </div>
         ),
         sortValue: (row: MasterRow) => row.second_price ?? 0,
@@ -259,7 +261,7 @@ export function MasterPage() {
         ),
       },
     ],
-    [t],
+    [t, brandId],
   );
 
   async function handleMasterExport() {
