@@ -120,3 +120,51 @@ test('supplier summary notes are visible with the product before expanding suppl
   assert.equal(v.calls.filter((x:any)=>x.name==='fetchSupplierComparisonOffers').length,0);
  }finally{await v.close()}
 });
+
+test('supplier details expand under their own product row across all columns',async()=>{
+ const v=await fixture();try{
+  const pending=v.hold();await v.click('Sonraki');
+  await act(async()=>pending.resolve([
+    {...row('Mann',2,0),product_id:'first-id',product_code:'W11025'},
+    {...row('Mann',2,1),product_id:'second-id',product_code:'W11025'},
+  ]));
+  let buttons=v.renderer.root.findAllByType('button').filter((b:any)=>text(b).includes('Tedarikçiler ve notları'));
+  assert.equal(buttons.length,2);assert.notEqual(buttons[0].props['aria-controls'],buttons[1].props['aria-controls']);
+  await act(async()=>buttons[0].props.onClick());
+  let detailRows=v.renderer.root.findAllByType('tr').filter((r:any)=>r.props.className==='data-table__details-row');
+  assert.equal(detailRows.length,1);assert.equal(detailRows[0].findByType('td').props.colSpan,7);
+  buttons=v.renderer.root.findAllByType('button').filter((b:any)=>String(b.props['aria-label']||'').includes('tedarikçileri'));
+  assert.deepEqual(buttons.map((b:any)=>b.props['aria-expanded']),[true,false]);
+  await act(async()=>buttons[1].props.onClick());
+  buttons=v.renderer.root.findAllByType('button').filter((b:any)=>String(b.props['aria-label']||'').includes('tedarikçileri'));
+  assert.deepEqual(buttons.map((b:any)=>b.props['aria-expanded']),[false,true]);
+  detailRows=v.renderer.root.findAllByType('tr').filter((r:any)=>r.props.className==='data-table__details-row');assert.equal(detailRows.length,1);
+ }finally{await v.close()}
+});
+
+test('repeating a search closes details so stale offers cannot remain visible',async()=>{
+ const v=await fixture();try{
+  const button=v.renderer.root.findAllByType('button').find((b:any)=>text(b).includes('Tedarikçiler ve notları'));assert.ok(button);
+  await act(async()=>button.props.onClick());assert.equal(v.renderer.root.findAllByType('tr').filter((r:any)=>r.props.className==='data-table__details-row').length,1);
+  const input=v.renderer.root.findAll((n:any)=>typeof n.type==='function'&&n.type.name==='Input')[0];
+  await act(async()=>input.props.onEnter());
+  assert.equal(v.renderer.root.findAllByType('tr').filter((r:any)=>r.props.className==='data-table__details-row').length,0);
+ }finally{await v.close()}
+});
+
+test('expanded supplier details follow their product when the table is sorted',async()=>{
+ const v=await fixture();try{
+  const pending=v.hold();await v.click('Sonraki');
+  await act(async()=>pending.resolve([
+    {...row('Mann',2,0),product_id:'z',product_code:'Z001'},
+    {...row('Mann',2,1),product_id:'a',product_code:'A001'},
+  ]));
+  const target=v.renderer.root.findAllByType('button').find((b:any)=>String(b.props['aria-label']||'').startsWith('Z001:'));assert.ok(target);
+  await act(async()=>target.props.onClick());
+  const productHeader=v.renderer.root.findAllByType('th')[0].findByType('button');
+  await act(async()=>productHeader.props.onClick());
+  const rows=v.renderer.root.findAllByType('tr');const detailIndex=rows.findIndex((r:any)=>r.props.className==='data-table__details-row');
+  assert.ok(detailIndex>0);assert.match(text(rows[detailIndex-1]),/Z001/);assert.match(text(rows[detailIndex]),/Z001/);
+  assert.match(text(rows[detailIndex-2]),/A001/);
+ }finally{await v.close()}
+});

@@ -13677,3 +13677,33 @@ body {
 .additional-supplier-offers__list li + li { border-top: 1px solid #dae5f1; padding-top: 8px; }
 .additional-supplier-offers__primary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
 .additional-supplier-offers__terms { display: flex; flex-wrap: wrap; gap: 2px 8px; color: #526c88; margin-top: 3px; overflow-wrap: anywhere; }
+
+/* Supplier detail occupies its own row, never a fixed-width price cell. */
+.decision-table-wrap { container-type: inline-size; }
+.procurement-table-card .decision-table tbody tr:not(.data-table__details-row) > td { vertical-align: top; }
+.procurement-table-card .decision-table tbody tr.data-table__details-row > td {
+  width: auto;
+  max-width: none;
+  padding: 0 12px 12px;
+  background: #fff;
+}
+.decision-table .data-table__details-row .additional-supplier-offers__panel {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: min(100%, calc(100cqw - 24px));
+  margin-top: 0;
+}
+.additional-supplier-offers__heading { margin-bottom: 10px; color: #10243f; font-size: 13px; font-weight: 800; overflow-wrap: anywhere; }
+.decision-table .additional-supplier-offers__list { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.decision-table .additional-supplier-offers__list li { min-width: 0; padding: 8px; border: 1px solid #dae5f1; border-radius: 6px; background: #fff; }
+.decision-table .additional-supplier-offers__list li + li { border-top: 1px solid #dae5f1; padding-top: 8px; }
+.additional-supplier-offers__primary { flex-wrap: wrap; }
+.decision-table thead th:first-child { position: sticky; left: 0; z-index: 4; background: #f8fafc; }
+.decision-table tbody tr:not(.data-table__details-row) > td:first-child { position: sticky; left: 0; z-index: 1; background: #fff; }
+.decision-table tbody tr:not(.data-table__details-row):hover > td:first-child { background: #f8fbff; }
+@media (max-width: 720px) {
+  .decision-table thead th:first-child,
+  .decision-table tbody tr:not(.data-table__details-row) > td:first-child { width: 156px; }
+  .decision-table .product-identity-cell__top { flex-wrap: wrap; }
+}

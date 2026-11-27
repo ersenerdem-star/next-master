@@ -21,7 +21,7 @@ import {
   formatMasterNumber,
 } from "../components/master/MasterIntelligenceComponents";
 import { CompactFilterBar, PageHeader, PageShell } from "../components/common/VisualPrimitives";
-import { AdditionalSupplierOffers } from "../components/master/AdditionalSupplierOffers";
+import { SupplierOffersPanel, SupplierOffersToggle } from "../components/master/AdditionalSupplierOffers";
 import { useI18n } from "../../i18n/I18nProvider";
 
 export function MasterPage() {
@@ -44,9 +44,13 @@ export function MasterPage() {
   const searchingRef = useRef(false);
   const [searchRevision, setSearchRevision] = useState(0);
   const [exportingMaster, setExportingMaster] = useState(false);
+  const [expandedOfferKey, setExpandedOfferKey] = useState<string | null>(null);
 
   const selectedBrand = brands.find((item) => item.id === brandId) || null;
   const brandName = selectedBrand?.name || "";
+  const offerKey = (row: MasterRow) => JSON.stringify([brandId, row.product_code, row.product_id]);
+
+  useEffect(() => { setExpandedOfferKey(null); }, [brandId, submittedSearch, scope, page, searchRevision]);
 
   useEffect(() => {
     let cancelled = false;
@@ -234,7 +238,7 @@ export function MasterPage() {
           <div className="second-supplier-cell">
             <span className="second-supplier-cell__name">{row.second_supplier_name || r("master.values.noSecondSupplier")}</span>
             <MoneyCell value={row.second_price} muted={row.second_price == null} />
-            <AdditionalSupplierOffers key={`${brandId}:${row.product_code}:${row.cheapest_supplier}:${row.cheapest_price}:${row.second_supplier_name}:${row.second_price}`} brandId={brandId} row={row} />
+            <SupplierOffersToggle brandId={brandId} row={row} open={expandedOfferKey === offerKey(row)} onToggle={() => setExpandedOfferKey((current) => current === offerKey(row) ? null : offerKey(row))} />
           </div>
         ),
         sortValue: (row: MasterRow) => row.second_price ?? 0,
@@ -277,7 +281,7 @@ export function MasterPage() {
         ),
       },
     ],
-    [t, brandId, locale],
+    [t, brandId, locale, expandedOfferKey],
   );
 
   async function handleMasterExport() {
@@ -411,6 +415,7 @@ export function MasterPage() {
               columns={columns}
               className="decision-table"
               wrapClassName="decision-table-wrap"
+              renderRowDetails={(row: MasterRow) => expandedOfferKey === offerKey(row) ? <SupplierOffersPanel key={offerKey(row)} brandId={brandId} row={row} /> : null}
               emptyText={!brandId ? r("master.empty.selectBrandOrSearch") : r("master.empty.noComparisons")}
             />
           )}

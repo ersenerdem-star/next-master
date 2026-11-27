@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useI18n } from "../../../i18n/I18nProvider";
 import {useInterfaceText} from '../../../i18n/InterfaceText';
 
@@ -18,6 +18,7 @@ type DataTableProps<T> = {
   className?: string;
   wrapClassName?: string;
   rowKey?: (row: T, index: number) => string | number;
+  renderRowDetails?: (row: T) => ReactNode;
 };
 
 function getStableRowKey<T>(row: T, index: number) {
@@ -35,6 +36,7 @@ export function DataTable<T>({
   className = "",
   wrapClassName = "",
   rowKey,
+  renderRowDetails,
 }: DataTableProps<T>) {
   const { t,locale } = useI18n();
   const ui=useInterfaceText();
@@ -117,9 +119,10 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {sortedRows.map((row, index) => (
+          {sortedRows.map((row, index) => {
+            const details = renderRowDetails?.(row);
+            return <Fragment key={rowKey ? rowKey(row, index) : getStableRowKey(row, index)}>
             <tr
-              key={rowKey ? rowKey(row, index) : getStableRowKey(row, index)}
               onClick={onRowClick ? (event) => handleRowClick(row, event) : undefined}
               className={`${rowClassName?.(row) || ""}${onRowClick ? " data-table__row--clickable" : ""}`}
             >
@@ -127,7 +130,9 @@ export function DataTable<T>({
                 <td key={column.key}>{column.render(row)}</td>
               ))}
             </tr>
-          ))}
+            {details != null ? <tr className="data-table__details-row"><td colSpan={columns.length}>{details}</td></tr> : null}
+            </Fragment>;
+          })}
         </tbody>
       </table>
     </div>
