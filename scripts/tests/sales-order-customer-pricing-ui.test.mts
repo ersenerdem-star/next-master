@@ -714,7 +714,7 @@ test('refreshing options or changing their order does not create a false unsaved
   const order=fullOrder('supplier-refresh-no-dirty',[noSupplierId]);const view=await fixture({cache:{...draftCache(),salesOrdersView:'list',workbenchMode:'existing',selectedLocalSalesOrderId:'',quoteBuilderLines:[]},orders:[order]});
   try {
     await view.clickOrder(order.id);view.setConfirmResponse(false);view.holdSingleLookup();await view.click('Current options');
-    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Synthetic'},supplierOptions:[supplierOption('Supplier B',15),supplierOption('Supplier A',10,{supplier_id:'newly-known'})]});
+    await view.resolve(view.resolveRequest,[supplierOption('Supplier B',15),supplierOption('Supplier A',10,{supplier_id:'newly-known'})]);
     assert.equal(view.lineRows()[0].supplier_name,'Supplier A');assert.equal(view.lineRows()[0].selectedSupplierKey,'Supplier A-1');
     assert.equal(view.lineRows()[0].buy_price,10);assert.equal(view.lineRows()[0].sell_price,11);
     await view.click('sales.orders.exit');
