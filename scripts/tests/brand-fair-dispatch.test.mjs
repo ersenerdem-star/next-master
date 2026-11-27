@@ -24,3 +24,15 @@ test('completed work chains exactly one signed selection; a duplicate, pause or 
  for(const result of [{claimed:false},{status:'paused'},{status:'failed'},{status:'running'}])assert.equal((await continueCatalogBrand({...input,result})).status,'continuation_not_ready');
  assert.equal(sent,1);
 });
+
+test('an unavailable Monroe publication admission does not block a queued review', async (t) => {
+ const reported=t.mock.method(console,'error',()=>{});
+ const db={rpc:async(name)=>{
+  if(name==='admit_catalog_monroe_image_application')return {error:{code:'57014'}};
+  if(name==='admit_catalog_monroe_fitment_application')throw Error('timeout');
+  return {data:name==='next_catalog_brand_dispatch'?job:null};
+ }};
+ const result=await dispatchCatalogBrand({db,target,send:async()=>new Response(null,{status:202})});
+ assert.equal(result.jobId,job.id);
+ assert.equal(reported.mock.callCount(),2);
+});

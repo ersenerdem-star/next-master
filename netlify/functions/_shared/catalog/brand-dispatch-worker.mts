@@ -11,10 +11,14 @@ export async function dispatchCatalogBrand({db,target,send=fetch,now=Date.now}:a
  if(admitted.error)throw Error('BRAND_DISPATCH_ADMISSION_FAILED');
  const knorr=await db.rpc('admit_catalog_knorr_application',{});
  if(knorr.error)throw Error('KNORR_DISPATCH_ADMISSION_FAILED');
- const monroe=await db.rpc('admit_catalog_monroe_image_application',{});
- if(monroe.error)throw Error('MONROE_DISPATCH_ADMISSION_FAILED');
- const fitment=await db.rpc('admit_catalog_monroe_fitment_application',{});
- if(fitment.error)throw Error('MONROE_FITMENT_DISPATCH_ADMISSION_FAILED');
+ // Publication admission can retry on the next tick. A failed admission
+ // must not stop a discovery or review job already in the shared queue.
+ for (const name of ['admit_catalog_monroe_image_application','admit_catalog_monroe_fitment_application']) {
+  try {
+   const result=await db.rpc(name,{});
+   if(result.error)console.error('MONROE_PUBLICATION_ADMISSION_FAILED',name,result.error.code);
+  } catch { console.error('MONROE_PUBLICATION_ADMISSION_FAILED',name); }
+ }
  const selected=await db.rpc('next_catalog_brand_dispatch',{});
  if(selected.error)throw Error('BRAND_DISPATCH_SELECTION_FAILED');
  const job=selected.data;if(!job)return {status:'idle'};
