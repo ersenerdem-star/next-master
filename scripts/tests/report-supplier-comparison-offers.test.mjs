@@ -4,11 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
 const migration = await readFile(new URL('../../supabase/migrations/20261127102812_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
-const lengthMigration = await readFile(new URL('../../supabase/migrations/20261127141934_supplier_comparison_length_consistency.sql', import.meta.url), 'utf8');
+const lengthMigration = await readFile(new URL('../../supabase/migrations/20261127142159_supplier_comparison_length_consistency.sql', import.meta.url), 'utf8');
 const exportMigration = await readFile(new URL('../../supabase/migrations/20261127115259_supplier_comparison_export_offers.sql', import.meta.url), 'utf8');
 const exportNotesMigration = await readFile(new URL('../../supabase/migrations/20261127131813_supplier_comparison_export_notes.sql', import.meta.url), 'utf8');
-const noteIndicatorMigration = await readFile(new URL('../../supabase/migrations/20261127141139_supplier_report_note_indicators.sql', import.meta.url), 'utf8');
-const usageGateMigration = await readFile(new URL('../../supabase/migrations/20261127141137_supplier_manual_usage_gate_consistency.sql', import.meta.url), 'utf8');
+const noteIndicatorMigration = await readFile(new URL('../../supabase/migrations/20261127142155_supplier_report_note_indicators.sql', import.meta.url), 'utf8');
+const usageGateMigration = await readFile(new URL('../../supabase/migrations/20261127142151_supplier_manual_usage_gate_consistency.sql', import.meta.url), 'utf8');
 const manualOverlayMigration = await readFile(new URL('../../supabase/migrations/20261112133448_manual_supplier_price_overlay.sql', import.meta.url), 'utf8');
 const org='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
