@@ -1,3 +1,4 @@
+import {budgetedCatalogFetch,CatalogSourceDeferred} from './source-request-budget.mts';
 import {collectCompleteVehicles} from './tecalliance-vehicle-fitment.mjs';
 import {exactCatalogCode} from './supplier-enrichment-plan.mjs';
 import {officialGrossWeightKg} from './official-weight.mjs';
@@ -163,6 +164,7 @@ export type TecAllianceSyncConfig = {
   discoveryAlphabet?: string[];
   filterQueries?: string[];
   requestHeaders?: Record<string, string>;
+  fetchImpl?: typeof fetch;
 };
 
 type CatalogWritePayload = Record<string, unknown>;
@@ -265,7 +267,6 @@ export async function syncBrandCatalogFromTecAllianceBrand(
 ) {
   const refreshExisting = input.refreshExisting !== false;
   const onlyNew = input.onlyNew === true;
-  const concurrency = Math.max(1, input.concurrency ?? 4);
   const requestTimeoutMs = Math.max(5000, input.requestTimeoutMs ?? 30000);
   const perPage = Math.max(25, Math.min(100, input.pageSize ?? 100));
   const leafThreshold = Math.max(250, perPage * 8);
@@ -277,6 +278,20 @@ export async function syncBrandCatalogFromTecAllianceBrand(
     apikey: input.serviceRoleKey,
     Authorization: `Bearer ${input.serviceRoleKey}`,
     "Content-Type": "application/json",
+  };
+
+  config = {
+    ...config,
+    fetchImpl: budgetedCatalogFetch({
+      async rpc(name, args) {
+        const response = await fetch(`${input.supabaseUrl}/rest/v1/rpc/${name}`, {
+          method: 'POST', headers, body: JSON.stringify(args), redirect: 'error',
+          signal: AbortSignal.timeout(10000),
+        });
+        const data = await response.json();
+        return response.ok ? { data, error: null } : { data: null, error: data };
+      },
+    }, 'tecalliance'),
   };
 
   const target = await resolveOrCreateTargetBrand(input.supabaseUrl, headers, input.brandName);
@@ -387,7 +402,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
   let weightRows = 0;
   let discontinuedRows = 0;
 
-  await runPool([...workMap.values()], concurrency, async (item) => {
+  await runPool([...workMap.values()], 1, async (item) => {
     try {
       const productCode = item.searchTerm || item.existing?.product_code || "";
       const article =
@@ -413,6 +428,7 @@ export async function syncBrandCatalogFromTecAllianceBrand(
       catalogPayload.push(merged);
     }
   } catch (error) {
+      if (error instanceof CatalogSourceDeferred || (error instanceof Error && error.message==='CATALOG_SOURCE_BUDGET_UNAVAILABLE')) throw error;
       const productCode = item.searchTerm || item.existing?.product_code || "";
       errorRows.push({
         product_code: productCode,
@@ -725,11 +741,11 @@ async function requestTecAllianceArticles(
     },
   };
 
-  return fetchTecAllianceJson<TecAllianceArticleSearchResponse>(TECALLIANCE_API_URL, payload, input.requestTimeoutMs, config.requestHeaders, input.fetchImpl);
+  return fetchTecAllianceJson<TecAllianceArticleSearchResponse>(TECALLIANCE_API_URL, payload, input.requestTimeoutMs, config.requestHeaders, input.fetchImpl ?? config.fetchImpl);
 }
 
-export async function fetchTecAllianceSupplierCatalogFields(brandName:string,productCode:string,config:TecAllianceSyncConfig,requestTimeoutMs=12000) {
-  const result=await requestTecAllianceArticles({searchQuery:productCode,page:1,perPage:50,requestTimeoutMs,searchMatchType:'prefix_or_suffix'},config);
+export async function fetchTecAllianceSupplierCatalogFields(brandName:string,productCode:string,config:TecAllianceSyncConfig,requestTimeoutMs=12000,fetchImpl?:typeof fetch) {
+  const result=await requestTecAllianceArticles({searchQuery:productCode,page:1,perPage:50,requestTimeoutMs,searchMatchType:'prefix_or_suffix',fetchImpl},config);
   const exact=(v:unknown)=>String(v??'').replace(/\s+/g,'').toUpperCase();
   const matches=(result.articles||[]).filter((a:any)=>exact(a.articleNumber)===exact(productCode)
     &&Number(a.dataSupplierId??a.mfrId)===config.dataSupplierId

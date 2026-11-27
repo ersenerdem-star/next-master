@@ -62,3 +62,23 @@ test('Monroe retains its discovery cursor on a shared budget wait', async () => 
   assert.deepEqual(calls.map(([name]) => name), ['heartbeat_catalog_brand_job', 'acquire_catalog_source_request', 'defer_catalog_brand_source_request']);
   assert.deepEqual(calls[2][1], { input_org: 'org', input_job: 'job', input_token: 'token', input_retry_at: retryAt });
 });
+
+test('every registered TecAlliance brand declares the same upstream budget', async () => {
+  const { listTecAllianceBrandEntries } = await import('../../netlify/functions/_shared/catalog/tecalliance-brand-registry.mts');
+  const { supplierOfficialProvider } = await import('../../netlify/functions/_shared/catalog/supplier-official-completion.mts');
+  const entries = listTecAllianceBrandEntries();
+  assert.ok(entries.length > 15);
+  for (const entry of entries) {
+    const provider = supplierOfficialProvider(entry.managedBrandNames[0]);
+    assert.equal(provider && 'budgetGroup' in provider ? provider.budgetGroup : null, 'tecalliance', entry.managedBrandNames[0]);
+  }
+});
+
+test('approved Elring dispatcher signatures cannot authorize the generic route', async () => {
+  const { brandDispatchSignature, requireBrandDispatch } = await import('../../netlify/functions/_shared/catalog/brand-dispatch.mts');
+  const job = '11111111-1111-4111-8111-111111111111', org = '22222222-2222-4222-8222-222222222222';
+  const time=String(Date.now()), key='test-key', lane='catalog-elring-engine-v1';
+  const req = new Request('https://example.invalid', { headers:{'x-catalog-time':time,'x-catalog-signature':brandDispatchSignature(key,job,org,time,lane)} });
+  assert.doesNotThrow(() => requireBrandDispatch(req,key,job,org,lane));
+  assert.throws(() => requireBrandDispatch(req,key,job,org), /BRAND_DISPATCH_DENIED/);
+});

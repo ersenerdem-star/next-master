@@ -20,7 +20,8 @@ export function supplierOfficialProvider(brand:string){
  if(key==='bosch')return {key:'bosch',fetch:fetchBoschSupplierCatalogFields};
  if(['mann','mannfilter'].includes(key))return {key:'mann',fetch:fetchMannSupplierCatalogFields};
  const entry=resolveTecAllianceBrandEntry(brand);
- if(entry)return {key:entry.preferredProviderKey,fetch:(code:string)=>fetchTecAllianceSupplierCatalogFields(brand,code,entry.sync)};
+ if(entry)return {key:entry.preferredProviderKey,budgetGroup:'tecalliance' as const,
+  fetch:(code:string,options?:{fetchImpl?:typeof fetch})=>fetchTecAllianceSupplierCatalogFields(brand,code,entry.sync,12000,options?.fetchImpl)};
  return null;
 }
 export function safeSupplierOfficialObservation(value:any,code:string,brandId:string){

@@ -3,6 +3,7 @@ import {supplierUpgradeServiceHeaders} from '../supplier-upgrade-auth.mts';
 import {ENRICHMENT_POLICY,sourceCatalogFields,planSupplierCatalogEnrichment} from './supplier-enrichment-plan.mjs';
 import {supplierOfficialProvider,safeSupplierOfficialObservation} from './supplier-official-completion.mts';
 import {catalogLifecycleReview} from './catalog-completion-review.mjs';
+import {budgetedCatalogFetch,CatalogSourceDeferred} from './source-request-budget.mts';
 import {catalogRowFailure} from './catalog-row-failures.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,6 +48,10 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
    if(batch?.status!=='batch'||!['file','official'].includes(batch.phase)||!Array.isArray(batch.rows)||!batch.rows.length)throw Error('CATALOG_ENRICHMENT_BATCH_UNCONFIRMED');
    if(Number.isSafeInteger(batch.turnBudgetMs)&&batch.turnBudgetMs>=1000)effectiveBudgetMs=Math.min(effectiveBudgetMs,batch.turnBudgetMs);
    const provider=batch.phase==='official'?officialProvider(batch.brand):null;
+   const budgetGroup=provider&&'budgetGroup' in provider?provider.budgetGroup:null;
+   const officialFetch=budgetGroup?budgetedCatalogFetch({
+    async rpc(name,args){return {data:await rpc(name,args),error:null};},
+   },budgetGroup):undefined;
    const needsOfficial=batch.phase==='official'&&batch.rows.some((r:any)=>r.rowStatus==='accepted');
    if(needsOfficial&&!provider)return await rpc('finish_supplier_catalog_without_official_source',scope);
    const buildRow=async(row:any)=>{
@@ -57,9 +62,13 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
      if(row.rowStatus==='accepted'){
       try{
        await wait(officialDelayMs);
-       const observation=safeSupplierOfficialObservation(await provider!.fetch(row.code),row.code,batch.brandId);
+       const raw=provider&&'budgetGroup' in provider
+        ?await provider.fetch(row.code,{fetchImpl:officialFetch})
+        :await provider!.fetch(row.code);
+       const observation=safeSupplierOfficialObservation(raw,row.code,batch.brandId);
        incoming=observation.fields;evidence={...observation.evidence,policy:ENRICHMENT_POLICY,provider:provider!.key,sourceRequested:true,sourceOutcome:'matched'};
       }catch(error){
+       if(error instanceof CatalogSourceDeferred)throw error;
        if(['OFFICIAL_EXACT_MATCH_NOT_FOUND','OFFICIAL_PRODUCT_DOMAIN_UNSUPPORTED'].includes(String((error as Error)?.message))){
         const reason=String((error as Error).message);issues.push({field:'source',code:reason});
         evidence={policy:ENRICHMENT_POLICY,provider:provider!.key,sourceRequested:true,sourceOutcome:reason==='OFFICIAL_EXACT_MATCH_NOT_FOUND'?'not_found':'unsupported_domain',lifecycle:catalogLifecycleReview({}, {unavailable:reason})};
@@ -102,6 +111,7 @@ export async function runSupplierCatalogEnrichment({rpc,jobId,token,budgetMs=4*6
   }
   await rpc('release_supplier_catalog_enrichment',scope);return {status:'continuation'};
  }catch(error){
+  if(error instanceof CatalogSourceDeferred)return rpc('defer_supplier_catalog_source_request',{...scope,input_retry_at:error.retryAt});
   await rpc('release_supplier_catalog_enrichment',{...scope,input_error:String((error as Error)?.message||''),input_error_row:(error as any)?.sourceRow??null,input_error_provider:(error as any)?.provider??null}).catch(()=>{});
   throw Error(/^CATALOG_ENRICHMENT_[A-Z_]+$/.test(String((error as Error)?.message))?(error as Error).message:'CATALOG_ENRICHMENT_UNCONFIRMED');
  }

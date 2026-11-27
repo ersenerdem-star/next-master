@@ -61,8 +61,8 @@ export function budgetedCatalogFetch(
   };
 }
 
-export async function deferCatalogSourceJob(db: BudgetDb, scope: JobLease, error: CatalogSourceDeferred) {
-  const result = await db.rpc('defer_catalog_brand_source_request', { ...scope, input_retry_at: error.retryAt });
+export async function deferCatalogSourceJob(db: BudgetDb, scope: JobLease, error: CatalogSourceDeferred, method = 'defer_catalog_brand_source_request') {
+  const result = await db.rpc(method, { ...scope, input_retry_at: error.retryAt });
   if (result.error) throw Error('CATALOG_SOURCE_DEFER_FAILED');
   return { claimed: true, status: 'paused', error: error.message, retryAt: error.retryAt };
 }

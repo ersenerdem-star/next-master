@@ -27,7 +27,8 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
- const monroeOfficialFetch=monroe?budgetedCatalogFetch(db,'tecalliance'):undefined;
+ const officialBudgetGroup=monroe?'tecalliance':provider?.budgetGroup;
+ const officialFetch=officialBudgetGroup?budgetedCatalogFetch(db,officialBudgetGroup):undefined;
  const monroeCandidate=monroe&&job.manifest.adapter===MONROE_DISCOVERY_REVIEW_ADAPTER;
  const monroeFitment=monroe&&job.manifest.monroe_policy==='monroe-fitment-fill.v1';
  const monroeVehicles=new Map();
@@ -65,10 +66,10 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{
  const options=monroe?{
   fitment:monroeFitment,
-  fetchImpl:monroeOfficialFetch,
+  fetchImpl:officialFetch,
   vehiclesCache:monroeVehicles,
   vehicle:monroeFitment&&(!rows[0]?.vehicle?.trim()||!rows[0]?.vehicle_model?.trim()),
- }:undefined;
+ }:officialFetch?{fetchImpl:officialFetch}:undefined;
  const raw=await provider.fetch(item.product_code,options);
  const safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const before=rows[0]||{};

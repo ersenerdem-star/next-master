@@ -1,4 +1,5 @@
 import {ELRING, assertSource, readElringArticle} from './elring-official-provider.mjs';
+import {budgetedCatalogFetch,CatalogSourceDeferred,deferCatalogSourceJob} from './source-request-budget.mts';
 import {processPackage} from './elring-provider-package.mjs';
 
 export async function runElringJob({db,organizationId,jobId,fetchImpl=fetch,readArticle=readElringArticle,process=processPackage,maxMs=11*60*1000}) {
@@ -6,6 +7,8 @@ export async function runElringJob({db,organizationId,jobId,fetchImpl=fetch,read
   const job=await rpc('claim_catalog_elring_job',{input_org:organizationId,input_job:jobId});
   if(!job)return {claimed:false};
   const started=Date.now();
+  const request=budgetedCatalogFetch(db,'tecalliance',fetchImpl);
+  const scope={input_org:organizationId,input_job:jobId,input_token:job.lease_token};
   const heartbeat=async()=>rpc('heartbeat_catalog_elring_job',{input_org:organizationId,input_job:jobId,input_token:job.lease_token});
   const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',ELRING.sourceKey).single();
   const brand=await db.from('brands').select('id').eq('organization_id',organizationId).eq('name',ELRING.brand).single();
@@ -28,7 +31,7 @@ export async function runElringJob({db,organizationId,jobId,fetchImpl=fetch,read
           fitmentMaxRequests:job.manifest.fitment_max_requests,
           fetchImpl:async(url,options)=>{
             if(Date.now()-started>maxMs)throw Error('ELRING_TIME_WINDOW');
-            await heartbeat();return fetchImpl(url,options);
+            await heartbeat();return request(url,options);
           }});
         await save('observed');
       }
@@ -43,6 +46,7 @@ export async function runElringJob({db,organizationId,jobId,fetchImpl=fetch,read
       await save(job.mode==='publish'?'completed':'reviewed',true,endStatus);
       if(endStatus)return {claimed:true,status:'paused'};
     }catch(error){
+      if(error instanceof CatalogSourceDeferred)return deferCatalogSourceJob(db,scope,error,'defer_catalog_elring_source_request');
       const message=String(error?.message||'Elring package failed').slice(0,500);
       const status=message==='ELRING_TIME_WINDOW'?'paused':'failed';
       try{await save('failed',false,status,message);}catch{/* A lost lease must not be overwritten. */}

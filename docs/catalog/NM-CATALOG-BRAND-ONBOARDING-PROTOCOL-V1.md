@@ -59,6 +59,12 @@ the canonical reread passed.
   180 permits per UTC hour and Spareto at 60, with at least two seconds between
   permits in each group. These are operating limits for the pilot. Other
   adapters must opt in to the same shared groups when they are migrated.
+- The TecAlliance group also covers all registry-backed brand and supplier
+  catalog review jobs and the legacy TecAlliance bulk reader. Registry
+  additions inherit this group. The Elring worker uses it for article and
+  vehicle requests. The shared clock resumes due Elring budget waits only
+  when the existing source gate allows it. The Elring incident hold remains
+  authoritative.
 
 ## Kolbenschmidt / Wilmink distributor engine — 2026-10-21
 
