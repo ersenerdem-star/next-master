@@ -55,16 +55,16 @@ test('second-supplier column orders by numeric second price, ties by exact code 
 
 test('keyset paging reaches beyond 5,000 without skips and stops on a changed price source',async t=>{const db=await fixture(t);await db.exec(cursorSql);
  await db.query(`insert into supplier_prices select md5('c'||n)::uuid,$1,$2,$3,'P'||lpad(n::text,6,'0'),'P'||lpad(n::text,6,'0'),'Filter',n,current_date,null,null,true,'EUR' from generate_series(1,5100)n`,[org,brand,a]);
- const first=(await db.query(`select public.report_supplier_comparison_cursor($1,'',null,50,.1,.15) data`,[brand])).rows[0].data;assert.equal(first.rows.length,50);assert.equal(first.rows[0].product_code,'P000001');assert.equal(first.source_version,'v1');
- const beyond=(await db.query(`select public.report_supplier_comparison_cursor($1,'P005000','v1',50,.1,.15) data`,[brand])).rows[0].data;assert.equal(beyond.rows.length,50);assert.equal(beyond.rows[0].product_code,'P005001');assert.equal(beyond.rows.at(-1).product_code,'P005050');
- await db.exec(`select set_config('test.version','v2',false)`);const stale=(await db.query(`select public.report_supplier_comparison_cursor($1,'P005000','v1',50,.1,.15) data`,[brand])).rows[0].data;assert.equal(stale.stale,true);assert.deepEqual(stale.rows,[]);
+ const first=(await db.query(`select public.report_supplier_comparison_cursor($1,'',null,50,.1,.15) data`,[brand])).rows[0].data;assert.equal(first.rows.length,50);assert.equal(first.rows[0].product_code,'P000001');assert.match(first.source_version,/^v1\|date:\d{4}-\d{2}-\d{2}$/);
+ const beyond=(await db.query(`select public.report_supplier_comparison_cursor($1,'P005000',$2,50,.1,.15) data`,[brand,first.source_version])).rows[0].data;assert.equal(beyond.rows.length,50);assert.equal(beyond.rows[0].product_code,'P005001');assert.equal(beyond.rows.at(-1).product_code,'P005050');
+ await db.exec(`select set_config('test.version','v2',false)`);const stale=(await db.query(`select public.report_supplier_comparison_cursor($1,'P005000',$2,50,.1,.15) data`,[brand,first.source_version])).rows[0].data;assert.equal(stale.stale,true);assert.deepEqual(stale.rows,[]);
 });
 test('cursor tenant and role boundaries: authenticated user 50 max; service worker 1000 max',async t=>{const db=await fixture(t);await db.exec(cursorSql);
  await db.exec('set role authenticated');
  await assert.rejects(db.query(`select public.report_supplier_comparison_cursor_service($1,$2,'',null,1000,.1,.15)`,[org,brand]),/permission denied/);
  await assert.rejects(db.query(`select public.report_supplier_comparison_cursor($1,'',null,51,.1,.15)`,[brand]),/CURSOR_INVALID/);
  await db.exec('reset role;set role service_role');
- const result=(await db.query(`select public.report_supplier_comparison_cursor_service($1,$2,'',null,1000,.1,.15) data`,[org,brand])).rows[0].data;assert.deepEqual(result.rows,[]);assert.equal(result.source_version,'v1');
+ const result=(await db.query(`select public.report_supplier_comparison_cursor_service($1,$2,'',null,1000,.1,.15) data`,[org,brand])).rows[0].data;assert.deepEqual(result.rows,[]);assert.match(result.source_version,/^v1\|date:\d{4}-\d{2}-\d{2}$/);
  await assert.rejects(db.query(`select public.report_supplier_comparison_cursor_service($1,$2,'',null,1001,.1,.15)`,[org,brand]),/CURSOR_INVALID/);
  await assert.rejects(db.query(`select public.report_supplier_comparison_cursor_service('bbbbbbbb-bbbb-4bbb-8bbb-000000000001',$1,'',null,50,.1,.15)`,[brand]),/BRAND_INVALID/);
  await db.exec('reset role');
@@ -74,7 +74,7 @@ test('cursor tenant and role boundaries: authenticated user 50 max; service work
 test('manual-only candidates are bounded and merged in exact code order',async t=>{const db=await fixture(t);await db.exec(cursorSql);
  await db.query(`insert into supplier_manual_price_internal.entries select md5('manual'||n)::uuid,$1,$2,$3,'M'||lpad(n::text,4,'0'),'M'||lpad(n::text,4,'0'),'Manual',n,current_date,null,true from generate_series(1,120)n`,[org,brand,a]);
  const first=(await db.query(`select public.report_supplier_comparison_cursor($1,'',null,50,.1,.15) data`,[brand])).rows[0].data;assert.equal(first.rows.length,50);assert.equal(first.rows[0].product_code,'M0001');assert.equal(first.rows.at(-1).product_code,'M0050');
- const second=(await db.query(`select public.report_supplier_comparison_cursor($1,'M0050','v1',50,.1,.15) data`,[brand])).rows[0].data;assert.equal(second.rows[0].product_code,'M0051');assert.equal(second.rows.at(-1).product_code,'M0100');
+ const second=(await db.query(`select public.report_supplier_comparison_cursor($1,'M0050',$2,50,.1,.15) data`,[brand,first.source_version])).rows[0].data;assert.equal(second.rows[0].product_code,'M0051');assert.equal(second.rows.at(-1).product_code,'M0100');
 });
 test('legacy-only substring and OEM search never silently narrows to an exact SKU during sorting',async t=>{const db=await fixture(t);
  await db.query(`insert into supplier_prices values(md5('filter')::uuid,$1,$2,$3,'P001','P001','Oil Filter',2,current_date,null,null,true,'EUR')`,[org,brand,a]);
@@ -84,6 +84,18 @@ test('legacy-only substring and OEM search never silently narrows to an exact SK
 
 test('global sorted pages reject a changed price source rather than mix versions',async t=>{const db=await fixture(t);
  await db.query(`insert into supplier_prices values(md5('priced')::uuid,$1,$2,$3,'P1','P1','Filter',3,current_date,null,null,true,'EUR')`,[org,brand,a]);
- const first=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',1,50,.1,.15,null) data`,[brand])).rows[0].data;assert.equal(first.source_version,'v1');assert.equal(first.rows.length,1);
- await db.exec(`select set_config('test.version','v2',false)`);const second=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',2,50,.1,.15,'v1') data`,[brand])).rows[0].data;assert.equal(second.stale,true);assert.deepEqual(second.rows,[]);
+ const first=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',1,50,.1,.15,null) data`,[brand])).rows[0].data;assert.match(first.source_version,/^v1\|date:\d{4}-\d{2}-\d{2}$/);assert.equal(first.rows.length,1);
+ await db.exec(`select set_config('test.version','v2',false)`);const second=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',2,50,.1,.15,$2) data`,[brand,first.source_version])).rows[0].data;assert.equal(second.stale,true);assert.deepEqual(second.rows,[]);
+});
+
+
+test('both sorted and cursor reject yesterday’s version even when source records are unchanged',async t=>{const db=await fixture(t);await db.exec(cursorSql);
+ await db.query(`insert into supplier_prices values(md5('date')::uuid,$1,$2,$3,'D1','D1','Filter',3,current_date-1,null,current_date,true,'EUR')`,[org,brand,a]);
+ const versions=(await db.query(`select 'v1|date:' || to_char(current_date-1,'YYYY-MM-DD') yesterday, 'v1|date:' || to_char(current_date,'YYYY-MM-DD') today`)).rows[0];
+ const firstSorted=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',1,50,.1,.15,null) data`,[brand])).rows[0].data;
+ const firstCursor=(await db.query(`select public.report_supplier_comparison_cursor($1,'',null,50,.1,.15) data`,[brand])).rows[0].data;
+ assert.equal(firstSorted.source_version,versions.today);assert.equal(firstCursor.source_version,versions.today);assert.equal(firstSorted.rows.length,1);assert.equal(firstCursor.rows.length,1);
+ const sorted=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',2,50,.1,.15,$2) data`,[brand,versions.yesterday])).rows[0].data;
+ const cursor=(await db.query(`select public.report_supplier_comparison_cursor($1,'D1',$2,50,.1,.15) data`,[brand,versions.yesterday])).rows[0].data;
+ assert.equal(sorted.stale,true);assert.deepEqual(sorted.rows,[]);assert.equal(cursor.stale,true);assert.deepEqual(cursor.rows,[]);
 });

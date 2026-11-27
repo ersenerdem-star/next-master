@@ -35,7 +35,7 @@ begin
   end if;
   select b.name into v_brand from public.brands b where b.id=input_brand_id and b.organization_id=v_org;
   if v_brand is null then raise exception 'SUPPLIER_COMPARISON_BRAND_INVALID' using errcode='22023'; end if;
-  v_version:=public.get_catalog_master_export_version(v_org,input_brand_id,'priced');
+  v_version:=public.get_catalog_master_export_version(v_org,input_brand_id,'priced') || '|date:' || to_char(current_date, 'YYYY-MM-DD');
   if input_expected_version is not null and input_expected_version<>v_version
   then return jsonb_build_object('stale',true,'rows','[]'::jsonb); end if;
   -- The legacy-only reader supports substring/OEM/description search while

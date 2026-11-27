@@ -23,7 +23,7 @@ begin
  then raise exception 'SUPPLIER_COMPARISON_CURSOR_INVALID' using errcode='22023'; end if;
  select b.name into v_brand_name from public.brands b where b.id=input_brand_id and b.organization_id=v_organization_id;
  if v_brand_name is null then raise exception 'SUPPLIER_COMPARISON_BRAND_INVALID' using errcode='22023'; end if;
- v_version:=public.get_catalog_master_export_version(v_organization_id,input_brand_id,'priced');
+ v_version:=public.get_catalog_master_export_version(v_organization_id,input_brand_id,'priced') || '|date:' || to_char(current_date, 'YYYY-MM-DD');
  if input_expected_version is not null and input_expected_version<>v_version
  then return jsonb_build_object('stale',true,'rows','[]'::jsonb); end if;
   with pointer_scope as materialized (
