@@ -83,7 +83,14 @@ test('published pointers fence legacy and tenant/role access are enforced',async
   assert.equal(overridden.length,1);assert.equal(Number(overridden[0].buy_price),8);assert.equal(overridden[0].notes,'manual override');
   const after=(await db.query(`select row_to_json(x) as row from (select (select count(*) from supplier_prices) l,(select count(*) from supplier_manual_price_internal.entries) m,(select count(*) from supplier_current_price_pointers) p) x`)).rows;
   assert.deepEqual(after,before,'a report read does not change prices or publication pointers');
+  assert.deepEqual((await db.query(`select * from public.report_supplier_comparison_offers($1,'MISSING')`,[brand])).rows,[]);
+  await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'')`,[brand]),/SUPPLIER_COMPARISON_INPUT_INVALID/);
   await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[id(999)]),/SUPPLIER_COMPARISON_BRAND_INVALID/);
+  await db.exec(`set role authenticated`);
+  assert.equal(Number((await db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand])).rows[0].buy_price),8);
+  await db.exec(`reset role;set role anon`);
+  await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand]),/permission denied/);
+  await db.exec(`reset role`);
   await db.exec(`select set_config('test.reports','false',false)`);
   await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand]),/SUPPLIER_COMPARISON_ACCESS_DENIED/);
   await db.exec(`select set_config('test.uid','',false),set_config('test.super','true',false)`);
