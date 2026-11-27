@@ -57,9 +57,13 @@ test('all offers preserve exact part identity, current supplier scope and manual
   await db.query(`insert into suppliers values($1,$2,'Disabled',false)`,[id(40),org]);
   await db.query(`insert into supplier_prices values($1,$2,$3,$4,'00123','00/123',0.1,'2026-01-01',null,1,1,null,null,true,'EUR')`,[id(400),org,brand,id(40)]);
   await db.query(`insert into supplier_prices values($1,$2,$3,$4,'00123','00123',0.01,'2026-01-01',null,1,1,null,null,true,'EUR')`,[id(401),org,brand,id(1)]);
+  await db.query(`update supplier_prices set stock_qty=0 where supplier_id=$1`,[id(2)]);
+  await db.query(`insert into suppliers values($1,$2,'Future',true),($3,$2,'Expired',true)`,[id(41),org,id(42)]);
+  await db.query(`insert into supplier_prices values($1,$2,$3,$4,'00123','00/123',0.2,current_date+1,null,1,1,null,null,true,'EUR'),($5,$2,$3,$6,'00123','00/123',0.3,'2026-01-01',null,1,1,null,current_date-1,true,'EUR')`,[id(402),org,brand,id(41),id(403),id(42)]);
   const {rows}=await db.query(`select * from public.report_supplier_comparison_offers($1,$2)`,[brand,'00/123']);
   assert.equal(rows.length,30);assert.equal(rows[0].supplier_name,'Supplier 30');assert.equal(Number(rows[0].buy_price),0.5);
   assert.equal(rows[0].notes,'Manual');assert.equal(rows[0].moq,2);assert.equal(rows.at(-1).supplier_name,'Supplier 29');
+  assert.equal(rows.find(r=>r.supplier_name==='Supplier 2').stock_qty,0,'zero stock remains an explicit value and does not hide the offer');
   assert.equal(rows.filter(r=>r.supplier_name==='Supplier 30').length,1);
   assert.ok(!rows.some(r=>r.supplier_name==='Disabled'));
   assert.deepEqual((await db.query(`select * from public.report_supplier_comparison_offers($1,$2)`,[brand,'00123'])).rows.map(x=>Number(x.buy_price)),[0.01]);
