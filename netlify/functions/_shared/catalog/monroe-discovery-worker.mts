@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { assertBrandEngineSource } from './brand-engine-registry.mts';
 import { fetchMonroeDiscoveryPage } from './tecalliance-sync.mts';
+import { budgetedCatalogFetch, CatalogSourceDeferred, deferCatalogSourceJob } from './source-request-budget.mts';
 
 export const MONROE_DISCOVERY_ADAPTER = 'monroe-official-discovery.v1';
 export const MONROE_DISCOVERY_REVIEW_ADAPTER = 'monroe-discovered-products.v1';
@@ -46,12 +47,13 @@ export async function runClaimedMonroeDiscovery({
     if (source.error || source.data?.robots_posture !== 'allowed') throw Error('MONROE_DISCOVERY_SOURCE_UNAVAILABLE');
     assertBrandEngineSource(source.data, brand);
     await rpc('heartbeat_catalog_brand_job', scope);
-    const receipt = monroeDiscoveryReceipt(await fetchPage(prefix, page), prefix, page);
+    const receipt = monroeDiscoveryReceipt(await fetchPage(prefix, page, budgetedCatalogFetch(db, 'tecalliance')), prefix, page);
     const result = await rpc('complete_catalog_monroe_discovery', { ...scope, input_page: receipt });
     return { claimed: true, ...result };
   } catch (error) {
+    if (error instanceof CatalogSourceDeferred) return deferCatalogSourceJob(db, scope, error);
     const message = (error instanceof Error ? error.message : 'MONROE_DISCOVERY_FAILED').slice(0, 200);
-    const retry = /TecAlliance request failed (429|5\d\d)|timeout|abort|fetch failed|ECONN|network/i.test(message)
+    const retry = /TecAlliance request failed (429|5\d\d)|timeout|abort|fetch failed|ECONN|network|CATALOG_SOURCE_BUDGET_UNAVAILABLE/i.test(message)
       && Number(job.retry_attempts || 0) < 4;
     const status = retry ? 'paused' : 'failed';
     await rpc('checkpoint_catalog_brand_job', {

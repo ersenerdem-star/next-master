@@ -676,6 +676,7 @@ async function requestTecAllianceArticles(
     requestTimeoutMs: number;
     searchMatchType: "prefix" | "prefix_or_suffix" | "exact";
     articleNumberDiscovery?: boolean;
+    fetchImpl?: typeof fetch;
   },
   config: TecAllianceSyncConfig,
 ) {
@@ -724,7 +725,7 @@ async function requestTecAllianceArticles(
     },
   };
 
-  return fetchTecAllianceJson<TecAllianceArticleSearchResponse>(TECALLIANCE_API_URL, payload, input.requestTimeoutMs, config.requestHeaders);
+  return fetchTecAllianceJson<TecAllianceArticleSearchResponse>(TECALLIANCE_API_URL, payload, input.requestTimeoutMs, config.requestHeaders, input.fetchImpl);
 }
 
 export async function fetchTecAllianceSupplierCatalogFields(brandName:string,productCode:string,config:TecAllianceSyncConfig,requestTimeoutMs=12000) {
@@ -784,19 +785,21 @@ export function mapMonroeCatalogArticle(article: TecAllianceApiArticle, productC
 
 const monroeTecAlliance = { providerLabel: 'Monroe', providerId: 2143, dataSupplierId: 37, manufacturerNames: ['MONROE'] };
 
-export async function fetchMonroeDiscoveryPage(prefix: string, page: number) {
+export async function fetchMonroeDiscoveryPage(prefix: string, page: number, fetchImpl?: typeof fetch) {
   if (!/^[0-9A-Z]$/.test(prefix) || !Number.isInteger(page) || page < 1 || page > 200) {
     throw Error('MONROE_DISCOVERY_PAGE_INVALID');
   }
   return requestTecAllianceArticles({
     searchQuery: prefix, page, perPage: 100, requestTimeoutMs: 12000,
-    searchMatchType: 'prefix', articleNumberDiscovery: true,
+    searchMatchType: 'prefix', articleNumberDiscovery: true, fetchImpl,
   }, monroeTecAlliance);
 }
 
-export async function fetchMonroeCatalogFields(productCode: string, { fitment = false, vehicle = true, vehiclesCache = new Map() } = {}) {
+export async function fetchMonroeCatalogFields(productCode: string, {
+  fitment = false, vehicle = true, vehiclesCache = new Map(), fetchImpl = fetch,
+} = {}) {
   const result = await requestTecAllianceArticles({
-    searchQuery: productCode, page: 1, perPage: 10, requestTimeoutMs: 12000, searchMatchType: 'exact',
+    searchQuery: productCode, page: 1, perPage: 10, requestTimeoutMs: 12000, searchMatchType: 'exact', fetchImpl,
   }, monroeTecAlliance);
   const matches = (result.articles ?? []).filter(article =>
     exactCatalogCode(article.articleNumber) === exactCatalogCode(productCode) && Number(article.dataSupplierId ?? article.mfrId) === 37 &&
@@ -818,11 +821,12 @@ export async function fetchMonroeCatalogFields(productCode: string, { fitment = 
   if (vehicle) {
     let requests = 0;
     const started = Date.now();
+    const fitmentDeadlineMs = fetchImpl === fetch ? 150000 : 210000;
     const call = async (method: string, values: Record<string, unknown>) => {
-      if (++requests > 84 || Date.now()-started > 150000) throw Error('FITMENT_REQUEST_BOUND');
+      if (++requests > 84 || Date.now()-started > fitmentDeadlineMs) throw Error('FITMENT_REQUEST_BOUND');
       await new Promise(resolve => setTimeout(resolve,1100));
       const response = await fetchTecAllianceJson<Record<string, unknown>>(TECALLIANCE_API_URL,
-        {[method]:{provider:2143,articleCountry:'GB',lang:'en',...values}},12000);
+        {[method]:{provider:2143,articleCountry:'GB',lang:'en',...values}},12000,undefined,fetchImpl);
       return {response};
     };
     try {
@@ -1068,12 +1072,13 @@ async function fetchTecAllianceJson<T>(
   payload: unknown,
   requestTimeoutMs: number,
   headerOverrides?: Record<string, string>,
+  fetchImpl = fetch,
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), requestTimeoutMs);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetchImpl(url, {
       method: "POST",
       headers: {
         ...defaultRequestHeaders,

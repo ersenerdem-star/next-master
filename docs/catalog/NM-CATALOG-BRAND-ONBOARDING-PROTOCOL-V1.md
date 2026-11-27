@@ -34,6 +34,32 @@ the canonical reread passed.
    not a zero, empty success, or guessed value. The package remains visible
    until its review, publication, enrichment and reread states are explicit.
 
+## Shared queue and upstream request budgets
+
+- Route scheduled discovery, exact product verification and follow-up reads
+  through the durable catalog queue. Keep one leased worker per organization
+  and checkpoint the pending page or product. Reuse the shared dispatcher when
+  adding brands. Persist the discovery schedule and deduplicate product
+  candidates before queuing them.
+- Assign each adapter to the budget group of its upstream quota. Brands and
+  endpoints that share a provider limit share one group, including linked
+  vehicle queries and secondary lookups. Acquire a shared permit immediately
+  before each outbound request. A missing budget or unavailable permit service
+  blocks the request. Keep credentials and request bodies out of budget logs.
+- Enforce both minimum spacing and the hourly quota. Preserve the job cursor
+  when a budget has been used up. On HTTP 429 or 503 with Retry-After, apply
+  the upstream delay to the entire group. A budget wait does not consume a
+  transport retry.
+- Verify the source's limits before rollout. Capture a live receipt that shows
+  admission, budget deferral and resumption. Compare catalog identifiers and
+  commercial data against a baseline. Connect and verify each existing adapter
+  before including its traffic in a reported budget.
+- The Monroe pilot covers scheduled discovery, exact review, and the primary
+  and secondary reads made by Monroe brand queue jobs. TecAlliance starts at
+  180 permits per UTC hour and Spareto at 60, with at least two seconds between
+  permits in each group. These are operating limits for the pilot. Other
+  adapters must opt in to the same shared groups when they are migrated.
+
 ## Kolbenschmidt / Wilmink distributor engine — 2026-10-21
 
 The owner explicitly selected Wilmink for the Kolbenschmidt engine. Register

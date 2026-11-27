@@ -14,6 +14,7 @@ import {runClaimedSparetoCorrection} from './spareto-correction-worker.mts';
 import {SPARETO_CORRECTION_ADAPTER} from './spareto-reviewed-correction.mjs';
 import {WILMINK_SCAN,safeWilminkObservation} from './wilmink-kolbenschmidt.mjs';
 import {runWilminkDiscovery,wilminkProvider} from './wilmink-discovery-worker.mts';
+import {budgetedCatalogFetch,CatalogSourceDeferred,deferCatalogSourceJob} from './source-request-budget.mts';
 import {catalogRowFailure} from './catalog-row-failures.mjs';
 export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=brandOfficialProvider,fetchSecondary=fetchExactSparetoSecondary,fetchSecondaryPage=fetchSparetoSecondaryPage,fetchWilmink=fetchKnorrWilminkReview,delayMs=1100}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
@@ -26,6 +27,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
+ const monroeOfficialFetch=monroe?budgetedCatalogFetch(db,'tecalliance'):undefined;
  const monroeCandidate=monroe&&job.manifest.adapter===MONROE_DISCOVERY_REVIEW_ADAPTER;
  const monroeFitment=monroe&&job.manifest.monroe_policy==='monroe-fitment-fill.v1';
  const monroeVehicles=new Map();
@@ -60,9 +62,15 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const missingMonroe=monroeCandidate&&matches.length===0;
  if(rows.length!==1&&!missingKnorr&&!missingMonroe){const reason='CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS';observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:{},fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:reason}),observedAt:new Date().toISOString(),unavailable:reason};}else{
  await new Promise(r=>setTimeout(r,delayMs));
- try{const raw=monroeFitment
-  ?await provider.fetch(item.product_code,{fitment:true,vehiclesCache:monroeVehicles,vehicle:!rows[0].vehicle?.trim()||!rows[0].vehicle_model?.trim()})
-  :await provider.fetch(item.product_code),safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
+ try{
+ const options=monroe?{
+  fitment:monroeFitment,
+  fetchImpl:monroeOfficialFetch,
+  vehiclesCache:monroeVehicles,
+  vehicle:monroeFitment&&(!rows[0]?.vehicle?.trim()||!rows[0]?.vehicle_model?.trim()),
+ }:undefined;
+ const raw=await provider.fetch(item.product_code,options);
+ const safe=def.authority==='distributor'?safeWilminkObservation(raw,item.product_code,job.manifest.brand):safeSupplierOfficialObservation(raw,item.product_code,brand.data.id);
  const before=rows[0]||{};
  const plan=planSupplierCatalogEnrichment({existing:before,incoming:safe.fields,phase:'official'});
  if(monroeFitment){
@@ -116,7 +124,8 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
    const sourceUrl=indexed.data?.source_url??source.data.metadata?.secondary_product_urls?.[code];
    if(!sourceUrl)throw Error('SPARETO_PRODUCT_URL_NOT_INDEXED');
    await new Promise(r=>setTimeout(r,Math.max(1100,delayMs)));
-   const secondary=await fetchSecondaryPage({brand:'Monroe',code,sourceUrl,expectedEan:safe.fields.ean||before.ean||null});
+   const secondary=await fetchSecondaryPage({brand:'Monroe',code,sourceUrl,expectedEan:safe.fields.ean||before.ean||null},
+    {fetchImpl:budgetedCatalogFetch(db,'spareto')});
    const official={authority:'official',brand:'Monroe',code:safe.evidence.code,sourceUrl:safe.evidence.sourceUrl,
     fingerprint:safe.evidence.fingerprint,fields:safe.fields};
    const {hs_code,origin}=secondary.fields;
@@ -125,6 +134,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
     sourceUrl,reportedFields:{hs_code,origin},
    };
   }catch(e:any){
+   if(e instanceof CatalogSourceDeferred)throw e;
    const message=String(e?.message||'');
    observation.secondary={status:'unavailable',reason:/^[A-Z][A-Z0-9_]{1,99}$/.test(message)?message:'SECONDARY_SOURCE_FAILED',canonicalWrite:false};
   }
@@ -151,7 +161,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  }
  const pause=index+1<job.total_items&&Date.now()-started>maxMs;await save(job.mode==='publish'?'completed':'reviewed',true,pause?'paused':null);
  if(pause)return {claimed:true,status:'paused'};
- }catch(e:any){const message=String(e.message||'BRAND_SOURCE_FAILED').slice(0,350);const retry=/(?:HTTP[_ ]?|TecAlliance request failed )(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network/i.test(message)&&Number(job.retry_attempts||0)<4;try{await save('failed',false,retry?'paused':'failed',message);}catch{}return {claimed:true,status:retry?'paused':'failed',error:message};}
+ }catch(e:any){if(e instanceof CatalogSourceDeferred)return deferCatalogSourceJob(db,scope,e);const message=String(e.message||'BRAND_SOURCE_FAILED').slice(0,350);const retry=/(?:HTTP[_ ]?|TecAlliance request failed )(429|5[0-9]{2})|timeout|timed out|abort|fetch failed|ECONN|network|CATALOG_SOURCE_BUDGET_UNAVAILABLE/i.test(message)&&Number(job.retry_attempts||0)<4;try{await save('failed',false,retry?'paused':'failed',message);}catch{}return {claimed:true,status:retry?'paused':'failed',error:message};}
  }
  return {claimed:true,status:job.mode==='publish'?'completed':'reviewed'};
 }
