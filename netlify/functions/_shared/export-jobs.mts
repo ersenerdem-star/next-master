@@ -229,6 +229,11 @@ const CATALOG_MASTER_EXPORT_HEADERS = [
   "Notes",
 ] as const;
 
+const CATALOG_MASTER_SUPPLIER_HEADERS = [
+  "Product_Code", "Original_Product_Code", "Brand", "Supplier_Rank", "Supplier", "Buy_Price_EUR", "Price_Date",
+] as const;
+const CATALOG_MASTER_OFFER_BATCH_SIZE = 200;
+
 // Excel worksheets support at most 1,048,576 rows including the header. Keep
 // one row for the header and fail closed at the native file limit rather than
 // silently truncating a large export.
@@ -1540,7 +1545,7 @@ export async function startCatalogMasterExport(
     marginB,
     format: "xlsx",
     maxRows: CATALOG_MASTER_EXPORT_MAX_ROWS,
-    schemaVersion: 5,
+    schemaVersion: 6,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1895,6 +1900,43 @@ async function fetchSupplierPriceExportPage(input: {
 
 type RemainingAdminExportType = "supplier_price_list" | "catalog_export" | "catalog_master";
 
+async function appendCatalogMasterSupplierOffers(writer: StreamingExportWriter, supabaseUrl: string, serviceRoleKey: string,
+  organizationId: string, brandId: string, page: CatalogMasterExportWorkbookRow[]) {
+  if (!writer.appendAdditional) throw new Error("Supplier offer worksheet is unavailable.");
+  const rowsByCode = new Map(page.map((row) => [row.productCode, row]));
+  const codes = [...rowsByCode.keys()];
+  for (let offset = 0; offset < codes.length; offset += CATALOG_MASTER_OFFER_BATCH_SIZE) {
+    const batch = codes.slice(offset, offset + CATALOG_MASTER_OFFER_BATCH_SIZE);
+    const requested = new Set(batch);
+    const payload = await rpcJson<unknown>(supabaseUrl, serviceRoleKey, "cloud_catalog_master_export_offers", {
+      input_organization_id: organizationId, input_brand_id: brandId, input_product_codes: batch,
+    }, EXPORT_REQUEST_TIMEOUT_MS);
+    if (!Array.isArray(payload)) throw new Error("Invalid supplier offer export data.");
+    const ranks = new Map<string, number>();
+    const seen = new Set<string>();
+    const exportRows: unknown[][] = [];
+    for (const item of payload) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) throw new Error("Invalid supplier offer export row.");
+      const offer = item as Record<string, unknown>;
+      const code = String(offer.product_code || "");
+      const supplierId = String(offer.supplier_id || "");
+      const supplierName = String(offer.supplier_name || "");
+      const price = Number(offer.buy_price);
+      const duplicateKey = JSON.stringify([code, supplierId]);
+      const source = rowsByCode.get(code);
+      if (!source || !requested.has(code) || !supplierId || !supplierName || !Number.isFinite(price) || price <= 0 || seen.has(duplicateKey)) {
+        throw new Error("Invalid supplier offer identity or price in export.");
+      }
+      seen.add(duplicateKey);
+      const rank = (ranks.get(code) || 0) + 1;
+      ranks.set(code, rank);
+      exportRows.push([normalizeAdminExportProductCode(source.productCode, source.brand), source.productCode, source.brand,
+        rank, supplierName, price, String(offer.price_date || "")]);
+    }
+    await writer.appendAdditional(exportRows);
+  }
+}
+
 function verifiedSourceTotal(value: unknown, previousTotal: number | null, rowLimit: number) {
   const total = value == null ? previousTotal : Number(value);
   if (total == null || !Number.isSafeInteger(total) || total < 1) {
@@ -1940,13 +1982,15 @@ async function runPagedRemainingAdminExportJob(
     const format = exportType === "catalog_master" || (exportType === "catalog_export" && scope.format === "xlsx") ? "xlsx" : "csv";
     if (!brandId || (exportType === "supplier_price_list" && !supplierId)) throw new Error("Export job is missing its supplier or brand scope.");
     const includeSupplierTerms = exportType === "supplier_price_list" && Number(scope.schemaVersion || 2) >= 3;
+    const includeAllMasterOffers = exportType === "catalog_master" && Number(scope.schemaVersion || 0) >= 6;
     const includeQuantityTiers = exportType === "supplier_price_list" && isWahlerBrand(brandName) && Number(scope.schemaVersion) >= 4;
     const headers = exportType === "supplier_price_list"
       ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", ...(includeSupplierTerms ? ["Stock_Qty", "Valid_To"] : []), ...(includeQuantityTiers ? ["Quantity_Buy_Prices_EUR"] : [])]
       : exportType === "catalog_export" ? CATALOG_EXPORT_HEADERS : CATALOG_MASTER_EXPORT_HEADERS;
     writer = format === "csv"
       ? await createCsvExportStream(headers, { bom: true })
-      : await createXlsxExportStream(headers, sanitizeSheetName(`${brandName} ${exportType === "catalog_master" ? "Master" : "Catalog"}`));
+      : await createXlsxExportStream(headers, sanitizeSheetName(`${brandName} ${exportType === "catalog_master" ? "Master" : "Catalog"}`),
+        includeAllMasterOffers ? { headers: CATALOG_MASTER_SUPPLIER_HEADERS, sheetName: "Supplier Offers" } : undefined);
     let rowCount = 0;
     let totalCount: number | null = null;
     let afterCode: string | null = null;
@@ -2003,6 +2047,7 @@ async function runPagedRemainingAdminExportJob(
         nextCode = page.at(-1)!.cursorCode;
         nextId = page.at(-1)!.cursorId;
         sheetRows = catalogMasterExportSheetRows(page).slice(1);
+        if (includeAllMasterOffers) await appendCatalogMasterSupplierOffers(writer, supabaseUrl, serviceRoleKey, job.organization_id, brandId, page);
       }
       totalCount = verifiedSourceTotal(pageTotal, totalCount, CATALOG_EXPORT_MAX_ROWS);
       for (const cursor of cursors) {

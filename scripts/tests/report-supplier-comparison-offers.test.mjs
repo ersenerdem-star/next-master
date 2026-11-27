@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
 const migration = await readFile(new URL('../../supabase/migrations/20261127102812_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
+const exportMigration = await readFile(new URL('../../supabase/migrations/20261127115259_supplier_comparison_export_offers.sql', import.meta.url), 'utf8');
 const org='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 const brand='33333333-3333-4333-8333-333333333333';
@@ -95,4 +96,55 @@ test('published pointers fence legacy and tenant/role access are enforced',async
   await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand]),/SUPPLIER_COMPARISON_ACCESS_DENIED/);
   await db.exec(`select set_config('test.uid','',false),set_config('test.super','true',false)`);
   await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand]),/SUPPLIER_COMPARISON_ACCESS_DENIED/);
+});
+
+test('batch export preserves every current offer, original codes and isolates tenant and role',async t=>{
+  const db=await fixture(t);
+  await db.exec(`create function public.get_admin_price_list_export_version(uuid,uuid) returns text language sql stable as $$select 'v1'::text$$`);
+  await db.exec(exportMigration);
+  for(let n=1;n<=30;n++){
+    const supplier=id(n);
+    await db.query(`insert into suppliers values($1,$2,$3,true)`,[supplier,org,`Supplier ${n}`]);
+    await db.query(`insert into supplier_prices values($1,$2,$3,$4,'00123','00/123',$5,current_date,null,1,1,null,null,true,'EUR')`,[id(100+n),org,brand,supplier,n]);
+  }
+  await db.query(`insert into supplier_manual_price_internal.entries values($1,$2,$3,$4,'00/123','00/123',0.5,current_date,null,1,1,true)`,[id(300),org,brand,id(30)]);
+  await db.query(`insert into supplier_prices values($1,$2,$3,$4,'00123','00123',0.01,current_date,null,1,1,null,null,true,'EUR')`,[id(301),org,brand,id(1)]);
+  await db.query(`insert into suppliers values($1,$2,'disabled',false),($3,$2,'future',true)`,[id(40),org,id(41)]);
+  await db.query(`insert into supplier_prices values($1,$2,$3,$4,'00123','00/123',0.2,current_date,null,1,1,null,null,true,'EUR'),($5,$2,$3,$6,'00123','00/123',0.3,current_date+1,null,1,1,null,null,true,'EUR')`,[id(402),org,brand,id(40),id(403),id(41)]);
+  const got=(await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,['00/123','00123']])).rows[0].offers;
+  assert.equal(got.length,31);assert.deepEqual(got.filter(x=>x.product_code==='00123').map(x=>Number(x.buy_price)),[0.01]);
+  assert.equal(Number(got.find(x=>x.product_code==='00/123').buy_price),0.5);
+  const screen=(await db.query(`select supplier_id,buy_price from public.report_supplier_comparison_offers($1,'00/123')`,[brand])).rows;
+  assert.deepEqual(got.filter(x=>x.product_code==='00/123').map(x=>[x.supplier_id,Number(x.buy_price)]),screen.map(x=>[x.supplier_id,Number(x.buy_price)]));
+  // A pointer fences an older legacy price; manual override wins over publication.
+  await db.query(`insert into supplier_current_price_pointers values($1,$2,$3,$4,$5)`,[org,brand,id(1),id(501),id(502)]);
+  await db.query(`insert into supplier_price_publications values($1,$2,$3,$4,$5,'published')`,[id(502),id(501),org,id(1),brand]);
+  await db.query(`insert into supplier_price_release_rows values($1,$2,'00/123','00/123',41,current_date,null,1,1,null,null,'accepted','EUR')`,[id(503),id(501)]);
+  let published=(await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,['00/123']])).rows[0].offers;
+  assert.equal(Number(published.find(x=>x.supplier_id===id(1)).buy_price),41);
+  await db.query(`insert into supplier_manual_price_internal.entries values($1,$2,$3,$4,'00/123','00/123',37,current_date,null,1,1,true)`,[id(504),org,brand,id(1)]);
+  published=(await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,['00/123']])).rows[0].offers;
+  assert.equal(Number(published.find(x=>x.supplier_id===id(1)).buy_price),37);
+  assert.deepEqual((await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,['missing']])).rows[0].offers,[]);
+  await assert.rejects(db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[])`,[org,brand,Array(201).fill('X')]),/SUPPLIER_EXPORT_INPUT_INVALID/);
+  await assert.rejects(db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[])`,[other,brand,['00/123']]),/SUPPLIER_EXPORT_BRAND_INVALID/);
+  const before=(await db.query(`select public.get_catalog_master_export_version($1,$2,'priced') version`,[org,brand])).rows[0].version;
+  await db.query(`update suppliers set price_usage_enabled=false where id=$1`,[id(30)]);
+  const after=(await db.query(`select public.get_catalog_master_export_version($1,$2,'priced') version`,[org,brand])).rows[0].version;
+  assert.notEqual(after,before,'disabling a manual-only supplier changes the cached export version');
+  await db.exec(`set role authenticated`);
+  await assert.rejects(db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[])`,[org,brand,['00/123']]),/permission denied/);
+  await db.exec(`reset role;set role service_role`);
+  assert.equal((await db.query(`select jsonb_array_length(public.cloud_catalog_master_export_offers($1,$2,$3::text[])) n`,[org,brand,['00/123']])).rows[0].n,29);
+  await db.exec(`reset role`);
+});
+
+test('batch JSON includes more than 1000 offers without row-limit truncation',async t=>{
+  const db=await fixture(t);
+  await db.exec(`create function public.get_admin_price_list_export_version(uuid,uuid) returns text language sql stable as $$select 'v1'::text$$`);
+  await db.exec(exportMigration);
+  await db.query(`insert into suppliers select md5('s'||n)::uuid,$1,'S'||n,true from generate_series(1,60) n`,[org]);
+  await db.query(`insert into supplier_prices select md5('r'||s||'x'||p)::uuid,$1,$2,md5('s'||s)::uuid,'PART'||p,'PART'||p,s,current_date,null,1,1,null,null,true,'EUR' from generate_series(1,60) s cross join generate_series(1,20) p`,[org,brand]);
+  const result=(await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,Array.from({length:20},(_,n)=>`PART${n+1}`)])).rows[0].offers;
+  assert.equal(result.length,1200);assert.equal(result.filter(x=>x.product_code==='PART1').length,60);
 });

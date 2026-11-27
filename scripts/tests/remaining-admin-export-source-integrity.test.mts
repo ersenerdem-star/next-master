@@ -39,6 +39,8 @@ type Scenario = {
   pageSizes?: number[];
   version?: string;
   schemaVersion?: number;
+  offers?: Record<string, unknown>[];
+  offerFailure?: boolean;
 };
 
 async function withExportSource(scenario: Scenario, check: (state: {
@@ -97,6 +99,16 @@ async function withExportSource(scenario: Scenario, check: (state: {
     if (url.pathname === `/rest/v1/rpc/${versionRpc}`) {
       events.push("source-version");
       return Response.json(scenario.version || "version-1");
+    }
+    if (url.pathname === "/rest/v1/rpc/cloud_catalog_master_export_offers") {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      assert.equal(body.input_organization_id, "org-1");
+      assert.equal(body.input_brand_id, "brand-1");
+      const codes = body.input_product_codes as string[];
+      assert.ok(codes.length > 0 && codes.length <= 200);
+      events.push("source-offers");
+      if (scenario.offerFailure) return new Response("unavailable", { status: 500 });
+      return Response.json((scenario.offers || []).filter((row) => codes.includes(String(row.product_code))));
     }
     if (url.pathname.startsWith("/storage/v1/object/")) {
       events.push("storage-upload");
@@ -264,6 +276,67 @@ test("master export refuses stale purchase and sale prices before uploading its 
     await assert.rejects(run(), /changed|snapshot|version/i);
     assert.equal(job.status, "failed");
     assert.equal(uploads.length, 0);
+  });
+});
+
+test("master XLSX includes every supplier in an additional sheet with numeric prices and exact part codes", async () => {
+  const codes = ["001.234", "002567"];
+  const pages = [[{ ...masterRow(), product_code: codes[0], cursor_code: codes[0], brand: "Mann", supplier_count: 5, total_count: 2 },
+    { ...masterRow(), product_code: codes[1], cursor_code: codes[1], brand: "Mann", supplier_count: 1, total_count: 2 }]];
+  const offers = [3.89, 4.05, 4.96, 5.55, 6].map((price, i) => ({ product_code: codes[0], supplier_id: `sup-${i}`, supplier_name: ["GroupAuto", "Romany", "TPM", "Fourth", "Fifth"][i], buy_price: price, price_date: "2026-11-27" }));
+  offers.push({ product_code: codes[1], supplier_id: "sup-1", supplier_name: "Romany", buy_price: 1.5, price_date: "2026-11-27" });
+  await withExportSource({ kind: "catalog_master", pages, schemaVersion: 6, offers }, async ({ run, job, uploads, events }) => {
+    await run();
+    assert.equal(job.status, "finalized");
+    const workbook = XLSX.read(uploads[0], { type: "array" });
+    assert.equal(workbook.SheetNames.length, 2);
+    const summary = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[0]]);
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[1]]);
+    assert.equal(summary.length, 2);
+    assert.equal(summary[0].A_Sales_EUR, 13.57);
+    assert.equal(rows.length, 6);
+    assert.deepEqual(rows.slice(0, 5).map((r) => r.Supplier), ["GroupAuto", "Romany", "TPM", "Fourth", "Fifth"]);
+    assert.deepEqual(rows.slice(0, 5).map((r) => r.Buy_Price_EUR), [3.89, 4.05, 4.96, 5.55, 6]);
+    assert.deepEqual(rows.map((r) => r.Supplier_Rank), [1, 2, 3, 4, 5, 1]);
+    assert.equal(rows[0].Original_Product_Code, "001.234");
+    assert.equal(rows[5].Original_Product_Code, "002567");
+    assert.equal(typeof rows[0].Buy_Price_EUR, "number");
+    assert.ok(events.indexOf("source-offers") < events.indexOf("source-version"));
+  });
+});
+
+test("master export leaves the supplier sheet empty when no offers exist", async () => {
+  await withExportSource({ kind: "catalog_master", pages: [[masterRow()]], schemaVersion: 6 }, async ({ run, uploads }) => {
+    await run();
+    const workbook = XLSX.read(uploads[0], { type: "array" });
+    assert.equal(workbook.SheetNames.length, 2);
+    assert.equal(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[1]]).length, 0);
+  });
+});
+
+test("supplier detail read failure or source version change prevents upload", async () => {
+  for (const scenario of [{ offerFailure: true }, { version: "version-2" }]) {
+    await withExportSource({ kind: "catalog_master", pages: [[masterRow()]], schemaVersion: 6, ...scenario }, async ({ run, job, uploads }) => {
+      await assert.rejects(run());
+      assert.equal(job.status, "failed");
+      assert.equal(uploads.length, 0);
+    });
+  }
+});
+
+test("master export retrieves all supplier details in bounded batches across product pages", async () => {
+  const makeRow = (n: number) => ({ ...masterRow(), product_code: `SKU-${String(n).padStart(6, "0")}`,
+    cursor_code: `SKU-${String(n).padStart(6, "0")}`, cursor_id: `id-${n}`, total_count: 1001 });
+  const rows = Array.from({ length: 1001 }, (_, i) => makeRow(i + 1));
+  const offers = rows.map((row) => ({ product_code: row.product_code, supplier_id: "supplier-one", supplier_name: "GroupAuto", buy_price: 1.25, price_date: "2026-11-27" }));
+  await withExportSource({ kind: "catalog_master", pages: [rows.slice(0, 1000), rows.slice(1000)], schemaVersion: 6, offers }, async ({ run, uploads, events }) => {
+    await run();
+    assert.equal(events.filter((event) => event === "source-offers").length, 6);
+    const workbook = XLSX.read(uploads[0], { type: "array" });
+    const details = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[1]]);
+    assert.equal(details.length, 1001);
+    assert.equal(details[0].Original_Product_Code, "SKU-000001");
+    assert.equal(details.at(-1)!.Original_Product_Code, "SKU-001001");
   });
 });
 
