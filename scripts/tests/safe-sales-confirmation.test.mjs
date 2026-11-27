@@ -117,7 +117,7 @@ test('regenerated line identities cannot erase the flag but a distinct existing 
  const existing={...base,lineId:'B'};
  const draft={...payload('same-sku',[pending,existing]),status:'draft'};
  const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
- const reidentified={...base,lineId:'C'};
+ const reidentified={...base,lineId:'C',brand:'  bOsCh ',requestedCode:'',resolvedCode:' 000123 '};
  await assert.rejects(db.query('select public.save_sales_order_atomic($1::jsonb)',
   [JSON.stringify({...draft,lines:[reidentified,existing],expected_updated_at:saved.updated_at})]),/SALES_DRAFT_QUANTITY_RECHECK_REQUIRED/);
  const remaining=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
@@ -128,6 +128,18 @@ test('regenerated line identities cannot erase the flag but a distinct existing 
  const created=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
   [JSON.stringify({...other,lines:[{...reidentified,purchase_qty_recheck_required:false}],expected_updated_at:savedOther.updated_at})])).rows[0].result.sales_order;
  assert.equal(created.lines[0].lineId,'C');assert.equal(created.lines[0].purchase_qty_recheck_required,false);
+});
+test('SKU comparison preserves leading zeroes and punctuation when a pending line is removed',async t=>{
+ const {db}=await fixture(t);
+ for (const [id,oldCode,newCode] of [['punctuation','00/123','00123'],['zero','00123','123']]) {
+  const pending={...line('Other',oldCode),lineId:'A',purchase_qty_recheck_required:true};
+  const draft={...payload(id,[pending]),status:'draft'};
+  const saved=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',[JSON.stringify(draft)])).rows[0].result.sales_order;
+  const replacement={...line('Other',newCode),lineId:'C'};
+  const result=(await db.query('select public.save_sales_order_atomic($1::jsonb) as result',
+   [JSON.stringify({...draft,lines:[replacement],expected_updated_at:saved.updated_at})])).rows[0].result.sales_order;
+  assert.equal(result.lines[0].resolvedCode,newCode);
+ }
 });
 test('large draft checks unresolved flags without losing any rows',{timeout:120000},async t=>{
  const {db}=await fixture(t);

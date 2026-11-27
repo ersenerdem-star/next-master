@@ -56,14 +56,16 @@ begin
     (where n.line_id is null or not(previous_ids ? n.line_id)),'{}'::jsonb)
    into missing_by_id,missing_any_by_code,missing_unknown_by_code
   from (select nullif(l.value->>'lineId','') as line_id,
-    jsonb_build_array(l.value->'brand',l.value->'resolvedCode',l.value->'requestedCode')::text as code_key
+    jsonb_build_array(upper(btrim(coalesce(l.value->>'brand',''))),upper(coalesce(
+     nullif(btrim(l.value->>'resolvedCode'),''),nullif(btrim(l.value->>'requestedCode'),''),'')))::text as code_key
    from jsonb_array_elements(new.lines) l(value)
    where l.value->'purchase_qty_recheck_required' is null
       or l.value->'purchase_qty_recheck_required' not in ('true'::jsonb,'false'::jsonb)) n;
   for item in select value from jsonb_array_elements(previous_lines)
    where value->'purchase_qty_recheck_required'='true'::jsonb loop
    line_id:=nullif(item->>'lineId','');
-   code_key:=jsonb_build_array(item->'brand',item->'resolvedCode',item->'requestedCode')::text;
+   code_key:=jsonb_build_array(upper(btrim(coalesce(item->>'brand',''))),upper(coalesce(
+    nullif(btrim(item->>'resolvedCode'),''),nullif(btrim(item->>'requestedCode'),''),'')))::text;
    if (line_id is not null and (missing_by_id ? line_id or missing_unknown_by_code ? code_key))
       or (line_id is null and missing_any_by_code ? code_key) then
     raise exception 'SALES_DRAFT_QUANTITY_RECHECK_REQUIRED: Siparişi yeniden açın; adet kademesi için tedarikçi seçeneklerini yenileyin. / Reopen the order and refresh the supplier quantity-tier options.' using errcode='P0001';
