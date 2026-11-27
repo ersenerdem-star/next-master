@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudMasterFast, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
+import { enrichSupplierReportCatalog } from "../../infrastructure/api/supplierReportCatalogApi";
 import { downloadExportJob, startMasterExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
@@ -131,8 +132,18 @@ export function MasterPage() {
           marginA,
           marginB,
         });
+        if (cancelled) return;
+        // The fast priced report only carries supplier metadata. Retrieve
+        // exact catalog details for this visible page before reporting success.
+        let complete = result;
+        if (scope === "priced") {
+          try { complete = await enrichSupplierReportCatalog(brandId, result); }
+          catch {
+            throw new Error(locale === "tr" ? "Katalog bilgileri yüklenemedi. Tekrar deneyin." : "Catalog details could not be loaded. Please try again.");
+          }
+        }
         if (!cancelled) {
-          setRows(result);
+          setRows(complete);
           if (searchingRef.current) {
             const nextTotal = result[0]?.total_count ?? result.length;
             actionFeedback.succeed(result[0]?.total_count_is_estimate || result[0]?.total_count_is_unknown

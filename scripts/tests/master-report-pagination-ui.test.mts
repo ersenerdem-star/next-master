@@ -23,14 +23,46 @@ after(async()=>{await rm(temporary,{recursive:true,force:true})});
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 const row=(brand:string,page:number,index:number)=>({product_id:null,product_code:`${brand}-${page}-${index}`,brand,description:'',oem_no:'',hs_code:'',origin:'',weight_kg:null,cheapest_supplier:'A',cheapest_price:1,second_supplier_name:'B',second_price:2,price_gap:1,price_gap_percent:100,price_date:'',sales_a:1,sales_b:2,supplier_count:2,catalog_status:'',notes:'',has_notes:false,total_count:100000,total_count_is_estimate:true});
 function text(node:ReactTestInstance|string):string{return typeof node==='string'?node:node.children.map(x=>text(x)).join('')}
-function deferred(){let resolve!:(value:any)=>void;const promise=new Promise(r=>{resolve=r});return{promise,resolve}}
+function deferred(){let resolve!:(value:any)=>void;let reject!:(reason:any)=>void;const promise=new Promise((r,j)=>{resolve=r;reject=j});return{promise,resolve,reject}}
 async function fixture(allPages=false){
- const calls:any[]=[]; const events:any[]=[]; let pending:any=null; let pendingOffer:any=null;
- (globalThis as any)[key]={feedback:{begin(s:any){events.push(['begin',s])},succeed(s:any){events.push(['succeed',s])},fail(s:any){events.push(['fail',s])},clear(){}},call(name:string,...args:any[]){calls.push({name,args});if(name==='fetchCloudBrands')return Promise.resolve([{id:'mann',name:'Mann'},{id:'bosch',name:'Bosch'}]);if(name==='fetchPriceListSettings')return Promise.resolve([]);if(name==='fetchSupplierComparisonOffers'){if(pendingOffer){const d=pendingOffer;pendingOffer=null;return d.promise}return Promise.resolve([])}if(name==='fetchCloudMasterFast'){if(pending){const d=pending;pending=null;return d.promise}const p=args[0];return Promise.resolve(Array.from({length:!allPages&&p.page===3?4:50},(_,i)=>row(p.brand,p.page,i)))}return Promise.resolve(null)}};
+ const calls:any[]=[]; const events:any[]=[]; let pending:any=null; let pendingOffer:any=null; let pendingCatalog:any=null;
+ (globalThis as any)[key]={feedback:{begin(s:any){events.push(['begin',s])},succeed(s:any){events.push(['succeed',s])},fail(s:any){events.push(['fail',s])},clear(){}},call(name:string,...args:any[]){calls.push({name,args});if(name==='fetchCloudBrands')return Promise.resolve([{id:'mann',name:'Mann'},{id:'bosch',name:'Bosch'}]);if(name==='fetchPriceListSettings')return Promise.resolve([]);if(name==='enrichSupplierReportCatalog'){if(pendingCatalog){const d=pendingCatalog;pendingCatalog=null;return d.promise}return Promise.resolve(args[1])}if(name==='fetchSupplierComparisonOffers'){if(pendingOffer){const d=pendingOffer;pendingOffer=null;return d.promise}return Promise.resolve([])}if(name==='fetchCloudMasterFast'){if(pending){const d=pending;pending=null;return d.promise}const p=args[0];return Promise.resolve(Array.from({length:!allPages&&p.page===3?4:50},(_,i)=>row(p.brand,p.page,i)))}return Promise.resolve(null)}};
  let renderer:any;await act(async()=>{renderer=create(createElement(MasterPage))});
  const button=(label:string)=>renderer.root.findAllByType('button').find((b:any)=>text(b)===label);
- return{renderer,calls,events,button,hold(){pending=deferred();return pending},holdOffer(){pendingOffer=deferred();return pendingOffer},async click(label:string){const b=button(label);assert.ok(b,`missing button ${label}`);await act(async()=>b.props.onClick())},async close(){await act(async()=>renderer.unmount())}};
+ return{renderer,calls,events,button,hold(){pending=deferred();return pending},holdOffer(){pendingOffer=deferred();return pendingOffer},holdCatalog(){pendingCatalog=deferred();return pendingCatalog},async click(label:string){const b=button(label);assert.ok(b,`missing button ${label}`);await act(async()=>b.props.onClick())},async close(){await act(async()=>renderer.unmount())}};
 }
+
+test('catalog enrichment finishes before success and late prior-brand metadata cannot replace current rows',async()=>{
+ const v=await fixture();try{
+  const old=v.holdCatalog();await v.click('Sonraki');
+  const selects=v.renderer.root.findAll((n:any)=>typeof n.type==='function'&&n.type.name==='Select');
+  await act(async()=>selects.find((n:any)=>n.props.value==='mann').props.onChange('bosch'));
+  await act(async()=>old.resolve([{...row('Mann',2,0),description:'stale metadata'}]));
+  assert.doesNotMatch(text(v.renderer.root),/stale metadata/);
+  assert.match(text(v.renderer.root),/BOSCH10/);
+  const input=v.renderer.root.findAll((n:any)=>typeof n.type==='function'&&n.type.name==='Input')[0];
+  await act(async()=>input.props.onChange('W11025'));
+  const current=v.holdCatalog();const completed=v.events.filter(x=>x[0]==='succeed').length;
+  await act(async()=>input.props.onEnter());
+  assert.equal(v.events.filter(x=>x[0]==='succeed').length,completed);
+  await act(async()=>current.resolve([{...row('Bosch',1,0),product_code:'W11025',description:'Oil Filter'}]));
+  assert.match(text(v.renderer.root),/Oil Filter/);
+  assert.equal(v.events.filter(x=>x[0]==='succeed').length,completed+1);
+ }finally{await v.close()}
+});
+
+test('catalog lookup failure does not announce success or show unverified details',async()=>{
+ const v=await fixture();try{
+  const input=v.renderer.root.findAll((n:any)=>typeof n.type==='function'&&n.type.name==='Input')[0];
+  await act(async()=>input.props.onChange('W11025'));
+  const pending=v.holdCatalog();const completed=v.events.filter(x=>x[0]==='succeed').length;
+  await act(async()=>input.props.onEnter());
+  await act(async()=>pending.reject(new Error('offline')));
+  assert.equal(v.events.filter(x=>x[0]==='succeed').length,completed);
+  assert.match(text(v.renderer.root),/Katalog bilgileri yüklenemedi/);
+  assert.ok(v.events.some(x=>x[0]==='fail' && String(x[1]).includes('Katalog bilgileri yüklenemedi')));
+ }finally{await v.close()}
+});
 
 test('pages use the existing reader, next and previous preserve the brand and filters',async()=>{
  const v=await fixture();try{
