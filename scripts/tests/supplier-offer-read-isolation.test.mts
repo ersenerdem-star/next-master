@@ -81,3 +81,12 @@ test('invalid or omitted response and ambiguous supplier identities never produc
    await assert.rejects(fetchCurrentSupplierOptionsForOrder(input));
  }
 });
+
+test('duplicate responses are removed only when identical; differing prices or conditions fail closed',async()=>{
+  const first=offer('a','Supplier A',10,1);
+  setup([first,{...first}]);const identical=await fetchCurrentSupplierOptionsForOrder(input);
+  assert.equal(identical.length,1);assert.equal(identical[0].buy_price,10);
+  for(const other of [offer('a','Supplier A',11,1),offer('a','Supplier A',10,6),{...first,notes:'Different terms'}]){
+    setup([first,other]);await assert.rejects(fetchCurrentSupplierOptionsForOrder(input),/conflicting current offers/);
+  }
+});

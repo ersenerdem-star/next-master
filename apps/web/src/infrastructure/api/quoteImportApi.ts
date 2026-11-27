@@ -106,7 +106,17 @@ export async function fetchCurrentSupplierOptionsForOrder(input: { code: string;
         || item.applied_min_quantity < 1 || item.applied_min_quantity > input.quantity)) throw new Error("Supplier quantity tier could not be verified.");
     names.set(name, key);
     const previous = unique.get(key);
-    if (!previous || Number(item.buy_price) < Number(previous.buy_price)) unique.set(key, item);
+    if (previous) {
+      // The current-price RPC promises one effective offer per supplier/SKU.
+      // Do not silently pick a cheaper option if that contract ever changes:
+      // confirmation also requires an unambiguous supplier offer.
+      const exact = (offer: CurrentSupplierPriceOption) => JSON.stringify(Object.fromEntries(
+        Object.entries(offer).sort(([left], [right]) => left.localeCompare(right)),
+      ));
+      if (exact(previous) !== exact(item)) throw new Error("Supplier has conflicting current offers.");
+      continue;
+    }
+    unique.set(key, item);
   }
   return [...unique.values()].map(item => ({
     ...readSupplierCommercialTerms(item),
