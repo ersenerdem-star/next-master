@@ -78,6 +78,7 @@ test('pending quantity recheck blocks confirmation and preserves the draft; old 
  const {db,confirm}=await fixture(t);
  const pending={...line('Other','00123'),lineId:'line-1',purchase_qty_recheck_required:true};
  await assert.rejects(confirm(payload('new',[pending])),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
+ await assert.rejects(confirm(payload('new',[{...pending,purchase_qty_recheck_required:'true'}])),/SALES_CONFIRMATION_QUANTITY_RECHECK_REQUIRED/);
  assert.equal((await db.query('select count(*)::int n from sales_orders')).rows[0].n,0);
  assert.equal((await db.query('select count(*)::int n from purchase_orders')).rows[0].n,0);
  const draft={...payload('draft',[pending]),status:'draft'};
