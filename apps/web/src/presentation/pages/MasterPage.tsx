@@ -25,7 +25,7 @@ import { AdditionalSupplierOffers } from "../components/master/AdditionalSupplie
 import { useI18n } from "../../i18n/I18nProvider";
 
 export function MasterPage() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const r = (key: string, params?: Record<string, string | number>) => t(`reports.${key}`, params);
   const actionFeedback = useActionFeedback();
   const [brands, setBrands] = useState<BrandOption[]>([]);
@@ -33,6 +33,7 @@ export function MasterPage() {
   const [search, setSearch] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
   const [scope, setScope] = useState("priced");
+  const [page, setPage] = useState(1);
   const [marginA, setMarginA] = useState(0.1);
   const [marginB, setMarginB] = useState(0.15);
   const [rows, setRows] = useState<MasterPreviewRow[]>([]);
@@ -113,7 +114,7 @@ export function MasterPage() {
           brand: brandName,
           brandId,
           scope,
-          page: 1,
+          page,
           pageSize: 50,
           marginA,
           marginB,
@@ -133,7 +134,7 @@ export function MasterPage() {
     return () => {
       cancelled = true;
     };
-  }, [brandId, brandName, scope, submittedSearch, marginA, marginB]);
+  }, [brandId, brandName, scope, submittedSearch, marginA, marginB, page]);
 
   useEffect(() => {
     if (!searching || loadingRows) return;
@@ -305,6 +306,7 @@ export function MasterPage() {
   function handleSearch() {
     setSearching(true);
     actionFeedback.begin(r("master.feedback.searching", { target: search.trim() || brandName || r("values.allItems") }));
+    setPage(1);
     setSubmittedSearch(search);
   }
 
@@ -338,8 +340,8 @@ export function MasterPage() {
             onEnter={handleSearch}
           />
           <div className="smart-filter-bar__selects">
-            <Select label={r("fields.brand")} value={brandId} options={brandOptions} onChange={setBrandId} />
-            <Select label={r("master.fields.scope")} value={scope} options={scopeOptions} onChange={setScope} />
+            <Select label={r("fields.brand")} value={brandId} options={brandOptions} onChange={(value) => { setPage(1); setBrandId(value); }} />
+            <Select label={r("master.fields.scope")} value={scope} options={scopeOptions} onChange={(value) => { setPage(1); setScope(value); }} />
           </div>
           <Button onClick={handleSearch} busy={searching} busyLabel={r("busy.searching")}>
             {r("actions.search")}
@@ -391,6 +393,18 @@ export function MasterPage() {
               emptyText={!brandId ? r("master.empty.selectBrandOrSearch") : r("master.empty.noComparisons")}
             />
           )}
+          {brandId ? (
+            <div className="toolbar toolbar--wrap" aria-label={locale === "tr" ? "Rapor sayfaları" : "Report pages"}>
+              <Button variant="secondary" className="button--compact" disabled={loadingRows || page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                {locale === "tr" ? "Önceki" : "Previous"}
+              </Button>
+              <span role="status">{locale === "tr" ? `Sayfa ${page}` : `Page ${page}`}</span>
+              <Button variant="secondary" className="button--compact" disabled={loadingRows || rows.length < 50 || (scope === "priced" && page >= 100)} onClick={() => setPage((current) => current + 1)}>
+                {locale === "tr" ? "Sonraki" : "Next"}
+              </Button>
+              {scope === "priced" && page >= 100 && rows.length === 50 ? <span className="info-text">{locale === "tr" ? "Bu görünümde ilk 5.000 ürün gösterilebilir. Diğer ürünler için parça numarasıyla arayın." : "This view can show the first 5,000 products. Search by part number for other products."}</span> : null}
+            </div>
+          ) : null}
         </div>
       </section>
     </PageShell>
