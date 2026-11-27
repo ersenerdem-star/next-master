@@ -728,7 +728,7 @@ test('refreshing supplier options is buy-only and preserves the order choice and
   } finally {await view.close()}
 });
 
-test('bulk supplier choice only applies uniquely matched supplier offers, with quantity confirmation and sale prices kept',async()=>{
+test('bulk supplier choice skips quantity-adjusted lines and keeps sale prices and quantities',async()=>{
   const a=supplierLine();
   const missing={...line('TEST-002'),supplier_name:'Supplier A',manual_sell_price:false,buy_price:10,sell_price:12,
     supplierOptions:[supplierOption('Supplier A',10)],selectedSupplierKey:'Supplier A-0'};
@@ -740,10 +740,10 @@ test('bulk supplier choice only applies uniquely matched supplier offers, with q
     await act(async()=>bulk.props.onChange({target:{value:'supplier b'}}));
     view.setConfirmResponse(false);await view.click('Apply to eligible lines');
     assert.deepEqual(view.lineRows().map(row=>row.supplier_name),['Supplier A','Supplier A','Supplier A']);
-    assert.match(view.confirms.at(-1) || '',/2 eligible lines/);assert.match(view.confirms.at(-1) || '',/TEST-003: 3 → 6/);
+    assert.match(view.confirms.at(-1) || '',/1 eligible lines/);assert.match(view.confirms.at(-1) || '',/1 lines needing quantity changes were skipped/);
     view.setConfirmResponse(true);await view.click('Apply to eligible lines');
-    assert.deepEqual(view.lineRows().map(row=>row.supplier_name),['Supplier B','Supplier A','Supplier B']);
-    assert.deepEqual(view.lineRows().map(row=>row.sell_price),[11,12,13]);assert.deepEqual(view.lineRows().map(row=>row.qty),[3,3,6]);
+    assert.deepEqual(view.lineRows().map(row=>row.supplier_name),['Supplier B','Supplier A','Supplier A']);
+    assert.deepEqual(view.lineRows().map(row=>row.sell_price),[11,12,13]);assert.deepEqual(view.lineRows().map(row=>row.qty),[3,3,3]);
   } finally {await view.close()}
 });
 

@@ -2396,24 +2396,25 @@ export function QuotesPage({
       if (key === line.selectedSupplierKey || refreshingSupplierLines[line.lineId]) return [];
       return [{ line, key, adjustment: normalizeOrderQuantity(line.qty, option) }];
     });
-    if (!choices.length) {
-      setBuilderStatus(locale === "tr" ? "Uygun değiştirilecek satır bulunamadı." : "No eligible lines to change.");
+    const skipped = choices.filter(choice => choice.adjustment.adjusted);
+    const eligible = choices.filter(choice => !choice.adjustment.adjusted);
+    if (!eligible.length) {
+      setBuilderStatus(skipped.length
+        ? locale === "tr" ? `${skipped.length} satırda adet değişmesi gerekiyor; bu satırları tek tek seçin.` : `${skipped.length} lines need quantity changes; choose them individually.`
+        : locale === "tr" ? "Uygun değiştirilecek satır bulunamadı." : "No eligible lines to change.");
       return;
     }
-    const changes = choices.filter(choice => choice.adjustment.adjusted);
-    const details = changes.slice(0, 5).map(choice => `${choice.line.resolvedCode || choice.line.requestedCode}: ${choice.adjustment.requested} → ${choice.adjustment.corrected}`).join(", ");
     const message = locale === "tr"
-      ? `${supplierName} ${choices.length} uygun satıra uygulanacak; satış birim fiyatları korunacak.${changes.length ? ` ${changes.length} satırın miktarı asgari adet / kat nedeniyle değişecek (${details}${changes.length > 5 ? ", …" : ""}); satır toplamları da değişir.` : " Miktarlar değişmeyecek."} Devam edilsin mi?`
-      : `${supplierName} will be applied to ${choices.length} eligible lines; sales unit prices stay unchanged.${changes.length ? ` Quantities change on ${changes.length} lines due to minimums / pack multiples (${details}${changes.length > 5 ? ", …" : ""}); line totals also change.` : " Quantities stay unchanged."} Continue?`;
+      ? `${supplierName} ${eligible.length} uygun satıra uygulanacak; satış birim fiyatları ve adetler korunacak.${skipped.length ? ` Adet değişimi gereken ${skipped.length} satır atlandı; bu satırları tek tek seçin.` : ""} Devam edilsin mi?`
+      : `${supplierName} will be applied to ${eligible.length} eligible lines; sales unit prices and quantities stay unchanged.${skipped.length ? ` ${skipped.length} lines needing quantity changes were skipped; choose them individually.` : ""} Continue?`;
     if (!window.confirm(message)) return;
-    const byLine = new Map(choices.map(choice => [choice.line.lineId, choice]));
+    const byLine = new Map(eligible.map(choice => [choice.line.lineId, choice]));
     setQuoteBuilderLines(current => current.map(item => {
       const choice = byLine.get(item.lineId);
       if (!choice || item.qty !== choice.line.qty || item.selectedSupplierKey !== choice.line.selectedSupplierKey) return item;
       return applySupplierOption(item, choice.key);
     }));
-    const tierChanges = changes.filter(choice => isWahlerBrand(choice.line.brand) || choice.line.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === choice.key)?.applied_min_quantity != null).length;
-    setBuilderStatus(locale === "tr" ? `${choices.length} satırın tedarikçisi değiştirildi; satış birim fiyatları korundu. Taslağı kaydedin.${tierChanges ? ` ${tierChanges} satırda adet kademesi için güncel seçenekleri yenileyin.` : ""}` : `Supplier changed on ${choices.length} lines; sales unit prices were kept. Save the draft.${tierChanges ? ` Refresh options on ${tierChanges} quantity-tier lines.` : ""}`);
+    setBuilderStatus(locale === "tr" ? `${eligible.length} satırın tedarikçisi değiştirildi; adetler ve satış birim fiyatları korundu. Taslağı kaydedin.${skipped.length ? ` ${skipped.length} satırı adet değişimi nedeniyle tek tek seçin.` : ""}` : `Supplier changed on ${eligible.length} lines; quantities and sales unit prices were kept. Save the draft.${skipped.length ? ` Choose ${skipped.length} quantity-adjusted lines individually.` : ""}`);
   }
 
   async function refreshLineSupplierOptions(row: QuoteBuilderLine) {
@@ -4287,7 +4288,7 @@ export function QuotesPage({
                   disabled={!bulkSupplierId || savingDraft || confirmingOrder || Object.keys(refreshingSupplierLines).length > 0}>
                   {locale === "tr" ? "Uygun satırlara uygula" : "Apply to eligible lines"}
                 </Button>
-                <span className="info-text">{locale === "tr" ? "Yalnızca bu tedarikçiye ait tek fiyat seçeneği bulunan satırlara uygulanır; satış birim fiyatı korunur." : "Only lines with one offer from this supplier are changed; sales unit prices are kept."}</span>
+                <span className="info-text">{locale === "tr" ? "Tek fiyat seçeneği olan ve adet değişikliği gerektirmeyen satırlara uygulanır; satış birim fiyatı korunur." : "Applies to single-offer lines without quantity changes; sales unit prices are kept."}</span>
               </div>
             ) : null}
             <DataTable
