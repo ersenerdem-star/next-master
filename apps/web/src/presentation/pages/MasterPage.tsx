@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { fetchCloudMasterFast, type MasterPreviewRow } from "../../infrastructure/api/masterApi";
 import { enrichSupplierReportCatalog } from "../../infrastructure/api/supplierReportCatalogApi";
+import { fetchSupplierComparisonNoteIndicators } from "../../infrastructure/api/supplierComparisonNoteIndicatorsApi";
 import { downloadExportJob, startMasterExport, waitForExportJob } from "../../infrastructure/api/exportJobsApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import type { BrandOption } from "../../types/brand";
@@ -135,12 +136,15 @@ export function MasterPage() {
         if (cancelled) return;
         // The fast priced report only carries supplier metadata. Retrieve
         // exact catalog details for this visible page before reporting success.
-        let complete = result;
-        if (scope === "priced") {
-          try { complete = await enrichSupplierReportCatalog(brandId, result); }
-          catch {
-            throw new Error(locale === "tr" ? "Katalog bilgileri yüklenemedi. Tekrar deneyin." : "Catalog details could not be loaded. Please try again.");
-          }
+        let complete: typeof result;
+        try {
+          const [enriched, noteIndicators] = await Promise.all([
+            scope === "priced" ? enrichSupplierReportCatalog(brandId, result) : Promise.resolve(result),
+            fetchSupplierComparisonNoteIndicators(brandId, result.map((row) => row.product_code)),
+          ]);
+          complete = enriched.map((row) => ({ ...row, has_notes: noteIndicators[row.product_code] }));
+        } catch {
+          throw new Error(locale === "tr" ? "Katalog veya tedarikçi notları yüklenemedi. Tekrar deneyin." : "Catalog details or supplier notes could not be loaded. Please try again.");
         }
         if (!cancelled) {
           setRows(complete);

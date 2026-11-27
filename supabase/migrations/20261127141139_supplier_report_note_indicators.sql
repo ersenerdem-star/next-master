@@ -22,7 +22,7 @@ begin
   end if;
   if input_product_codes is null or cardinality(input_product_codes) not between 1 and 50
      or exists (select 1 from pg_catalog.unnest(input_product_codes) c(code)
-       where code is null or length(pg_catalog.btrim(code)) not between 1 and 100) then
+       where code is null or length(pg_catalog.btrim(code)) not between 1 and 256) then
     raise exception 'SUPPLIER_COMPARISON_INPUT_INVALID' using errcode = '22023';
   end if;
   v_offers := public.cloud_catalog_master_export_offers(v_org,input_brand_id,input_product_codes);

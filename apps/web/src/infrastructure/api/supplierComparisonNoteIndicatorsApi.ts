@@ -4,7 +4,7 @@ import { callAppRpc } from "./appRpcApi";
 export async function fetchSupplierComparisonNoteIndicators(brandId: string, productCodes: string[]): Promise<Record<string, boolean>> {
   const codes = [...new Set(productCodes)];
   if (!codes.length) return {};
-  if (!brandId || codes.length > 50 || codes.some((code) => !code || code.length > 100)) {
+  if (!brandId || codes.length > 50 || codes.some((code) => !code || code.length > 256)) {
     throw new Error("Supplier note request could not be verified.");
   }
   const data = await callAppRpc<unknown>("report_supplier_comparison_note_indicators", {

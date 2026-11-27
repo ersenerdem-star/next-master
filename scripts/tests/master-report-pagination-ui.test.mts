@@ -26,7 +26,7 @@ function text(node:ReactTestInstance|string):string{return typeof node==='string
 function deferred(){let resolve!:(value:any)=>void;let reject!:(reason:any)=>void;const promise=new Promise((r,j)=>{resolve=r;reject=j});return{promise,resolve,reject}}
 async function fixture(allPages=false){
  const calls:any[]=[]; const events:any[]=[]; let pending:any=null; let pendingOffer:any=null; let pendingCatalog:any=null;
- (globalThis as any)[key]={feedback:{begin(s:any){events.push(['begin',s])},succeed(s:any){events.push(['succeed',s])},fail(s:any){events.push(['fail',s])},clear(){}},call(name:string,...args:any[]){calls.push({name,args});if(name==='fetchCloudBrands')return Promise.resolve([{id:'mann',name:'Mann'},{id:'bosch',name:'Bosch'}]);if(name==='fetchPriceListSettings')return Promise.resolve([]);if(name==='enrichSupplierReportCatalog'){if(pendingCatalog){const d=pendingCatalog;pendingCatalog=null;return d.promise}return Promise.resolve(args[1])}if(name==='fetchSupplierComparisonOffers'){if(pendingOffer){const d=pendingOffer;pendingOffer=null;return d.promise}return Promise.resolve([])}if(name==='fetchCloudMasterFast'){if(pending){const d=pending;pending=null;return d.promise}const p=args[0];return Promise.resolve(Array.from({length:!allPages&&p.page===3?4:50},(_,i)=>row(p.brand,p.page,i)))}return Promise.resolve(null)}};
+ (globalThis as any)[key]={feedback:{begin(s:any){events.push(['begin',s])},succeed(s:any){events.push(['succeed',s])},fail(s:any){events.push(['fail',s])},clear(){}},call(name:string,...args:any[]){calls.push({name,args});if(name==='fetchCloudBrands')return Promise.resolve([{id:'mann',name:'Mann'},{id:'bosch',name:'Bosch'}]);if(name==='fetchPriceListSettings')return Promise.resolve([]);if(name==='enrichSupplierReportCatalog'){if(pendingCatalog){const d=pendingCatalog;pendingCatalog=null;return d.promise}return Promise.resolve(args[1])}if(name==='fetchSupplierComparisonNoteIndicators')return Promise.resolve(Object.fromEntries(args[1].map((code:string)=>[code,code==='HASOTHERNOTE'])));if(name==='fetchSupplierComparisonOffers'){if(pendingOffer){const d=pendingOffer;pendingOffer=null;return d.promise}return Promise.resolve([])}if(name==='fetchCloudMasterFast'){if(pending){const d=pending;pending=null;return d.promise}const p=args[0];return Promise.resolve(Array.from({length:!allPages&&p.page===3?4:50},(_,i)=>row(p.brand,p.page,i)))}return Promise.resolve(null)}};
  let renderer:any;await act(async()=>{renderer=create(createElement(MasterPage))});
  const button=(label:string)=>renderer.root.findAllByType('button').find((b:any)=>text(b)===label);
  return{renderer,calls,events,button,hold(){pending=deferred();return pending},holdOffer(){pendingOffer=deferred();return pendingOffer},holdCatalog(){pendingCatalog=deferred();return pendingCatalog},async click(label:string){const b=button(label);assert.ok(b,`missing button ${label}`);await act(async()=>b.props.onClick())},async close(){await act(async()=>renderer.unmount())}};
@@ -59,8 +59,8 @@ test('catalog lookup failure does not announce success or show unverified detail
   await act(async()=>input.props.onEnter());
   await act(async()=>pending.reject(new Error('offline')));
   assert.equal(v.events.filter(x=>x[0]==='succeed').length,completed);
-  assert.match(text(v.renderer.root),/Katalog bilgileri yüklenemedi/);
-  assert.ok(v.events.some(x=>x[0]==='fail' && String(x[1]).includes('Katalog bilgileri yüklenemedi')));
+  assert.match(text(v.renderer.root),/Katalog veya tedarikçi notları yüklenemedi/);
+  assert.ok(v.events.some(x=>x[0]==='fail' && String(x[1]).includes('Katalog veya tedarikçi notları yüklenemedi')));
  }finally{await v.close()}
 });
 
@@ -150,6 +150,15 @@ test('supplier summary notes are visible with the product before expanding suppl
   const secondSupplierCell=cells.find((c:any)=>text(c).includes('Tedarikçiler ve notları'));assert.ok(secondSupplierCell);
   assert.doesNotMatch(text(secondSupplierCell),/5\.53 SNP TPM/);
   assert.equal(v.calls.filter((x:any)=>x.name==='fetchSupplierComparisonOffers').length,0);
+ }finally{await v.close()}
+});
+
+test('the summary indicates a note on any supplier even if the cheapest has none',async()=>{
+ const v=await fixture();try{
+  const pending=v.hold();await v.click('Sonraki');
+  await act(async()=>pending.resolve([{...row('Mann',2,0),product_code:'HASOTHERNOTE',notes:null,has_notes:false}]));
+  const productCell=v.renderer.root.findAllByType('td').find((c:any)=>text(c).includes('HASOTHERNOTE'));
+  assert.ok(productCell);assert.match(text(productCell),/Tedarikçi notu var/);
  }finally{await v.close()}
 });
 

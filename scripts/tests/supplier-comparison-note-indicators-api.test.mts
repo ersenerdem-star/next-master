@@ -32,3 +32,10 @@ test("incomplete or malformed indicators fail instead of hiding notes", async ()
   }
   await assert.rejects(fetchSupplierComparisonNoteIndicators("brand", Array.from({ length: 51 }, (_, i) => `P${i}`)), /could not be verified/);
 });
+
+test("the note indicator accepts exact part codes up to the batch reader's 256-character limit", async () => {
+  const code = `${"0".repeat(254)}/X`;
+  (globalThis as any).__supplierNoteIndicatorTest = async () => ({ [code]: true });
+  assert.deepEqual(await fetchSupplierComparisonNoteIndicators("brand", [code]), { [code]: true });
+  await assert.rejects(fetchSupplierComparisonNoteIndicators("brand", [code + "X"]), /could not be verified/);
+});

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
 const migration = await readFile(new URL('../../supabase/migrations/20261127102812_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
+const lengthMigration = await readFile(new URL('../../supabase/migrations/20261127141934_supplier_comparison_length_consistency.sql', import.meta.url), 'utf8');
 const exportMigration = await readFile(new URL('../../supabase/migrations/20261127115259_supplier_comparison_export_offers.sql', import.meta.url), 'utf8');
 const exportNotesMigration = await readFile(new URL('../../supabase/migrations/20261127131813_supplier_comparison_export_notes.sql', import.meta.url), 'utf8');
 const noteIndicatorMigration = await readFile(new URL('../../supabase/migrations/20261127141139_supplier_report_note_indicators.sql', import.meta.url), 'utf8');
@@ -100,6 +101,17 @@ test('published pointers fence legacy and tenant/role access are enforced',async
   await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand]),/SUPPLIER_COMPARISON_ACCESS_DENIED/);
   await db.exec(`select set_config('test.uid','',false),set_config('test.super','true',false)`);
   await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,'PART')`,[brand]),/SUPPLIER_COMPARISON_ACCESS_DENIED/);
+});
+
+test('detail and note readers accept the same 256-character exact code without broadening access',async t=>{
+  const db=await fixture(t); await db.exec(lengthMigration);
+  const code='0'.repeat(254)+'/X';
+  await db.query(`insert into suppliers values($1,$2,'Supplier',true)`,[id(1),org]);
+  await db.query(`insert into supplier_prices values($1,$2,$3,$4,$5,$6,5,current_date,'long code note',1,1,null,null,true,'EUR')`,[id(101),org,brand,id(1),code.replace('/',''),code]);
+  const result=await db.query(`select * from public.report_supplier_comparison_offers($1,$2)`,[brand,code]);
+  assert.equal(result.rows.length,1); assert.equal(result.rows[0].notes,'long code note');
+  await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,$2)`,[brand,code+'X']),/INPUT_INVALID/);
+  await db.exec(`set role anon`); await assert.rejects(db.query(`select * from public.report_supplier_comparison_offers($1,$2)`,[brand,code]),/permission denied/);
 });
 
 test('batch export preserves every current offer, original codes and isolates tenant and role',async t=>{
