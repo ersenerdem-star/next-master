@@ -39,7 +39,7 @@ test('catalog enrichment finishes before success and late prior-brand metadata c
   await act(async()=>selects.find((n:any)=>n.props.value==='mann').props.onChange('bosch'));
   await act(async()=>old.resolve([{...row('Mann',2,0),description:'stale metadata'}]));
   assert.doesNotMatch(text(v.renderer.root),/stale metadata/);
-  assert.match(text(v.renderer.root),/BOSCH10/);
+  assert.match(text(v.renderer.root),/Bosch-1-0/);
   const input=v.renderer.root.findAll((n:any)=>typeof n.type==='function'&&n.type.name==='Input')[0];
   await act(async()=>input.props.onChange('W11025'));
   const current=v.holdCatalog();const completed=v.events.filter(x=>x[0]==='succeed').length;

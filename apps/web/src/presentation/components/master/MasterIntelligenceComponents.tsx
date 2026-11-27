@@ -1,7 +1,6 @@
 import {InterfaceText} from "../../../i18n/InterfaceText";
 import type { MasterRow } from "../../../types/master";
 import { BrandPill } from "../common/BrandPill";
-import { formatBrandAwareProductCode } from "../../../shared/productCodeDisplay";
 
 export const HIGH_GAP_PERCENT = 10;
 
@@ -89,7 +88,7 @@ export function ProductIdentityCell({ row }: { row: MasterRow }) {
   return (
     <div className="product-identity-cell">
       <div className="product-identity-cell__top">
-        <span className="product-identity-cell__code">{formatBrandAwareProductCode(row.product_code, row.brand) || "-"}</span>
+        <span className="product-identity-cell__code">{row.product_code || "-"}</span>
         <BrandPill brand={row.brand} compact />
       </div>
       <div className="product-identity-cell__description">{row.description || "No description"}</div>
