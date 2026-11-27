@@ -647,17 +647,20 @@ export async function fetchCloudMasterFast(params: MasterParams): Promise<Master
   return fetchCloudMaster(params);
 }
 
-export async function fetchCloudMasterGloballySorted(params: MasterParams & { sort: string; direction: "asc" | "desc" }): Promise<MasterPreviewRow[]> {
+export async function fetchCloudMasterGloballySorted(params: MasterParams & { sort: string; direction: "asc" | "desc"; expectedVersion: string | null }): Promise<{rows: MasterPreviewRow[]; sourceVersion: string}> {
   if (!params.brandId || params.scope !== "priced") throw new Error("Global supplier sorting requires a selected brand and priced scope.");
-  const data = await callAppRpc<{ rows?: MasterRow[]; scope_too_large?: boolean; search_not_supported?: boolean }>("report_supplier_comparison_sorted", {
+  const data = await callAppRpc<{ rows?: MasterRow[]; scope_too_large?: boolean; search_not_supported?: boolean; stale?: boolean; source_version?: string }>("report_supplier_comparison_sorted", {
     input_brand_id: params.brandId, input_search: params.search, input_sort: params.sort,
     input_direction: params.direction, input_page: params.page ?? 1, input_page_size: params.pageSize ?? 50,
     input_margin_a: params.marginA ?? 0.1, input_margin_b: params.marginB ?? 0.15,
+    input_expected_version: params.expectedVersion,
   });
+  if (data?.stale) throw Object.assign(new Error("Supplier prices changed while the report was open. Restart from the first page."), {code:"SUPPLIER_CURSOR_STALE"});
   if (data?.scope_too_large) throw Object.assign(new Error("Global sorting is unavailable for this large brand. Search by exact product code."), { code: "SORT_SCOPE_TOO_LARGE" });
   if (data?.search_not_supported) throw Object.assign(new Error("Global sorting for this search is not available. Clear sorting to see all search results."), {code:"SORT_SEARCH_UNSUPPORTED"});
-  if (!data || !Array.isArray(data.rows)) throw new Error("Globally sorted supplier comparison could not be loaded.");
-  return normalizeFastMasterRows(data.rows);
+  if (!data || !Array.isArray(data.rows) || typeof data.source_version !== "string" || !data.source_version
+    || (params.expectedVersion && data.source_version !== params.expectedVersion)) throw new Error("Globally sorted supplier comparison could not be verified.");
+  return {rows:normalizeFastMasterRows(data.rows),sourceVersion:data.source_version};
 }
 
 export async function fetchCloudMasterCursor(params: MasterParams & { afterCode: string; expectedVersion: string | null }): Promise<{ rows: MasterPreviewRow[]; nextCode: string | null; sourceVersion: string }> {

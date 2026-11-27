@@ -38,6 +38,7 @@ export function MasterPage() {
   const [page, setPage] = useState(1);
   const [globalSort, setGlobalSort] = useState<{key:string;direction:"asc"|"desc"}|null>(null);
   const cursorPages = useRef(new Map<number,{afterCode:string;expectedVersion:string|null}>([[1,{afterCode:"",expectedVersion:null}]]));
+  const sortedSourceVersion = useRef<string|null>(null);
   const [cursorStale, setCursorStale] = useState(false);
   const [marginA, setMarginA] = useState(0.1);
   const [marginB, setMarginB] = useState(0.15);
@@ -56,7 +57,7 @@ export function MasterPage() {
   const offerKey = (row: MasterRow) => JSON.stringify([brandId, row.product_code, row.product_id]);
 
   useEffect(() => { setExpandedOfferKey(null); }, [brandId, submittedSearch, scope, page, searchRevision, globalSort]);
-  useEffect(() => { cursorPages.current = new Map([[1,{afterCode:"",expectedVersion:null}]]); setCursorStale(false); }, [brandId, scope, submittedSearch, searchRevision, globalSort]);
+  useEffect(() => { cursorPages.current = new Map([[1,{afterCode:"",expectedVersion:null}]]); sortedSourceVersion.current=null; setCursorStale(false); }, [brandId, scope, submittedSearch, searchRevision, globalSort]);
 
   useEffect(() => {
     let cancelled = false;
@@ -139,7 +140,10 @@ export function MasterPage() {
         };
         let result: MasterPreviewRow[];
         if (globalSort && scope === "priced") {
-          result = await fetchCloudMasterGloballySorted({ ...request, sort: globalSort.key, direction: globalSort.direction });
+          const sorted = await fetchCloudMasterGloballySorted({ ...request, sort: globalSort.key, direction: globalSort.direction, expectedVersion: sortedSourceVersion.current });
+          if (cancelled) return;
+          sortedSourceVersion.current=sorted.sourceVersion;
+          result=sorted.rows;
         } else if (scope === "priced" && !submittedSearch.trim()) {
           const cursor = cursorPages.current.get(page);
           if (!cursor) throw new Error(locale === "tr" ? "Sayfa sırası doğrulanamadı. Raporu yeniden başlatın." : "The page cursor could not be verified. Restart the report.");

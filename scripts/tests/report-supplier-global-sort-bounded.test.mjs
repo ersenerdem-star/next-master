@@ -80,3 +80,10 @@ test('legacy-only substring and OEM search never silently narrows to an exact SK
  await db.query(`insert into supplier_prices values(md5('filter')::uuid,$1,$2,$3,'P001','P001','Oil Filter',2,current_date,null,null,true,'EUR')`,[org,brand,a]);
  const r=(await db.query(`select public.report_supplier_comparison_sorted($1,'Filter','bestPrice','asc',1,50,.1,.15) data`,[brand])).rows[0].data;assert.equal(r.search_not_supported,true);assert.deepEqual(r.rows,[]);
 });
+
+
+test('global sorted pages reject a changed price source rather than mix versions',async t=>{const db=await fixture(t);
+ await db.query(`insert into supplier_prices values(md5('priced')::uuid,$1,$2,$3,'P1','P1','Filter',3,current_date,null,null,true,'EUR')`,[org,brand,a]);
+ const first=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',1,50,.1,.15,null) data`,[brand])).rows[0].data;assert.equal(first.source_version,'v1');assert.equal(first.rows.length,1);
+ await db.exec(`select set_config('test.version','v2',false)`);const second=(await db.query(`select public.report_supplier_comparison_sorted($1,'','bestPrice','asc',2,50,.1,.15,'v1') data`,[brand])).rows[0].data;assert.equal(second.stale,true);assert.deepEqual(second.rows,[]);
+});

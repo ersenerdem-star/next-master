@@ -14,3 +14,6 @@ test('rejects changed versions, duplicate cursors and malformed pages',async()=>
 
 
 test('unsupported legacy searches never turn into an empty sorted result',async()=>{(globalThis as any).__supplierCursorTest=async()=>({search_not_supported:true,rows:[]});await assert.rejects(fetchCloudMasterGloballySorted({...params,search:'Filter',sort:'bestPrice',direction:'asc'}),(e:any)=>e.code==='SORT_SEARCH_UNSUPPORTED');});
+
+
+test('sorted reader returns the frozen source version and rejects stale pages',async()=>{const p={...params,search:'',sort:'bestPrice',direction:'asc',expectedVersion:null};(globalThis as any).__supplierCursorTest=async()=>({source_version:'v1',rows:[{product_code:'P1',total_count:1}]});const x=await fetchCloudMasterGloballySorted(p);assert.equal(x.sourceVersion,'v1');assert.equal(x.rows.length,1);(globalThis as any).__supplierCursorTest=async()=>({stale:true,rows:[]});await assert.rejects(fetchCloudMasterGloballySorted({...p,expectedVersion:'v1'}),(e:any)=>e.code==='SUPPLIER_CURSOR_STALE');});

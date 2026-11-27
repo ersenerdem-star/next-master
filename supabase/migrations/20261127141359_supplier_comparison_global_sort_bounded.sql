@@ -9,7 +9,8 @@ create or replace function public.report_supplier_comparison_sorted(
   input_page integer default 1,
   input_page_size integer default 50,
   input_margin_a numeric default 0.10,
-  input_margin_b numeric default 0.15
+  input_margin_b numeric default 0.15,
+  input_expected_version text default null
 ) returns jsonb language plpgsql stable security definer set search_path = '' as $function$
 declare
   v_org uuid := public.current_profile_org_id();
@@ -18,6 +19,7 @@ declare
   v_estimate bigint;
   v_legacy bigint;
   v_manual bigint;
+  v_version text;
   v_result jsonb;
 begin
   if auth.uid() is null or v_org is null
@@ -27,11 +29,15 @@ begin
   if input_brand_id is null or coalesce(input_sort,'') not in ('product','decision','bestPrice','second','gap')
     or coalesce(input_direction,'') not in ('asc','desc') or input_page is null or input_page not between 1 and 2000
     or input_page_size is null or input_page_size not between 1 and 50 or length(coalesce(input_search,''))>256
-    or input_margin_a is null or input_margin_a not between -1 and 10 or input_margin_b is null or input_margin_b not between -1 and 10 then
+    or input_margin_a is null or input_margin_a not between -1 and 10 or input_margin_b is null or input_margin_b not between -1 and 10
+    or (input_expected_version is not null and length(input_expected_version)>128) then
     raise exception 'SUPPLIER_COMPARISON_SORT_INPUT_INVALID' using errcode='22023';
   end if;
   select b.name into v_brand from public.brands b where b.id=input_brand_id and b.organization_id=v_org;
   if v_brand is null then raise exception 'SUPPLIER_COMPARISON_BRAND_INVALID' using errcode='22023'; end if;
+  v_version:=public.get_catalog_master_export_version(v_org,input_brand_id,'priced');
+  if input_expected_version is not null and input_expected_version<>v_version
+  then return jsonb_build_object('stale',true,'rows','[]'::jsonb); end if;
   -- The legacy-only reader supports substring/OEM/description search while
   -- published/manual scope is exact SKU. Never silently narrow that legacy
   -- result set to an exact code when global sorting is requested.
@@ -131,7 +137,7 @@ begin
     select * from sorted s order by ordinal
     limit input_page_size offset ((input_page-1)*input_page_size)
   )
-  select jsonb_build_object('rows',coalesce(jsonb_agg(jsonb_build_object(
+  select jsonb_build_object('source_version',v_version,'rows',coalesce(jsonb_agg(jsonb_build_object(
     'total_count',p.total_count,'product_id',null,'product_code',p.product_code,'brand',v_brand,
     'description',p.description,'oem_no',null,'hs_code',null,'origin',null,'weight_kg',null,
     'cheapest_supplier',p.cheapest_supplier,'cheapest_price',p.cheapest_price,'second_supplier_name',p.second_supplier_name,
@@ -142,6 +148,6 @@ begin
   return v_result;
 end;
 $function$;
-revoke all on function public.report_supplier_comparison_sorted(uuid,text,text,text,integer,integer,numeric,numeric) from public,anon,authenticated,service_role;
-grant execute on function public.report_supplier_comparison_sorted(uuid,text,text,text,integer,integer,numeric,numeric) to authenticated;
+revoke all on function public.report_supplier_comparison_sorted(uuid,text,text,text,integer,integer,numeric,numeric,text) from public,anon,authenticated,service_role;
+grant execute on function public.report_supplier_comparison_sorted(uuid,text,text,text,integer,integer,numeric,numeric,text) to authenticated;
 notify pgrst, 'reload schema';
