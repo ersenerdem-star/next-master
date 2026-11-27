@@ -5,6 +5,7 @@ import {brandOfficialProvider} from './brand-official-provider.mts';
 import {brandEngineForSource,assertBrandEngineSource} from './brand-engine-registry.mts';
 import {CATALOG_FIELDS,exactCatalogCode,planSupplierCatalogEnrichment} from './supplier-enrichment-plan.mjs';
 import {KNORR_DISCOVERY_ADAPTER,runClaimedKnorrDiscovery} from './knorr-discovery-worker.mts';
+import {MONROE_DISCOVERY_ADAPTER,MONROE_DISCOVERY_REVIEW_ADAPTER,runClaimedMonroeDiscovery} from './monroe-discovery-worker.mts';
 import {assessKnorrRecordedOwnership} from './knorr-code-identity.mjs';
 import {fetchKnorrWilminkReview} from './knorr-wilmink-review.mjs';
 import {fetchExactSparetoSecondary,fetchSparetoSecondaryPage} from './spareto-secondary-provider.mjs';
@@ -17,6 +18,7 @@ import {catalogRowFailure} from './catalog-row-failures.mjs';
 export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,providerFactory=brandOfficialProvider,fetchSecondary=fetchExactSparetoSecondary,fetchSecondaryPage=fetchSparetoSecondaryPage,fetchWilmink=fetchKnorrWilminkReview,delayMs=1100}:any){
  const rpc=async(name:string,args:any)=>{const r=await db.rpc(name,args);if(r.error)throw Error(r.error.message);return r.data;};
  const job=await rpc('claim_catalog_brand_job',{input_org:organizationId,input_job:jobId});if(!job)return {claimed:false};
+ if(job.manifest.adapter===MONROE_DISCOVERY_ADAPTER)return runClaimedMonroeDiscovery({db,organizationId,job});
  if(job.manifest.adapter===KNORR_DISCOVERY_ADAPTER)return runClaimedKnorrDiscovery({db,organizationId,job});
  if(job.manifest.adapter===SPARETO_CORRECTION_ADAPTER)return runClaimedSparetoCorrection({db,organizationId,job});
  if([WILMINK_SCAN,WILMINK_SUPPORT_SCAN].includes(job.manifest.adapter))return runWilminkDiscovery({db,organizationId,job});
@@ -24,6 +26,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  const def=brandEngineForSource(job.manifest.brand,job.manifest.source_key);let provider=providerFactory(job.manifest.brand);
  const source=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId).eq('source_key',def.sourceKey).single();
  const monroe=def.family==='monroe';
+ const monroeCandidate=monroe&&job.manifest.adapter===MONROE_DISCOVERY_REVIEW_ADAPTER;
  const monroeFitment=monroe&&job.manifest.monroe_policy==='monroe-fitment-fill.v1';
  const monroeVehicles=new Map();
  const monroeImageOnly=monroe&&job.manifest.monroe_policy==='monroe-image-fill.v1';
@@ -38,6 +41,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  try{
  if(job.manifest.source_key!==def.sourceKey)throw Error('BRAND_SOURCE_CONFIGURATION_CHANGED');
  if(source.error||brand.error||!provider)throw Error('OFFICIAL_ENGINE_NOT_CONFIGURED');assertBrandEngineSource(source.data,job.manifest.brand,{publish:job.mode==='publish',sourceKey:def.sourceKey});
+ if(monroeCandidate&&job.mode!=='stage')throw Error('MONROE_DISCOVERY_REVIEW_ONLY');
  if(monroeFitment&&source.data.metadata?.monroe_background_fitment_only!==true)throw Error('MONROE_AUTOMATIC_FITMENT_REVOKED');
  if(monroeImageOnly&&source.data.metadata?.monroe_background_image_only!==true)throw Error('MONROE_AUTOMATIC_APPLICATION_REVOKED');
  if(knorrAutomatic&&(source.data.metadata?.automatic_apply!==true||source.data.metadata?.automatic_application_policy!=='knorr-official-missing-only.v1'))throw Error('KNORR_AUTOMATIC_APPLICATION_REVOKED');
@@ -53,7 +57,8 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  // Only a unique canonical row is eligible; provenance and EAN are checked below.
  const rows=def.family==='knorr_bremse'&&exact.length===0&&matches.length===1&&/^[A-Z0-9][A-Z0-9.-]*$/.test(exactCatalogCode(item.product_code))?matches:exact;
  const missingKnorr=def.family==='knorr_bremse'&&rows.length===0&&(current.data||[]).length===0;
- if(rows.length!==1&&!missingKnorr){const reason='CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS';observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:{},fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:reason}),observedAt:new Date().toISOString(),unavailable:reason};}else{
+ const missingMonroe=monroeCandidate&&matches.length===0;
+ if(rows.length!==1&&!missingKnorr&&!missingMonroe){const reason='CATALOG_IDENTITY_MISSING_OR_AMBIGUOUS';observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),before:{},fields:{},replacements:[],lifecycle:catalogLifecycleReview({}, {unavailable:reason}),observedAt:new Date().toISOString(),unavailable:reason};}else{
  await new Promise(r=>setTimeout(r,delayMs));
  try{const raw=monroeFitment
   ?await provider.fetch(item.product_code,{fitment:true,vehiclesCache:monroeVehicles,vehicle:!rows[0].vehicle?.trim()||!rows[0].vehicle_model?.trim()})
@@ -65,7 +70,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
  }
  if(monroeImageOnly)delete plan.patch.weight_kg;
  if(monroe)delete plan.patch.ean; // EAN checks identity; it is outside Monroe's write scope.
- observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before,missingCatalogProduct:missingKnorr,fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,...(def.family==='knorr_bremse'?{identity:raw.identity}:{}),lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing,...(def.authority==='distributor'?{authority:'distributor',sourceSku:raw.sourceSku,technicalAttributes:raw.technicalAttributes,imageCandidate:raw.imageCandidate}:{})};
+ observation={brand:job.manifest.brand,sourceKey:def.sourceKey,code:exactCatalogCode(item.product_code),sourceUrl:safe.evidence.sourceUrl,observedAt:safe.evidence.observedAt,fingerprint:safe.evidence.fingerprint,before,missingCatalogProduct:missingKnorr||missingMonroe,fields:plan.patch,sourceFields:safe.fields,sourceStatus:raw.sourceStatus||null,...(def.family==='knorr_bremse'?{identity:raw.identity}:{}),lifecycle:safe.evidence.lifecycle,replacements:catalogReplacementReviewRows(safe.evidence.lifecycle,item.product_code),issues:plan.issues,missing:plan.missing,...(def.authority==='distributor'?{authority:'distributor',sourceSku:raw.sourceSku,technicalAttributes:raw.technicalAttributes,imageCandidate:raw.imageCandidate}:{})};
  if(monroe){
   observation.imageCandidate=raw.imageCandidate;
   observation.sourceLogistics=raw.sourceLogistics;
@@ -92,7 +97,7 @@ export async function runBrandJob({db,organizationId,jobId,maxMs=8*60*1000,provi
    }
   }
  }
- if(monroe&&!monroeFitment&&!plan.issues.some(issue=>issue.code==='EAN_IDENTITY_CONFLICT')){
+ if(monroe&&!monroeCandidate&&!monroeFitment&&!plan.issues.some(issue=>issue.code==='EAN_IDENTITY_CONFLICT')){
   try{
    const secondarySource=await db.from('catalog_external_sources').select('*').eq('organization_id',organizationId)
     .eq('source_key','spareto_secondary_exact_v1').maybeSingle();

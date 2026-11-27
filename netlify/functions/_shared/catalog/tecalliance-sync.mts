@@ -127,6 +127,7 @@ type TecAllianceApiArticle = {
 };
 
 type TecAllianceArticleSearchResponse = {
+  status?: number;
   totalMatchingArticles?: number;
   maxAllowedPage?: number;
   articles?: TecAllianceApiArticle[];
@@ -674,6 +675,7 @@ async function requestTecAllianceArticles(
     perPage: number;
     requestTimeoutMs: number;
     searchMatchType: "prefix" | "prefix_or_suffix" | "exact";
+    articleNumberDiscovery?: boolean;
   },
   config: TecAllianceSyncConfig,
 ) {
@@ -685,10 +687,10 @@ async function requestTecAllianceArticles(
       lang: "en",
       searchQuery: input.searchQuery,
       searchMatchType: input.searchMatchType,
-      searchType: input.searchMatchType === "exact" ? 0 : 10,
+      searchType: input.searchMatchType === "exact" || input.articleNumberDiscovery ? 0 : 10,
       page: input.page,
       perPage: input.perPage,
-      sort: [
+      sort: input.articleNumberDiscovery ? [{ field: "articleNumber", direction: "asc" }] : [
         { field: "score", direction: "desc" },
         { field: "mfrName", direction: "asc" },
         { field: "linkageSortNum", direction: "asc" },
@@ -699,23 +701,23 @@ async function requestTecAllianceArticles(
       includeAll: false,
       includeLinkages: false,
       linkagesPerPage: 0,
-      includeGenericArticles: true,
-      includeArticleCriteria: true,
-      includeMisc: true,
-      includeImages: true,
+      includeGenericArticles: !input.articleNumberDiscovery,
+      includeArticleCriteria: !input.articleNumberDiscovery,
+      includeMisc: !input.articleNumberDiscovery,
+      includeImages: !input.articleNumberDiscovery,
       includePDFs: false,
       includeLinks: false,
-      includeArticleText: true,
-      includeOEMNumbers: true,
-      includeReplacedByArticles: true,
-      includeReplacesArticles: true,
+      includeArticleText: !input.articleNumberDiscovery,
+      includeOEMNumbers: !input.articleNumberDiscovery,
+      includeReplacedByArticles: !input.articleNumberDiscovery,
+      includeReplacesArticles: !input.articleNumberDiscovery,
       includeComparableNumbers: false,
-      includeGTINs: true,
-      includeTradeNumbers: true,
+      includeGTINs: !input.articleNumberDiscovery,
+      includeTradeNumbers: !input.articleNumberDiscovery,
       includePrices: false,
       includePartsListArticles: false,
       includeAccessoryArticles: false,
-      includeArticleLogisticsCriteria: true,
+      includeArticleLogisticsCriteria: !input.articleNumberDiscovery,
       includeDataSupplierFacets: false,
       includeGenericArticleFacets: false,
       includeCriteriaFacets: false,
@@ -780,10 +782,22 @@ export function mapMonroeCatalogArticle(article: TecAllianceApiArticle, productC
   };
 }
 
+const monroeTecAlliance = { providerLabel: 'Monroe', providerId: 2143, dataSupplierId: 37, manufacturerNames: ['MONROE'] };
+
+export async function fetchMonroeDiscoveryPage(prefix: string, page: number) {
+  if (!/^[0-9A-Z]$/.test(prefix) || !Number.isInteger(page) || page < 1 || page > 200) {
+    throw Error('MONROE_DISCOVERY_PAGE_INVALID');
+  }
+  return requestTecAllianceArticles({
+    searchQuery: prefix, page, perPage: 100, requestTimeoutMs: 12000,
+    searchMatchType: 'prefix', articleNumberDiscovery: true,
+  }, monroeTecAlliance);
+}
+
 export async function fetchMonroeCatalogFields(productCode: string, { fitment = false, vehicle = true, vehiclesCache = new Map() } = {}) {
   const result = await requestTecAllianceArticles({
     searchQuery: productCode, page: 1, perPage: 10, requestTimeoutMs: 12000, searchMatchType: 'exact',
-  }, { providerLabel: 'Monroe', providerId: 2143, dataSupplierId: 37, manufacturerNames: ['MONROE'] });
+  }, monroeTecAlliance);
   const matches = (result.articles ?? []).filter(article =>
     exactCatalogCode(article.articleNumber) === exactCatalogCode(productCode) && Number(article.dataSupplierId ?? article.mfrId) === 37 &&
     article.mfrName?.trim().toUpperCase() === 'MONROE');

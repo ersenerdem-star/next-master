@@ -2,6 +2,7 @@ import type {Config} from '@netlify/functions';
 import {createClient} from '@supabase/supabase-js';
 import {requireCallerProfile} from './_shared/auth.mts';
 import {json,readJson,HttpRequestError} from './_shared/http.mts';
+import {MONROE_DISCOVERY_ADAPTER,MONROE_DISCOVERY_REVIEW_ADAPTER} from './_shared/catalog/monroe-discovery-worker.mts';
 import {brandEngineDefinition,brandEngineForSource,assertBrandEngineSource,brandEngineCapability,matchesBrandEngineJob} from './_shared/catalog/brand-engine-registry.mts';
 export default async(req:Request)=>{
  if(!['GET','POST'].includes(req.method))return json({error:'Method not allowed'},405);
@@ -40,7 +41,7 @@ export default async(req:Request)=>{
   const result=await db.rpc(support?'start_catalog_wilmink_support':'start_catalog_wilmink_scan',{input_org:org,input_actor:caller.profile.id,input_key:body.requestId,...(support?{input_brand:brand.name,input_urls:body.urls||[]}:{} )});if(result.error)return json({error:result.error.message},400);return json({job:result.data,dispatchPending:true},202);
  }
  if(!['start','resume','publish'].includes(action))return json({error:'Invalid action'},400);if(action==='publish'&&!publishAllowed)return json({error:'OFFICIAL_ENGINE_PUBLICATION_NOT_APPROVED'},409);
- if(action!=='start'){const selected=await db.from('catalog_brand_jobs').select('manifest').eq('id',body.jobId).eq('organization_id',org).maybeSingle();if(selected.error||!matchesBrandEngineJob(selected.data,def)||(wilmink&&selected.data?.manifest?.adapter!=='brand-exact.v1'))return json({error:'BRAND_JOB_SCOPE_MISMATCH'},400);if(action==='publish'&&selected.data?.manifest?.adapter==='knorr-official-discovery.v1')return json({error:'KNORR_DISCOVERY_REVIEW_ONLY'},409);}
+ if(action!=='start'){const selected=await db.from('catalog_brand_jobs').select('manifest').eq('id',body.jobId).eq('organization_id',org).maybeSingle();if(selected.error||!matchesBrandEngineJob(selected.data,def)||(wilmink&&selected.data?.manifest?.adapter!=='brand-exact.v1'))return json({error:'BRAND_JOB_SCOPE_MISMATCH'},400);if(action==='publish'&&selected.data?.manifest?.adapter==='knorr-official-discovery.v1')return json({error:'KNORR_DISCOVERY_REVIEW_ONLY'},409);if(action==='publish'&&[MONROE_DISCOVERY_ADAPTER,MONROE_DISCOVERY_REVIEW_ADAPTER].includes(selected.data?.manifest?.adapter))return json({error:'MONROE_DISCOVERY_REVIEW_ONLY'},409);}
  const args=action==='start'?{input_org:org,input_actor:caller.profile.id,input_codes:body.codes,input_brand:brand.name,input_key:body.requestId,input_source:def.sourceKey}:{input_org:org,input_job:body.jobId,input_publish:action==='publish'};
  const result=await db.rpc(action==='start'?'start_catalog_brand_job':'schedule_catalog_brand_job',args);if(result.error)return json({error:result.error.message},400);
  // A service-signed scheduled dispatcher owns execution; no user session is
