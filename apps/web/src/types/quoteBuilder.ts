@@ -15,6 +15,8 @@ export type QuoteSupplierOption = {
   lifecycle_status?: CatalogLifecycleStatus | null;
   lifecycle_note?: string | null;
   lifecycle_warning?: string | null;
+  /** The purchase offer stored on this order, kept when fresh offers differ. */
+  saved_order_offer?: boolean;
 };
 
 export type QuoteResolveResult = {

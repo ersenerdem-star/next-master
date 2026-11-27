@@ -662,3 +662,87 @@ test('an already-seen portal order is reloaded for the invoice version', async()
     assert.equal(view.calls.find(call=>call.name==='createFullSalesInvoices')?.args[1][0].updated_at,'2026-11-26T10:00:00Z');
   } finally { await view.close(); }
 });
+
+const supplierOption = (name: string, buy: number, extra: Record<string, unknown> = {}) => ({
+  supplier_id: name.toLowerCase(), supplier_name:name, buy_price:buy, sell_price:buy * 1.1,
+  price_date:'2026-11-26', notes:null, moq:1, order_multiple:1, stock_qty:5, valid_to:null, ...extra,
+});
+const supplierLine = () => ({...line(), manual_sell_price:false, supplier_name:'Supplier A', buy_price:10, sell_price:11,
+  supplierOptions:[supplierOption('Supplier A',10),supplierOption('Supplier B',15)], selectedSupplierKey:'Supplier A-0'});
+async function chooseSupplier(view: Awaited<ReturnType<typeof fixture>>, value: string) {
+  const control=view.renderer.root.findAllByType('select').find(node => node.props['aria-label']==='TEST-001 sales.orders.purchaseOption');
+  assert.ok(control,'supplier choice must be visible on each normal order row');
+  await act(async()=>control.props.onChange({target:{value}}));
+}
+
+test('existing order supplier choice updates purchase while preserving its sale, and survives save and reopen',async()=>{
+  const order={...fullOrder('supplier-choice',[supplierLine()]),customer_id:'customer-a',customer_name:'Customer A'};
+  const cache={...existingCache(order),customerName:'Customer A',customerSelection:'customer-a'};
+  const view=await fixture({cache,orders:[order]}); let savedOrder:any;
+  try {
+    await chooseSupplier(view,'Supplier B-1');
+    const updated=view.lineRows()[0];
+    assert.equal(updated.supplier_name,'Supplier B'); assert.equal(updated.buy_price,15); assert.equal(updated.sell_price,11);
+    assert.equal(updated.manual_sell_price,false); assert.equal(updated.supplier_override_keep_sell_price,true); assert.equal(updated.customer_price_basis_buy_price,10);
+    await view.click('sales.orders.saveDraft');
+    savedOrder=view.saved.at(-1); assert.equal(savedOrder.lines[0].supplier_name,'Supplier B'); assert.equal(savedOrder.lines[0].sell_price,11);
+  } finally {await view.close()}
+  const reopened=await fixture({cache:existingCache(savedOrder),orders:[savedOrder]});
+  try {assert.equal(reopened.lineRows()[0].supplier_name,'Supplier B');assert.equal(reopened.lineRows()[0].sell_price,11);assert.equal(reopened.lineRows()[0].selectedSupplierKey,'Supplier B-1');} finally {await reopened.close()}
+});
+
+test('supplier MOQ or pack adjustment asks explicitly before changing the customer quantity',async()=>{
+  const original={...supplierLine(),supplierOptions:[supplierOption('Supplier A',10),supplierOption('Supplier B',15,{moq:5,order_multiple:2})]};
+  const order=fullOrder('supplier-quantity',[original]); const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    view.setConfirmResponse(false); await chooseSupplier(view,'Supplier B-1');
+    assert.equal(view.lineRows()[0].qty,3);assert.equal(view.lineRows()[0].supplier_name,'Supplier A');assert.equal(view.lineRows()[0].sell_price,11);
+    assert.match(view.confirms.at(-1) || '',/3 to 6/);
+    view.setConfirmResponse(true); await chooseSupplier(view,'Supplier B-1');
+    assert.equal(view.lineRows()[0].qty,6);assert.equal(view.lineRows()[0].supplier_name,'Supplier B');assert.equal(view.lineRows()[0].sell_price,11);
+  } finally {await view.close()}
+});
+
+test('without customer a different supplier does not establish sale price; choosing customer uses original price basis',async()=>{
+  const fresh={...supplierLine(),sell_price:null,customer_pricing_pending:true};
+  const cache={...draftCache(),customerName:'',customerSelection:'',quoteBuilderLines:[fresh]};
+  const view=await fixture({cache,orders:[]});
+  try {
+    assert.equal(view.lineRows()[0].sell_price,null);
+    await chooseSupplier(view,'Supplier B-1');
+    assert.equal(view.lineRows()[0].buy_price,15);assert.equal(view.lineRows()[0].sell_price,null);
+    await view.selectCustomer('customer-a');
+    assert.equal(view.lineRows()[0].sell_price,11);assert.equal(view.lineRows()[0].buy_price,15);
+  } finally {await view.close()}
+});
+
+test('refreshing supplier options is buy-only and preserves the order choice and both prices',async()=>{
+  const order=fullOrder('supplier-refresh',[supplierLine()]); const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    view.holdSingleLookup(); await view.click('Current options');
+    assert.equal(view.calls.find(call=>call.name==='resolveQuoteLine')?.args[0].calculateSellPrice,false);
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Synthetic'},supplierOptions:[supplierOption('Supplier A',12),supplierOption('Supplier B',15),supplierOption('Supplier C',16)]});
+    const row=view.lineRows()[0];assert.equal(row.supplier_name,'Supplier A');assert.equal(row.buy_price,10);assert.equal(row.sell_price,11);
+    assert.equal(row.supplierOptions.length,4);assert.equal(row.supplierOptions[0].saved_order_offer,true);
+    await chooseSupplier(view,'Supplier C-3');assert.equal(view.lineRows()[0].buy_price,16);assert.equal(view.lineRows()[0].sell_price,11);
+  } finally {await view.close()}
+});
+
+test('bulk supplier choice only applies uniquely matched supplier offers, with quantity confirmation and sale prices kept',async()=>{
+  const a=supplierLine();
+  const missing={...line('TEST-002'),supplier_name:'Supplier A',manual_sell_price:false,buy_price:10,sell_price:12,
+    supplierOptions:[supplierOption('Supplier A',10)],selectedSupplierKey:'Supplier A-0'};
+  const pack={...line('TEST-003'),supplier_name:'Supplier A',manual_sell_price:false,buy_price:10,sell_price:13,
+    supplierOptions:[supplierOption('Supplier A',10),supplierOption('Supplier B',15,{moq:5,order_multiple:2})],selectedSupplierKey:'Supplier A-0'};
+  const order=fullOrder('bulk-supplier',[a,missing,pack]);const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    const bulk=view.renderer.root.findAllByType('select').find(node=>node.props['aria-label']==='Bulk supplier');assert.ok(bulk);
+    await act(async()=>bulk.props.onChange({target:{value:'supplier b'}}));
+    view.setConfirmResponse(false);await view.click('Apply to eligible lines');
+    assert.deepEqual(view.lineRows().map(row=>row.supplier_name),['Supplier A','Supplier A','Supplier A']);
+    assert.match(view.confirms.at(-1) || '',/2 eligible lines/);assert.match(view.confirms.at(-1) || '',/TEST-003: 3 → 6/);
+    view.setConfirmResponse(true);await view.click('Apply to eligible lines');
+    assert.deepEqual(view.lineRows().map(row=>row.supplier_name),['Supplier B','Supplier A','Supplier B']);
+    assert.deepEqual(view.lineRows().map(row=>row.sell_price),[11,12,13]);assert.deepEqual(view.lineRows().map(row=>row.qty),[3,3,6]);
+  } finally {await view.close()}
+});

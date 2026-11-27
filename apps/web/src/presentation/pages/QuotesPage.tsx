@@ -242,7 +242,7 @@ const PAYMENT_TERM_OPTIONS = [
 const DEFAULT_QUOTE_WORKBENCH_COLUMNS = {
   origin: false,
   stock: true,
-  supplierOption: false,
+  supplierOption: true,
   supplier: false,
   buy: false,
   buyTotal: false,
@@ -906,7 +906,12 @@ export function QuotesPage({
   const [marginA, setMarginA] = useState(10);
   const [marginB, setMarginB] = useState(15);
   const [quoteBuilderLines, setQuoteBuilderLines] = useState<QuoteBuilderLine[]>(initialWorkspaceCache?.quoteBuilderLines || []);
+  const quoteBuilderLinesRef = useRef(quoteBuilderLines);
+  quoteBuilderLinesRef.current = quoteBuilderLines;
   const [wahlerQuantityEdits, setWahlerQuantityEdits] = useState<Record<string, number>>({});
+  const [refreshingSupplierLines, setRefreshingSupplierLines] = useState<Record<string, boolean>>({});
+  const refreshingSupplierLinesRef = useRef(new Map<string, symbol>());
+  const [bulkSupplierId, setBulkSupplierId] = useState("");
   const wahlerQuantityRequests = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [customers, setCustomers] = useState<LocalCustomer[]>([]);
   const [companyProfiles, setCompanyProfiles] = useState<CompanyProfile[]>([]);
@@ -926,6 +931,8 @@ export function QuotesPage({
     catalogTransferInFlightRef.current = false;
     resyncingCatalogRef.current = false;
     setImportingLines(false);
+    refreshingSupplierLinesRef.current.clear();
+    setRefreshingSupplierLines({});
     setResolvingLine(false);
     setCatalogTransferRunning(false);
     setResyncingCatalog(false);
@@ -1539,7 +1546,7 @@ export function QuotesPage({
           return {
             ...line,
             c_sell_price: cSellPrice,
-            sell_price: line.manual_sell_price ? line.sell_price : cSellPrice ?? fallbackSellPrice,
+            sell_price: line.manual_sell_price || (line.supplier_override_keep_sell_price && line.sell_price != null) ? line.sell_price : cSellPrice ?? fallbackSellPrice,
           };
         }),
       );
@@ -2239,7 +2246,7 @@ export function QuotesPage({
         const option = priced.supplierOptions[optionIndex];
         const deferPrice = !customerPricingContextRef.current.hasCustomerProfile && (customerPricingContextRef.current.workbenchMode === "new" || row.customer_pricing_pending);
         if (wahlerPricingScopeRef.current !== wahlerPricingScope || !priced.found || confirmationSku(priced.resolvedCode) !== confirmationSku(code) || !isWahlerBrand(priced.brand)
-            || option?.buy_price == null || (!deferPrice && option.sell_price == null)
+            || option?.buy_price == null || (!deferPrice && option.sell_price == null && !row.supplier_override_keep_sell_price && !row.manual_sell_price)
             || normalizeOrderQuantity(adjustment.corrected, option).corrected !== adjustment.corrected) {
           throw new Error("Wahler quantity price could not be verified.");
         }
@@ -2259,9 +2266,9 @@ export function QuotesPage({
             supplierOptions: priced.supplierOptions,
             selectedSupplierKey: `${option.supplier_name}-${optionIndex}`,
             buy_price: option.buy_price,
-            sell_price: item.manual_sell_price ? item.sell_price : deferPrice ? null : priced.c_sell_price ?? option.sell_price,
+            sell_price: item.manual_sell_price || (item.supplier_override_keep_sell_price && item.sell_price != null) ? item.sell_price : deferPrice ? null : priced.c_sell_price ?? option.sell_price,
             customer_pricing_pending: deferPrice && !item.manual_sell_price ? true : item.customer_pricing_pending,
-            c_sell_price: priced.c_sell_price,
+            c_sell_price: item.supplier_override_keep_sell_price ? item.c_sell_price : priced.c_sell_price,
             price_date: option.price_date || "",
           };
         }));
@@ -2318,37 +2325,150 @@ export function QuotesPage({
     return saved;
   }
 
+  function applySupplierOption(item: QuoteBuilderLine, nextKey: string): QuoteBuilderLine {
+    const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
+    if (!selected || nextKey === item.selectedSupplierKey) return item;
+    const adjustment = normalizeOrderQuantity(item.qty, selected);
+    return {
+      ...item,
+      supplier_override_keep_sell_price: true,
+      customer_price_basis_buy_price: Object.prototype.hasOwnProperty.call(item, "customer_price_basis_buy_price")
+        ? item.customer_price_basis_buy_price : item.buy_price,
+      selectedSupplierKey: nextKey,
+      qty: adjustment.corrected,
+      requested_qty: adjustment.adjusted ? adjustment.requested : null,
+      moq: selected.moq ?? null,
+      order_multiple: selected.order_multiple ?? null,
+      stock_qty: selected.stock_qty ?? null,
+      valid_to: selected.valid_to ?? null,
+      quantity_adjusted: adjustment.adjusted,
+      quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
+      supplier_name: selected.supplier_name || "",
+      buy_price: selected.buy_price ?? null,
+      sell_price: item.sell_price,
+      price_date: selected.price_date || "",
+      notes: selected.notes || "",
+    };
+  }
+
   function chooseAttentionLineSupplier(lineId: string, nextKey: string) {
+    const currentLine = quoteBuilderLinesRef.current.find(item => item.lineId === lineId);
+    const nextOption = currentLine?.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
+    if (!currentLine || !nextOption || currentLine.selectedSupplierKey === nextKey) return;
+    const preview = normalizeOrderQuantity(currentLine.qty, nextOption);
+    if (preview.adjusted && !window.confirm(locale === "tr"
+      ? `Bu tedarikçinin asgari adet / sipariş katı nedeniyle miktar ${preview.requested} → ${preview.corrected} olarak değişecek. Satış birim fiyatı korunacak; satır toplamı değişecek. Devam edilsin mi?`
+      : `This supplier's minimum / order multiple changes quantity from ${preview.requested} to ${preview.corrected}. The sales unit price stays the same, but the line total changes. Continue?`)) return;
     setQuoteBuilderLines((current) => current.map((item) => {
       if (item.lineId !== lineId) return item;
       const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
-      if (!selected) return item;
-      const adjustment = normalizeOrderQuantity(item.qty, selected);
-      return {
-        ...item,
-        selectedSupplierKey: nextKey,
-        qty: adjustment.corrected,
-        requested_qty: adjustment.adjusted ? adjustment.requested : null,
-        moq: selected.moq ?? null,
-        order_multiple: selected.order_multiple ?? null,
-        quantity_adjusted: adjustment.adjusted,
-        quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
-        supplier_name: selected.supplier_name || "",
-        buy_price: selected.buy_price ?? null,
-        sell_price: item.manual_sell_price
-          ? item.sell_price
-          : !hasCustomerPricingProfile && (workbenchMode === "new" || item.customer_pricing_pending)
-            ? null
-          : shouldUseCPricePricing
-            ? item.c_sell_price ?? item.sell_price
-            : selected.buy_price != null
-              ? markupMoney(selected.buy_price, (workbenchMode === "new" || item.customer_pricing_pending ? effectiveCustomerType : customerType) === "B" ? effectiveMarginB : effectiveMarginA)
-              : selected.sell_price ?? null,
-        price_date: selected.price_date || "",
-        notes: selected.notes || "",
-      };
+      if (!selected || item.qty !== currentLine.qty || item.selectedSupplierKey !== currentLine.selectedSupplierKey) return item;
+      return applySupplierOption(item, nextKey);
     }));
     setBuilderStatus(t("sales.orders.supplierChoiceSaveDraft"));
+  }
+
+  const bulkSupplierOptions = useMemo(() => {
+    const names = new Map<string, string>();
+    quoteBuilderLines.forEach(line => line.supplierOptions.forEach(option => {
+      if (!option.saved_order_offer && option.supplier_name && option.supplier_id && Number(option.buy_price) > 0) names.set(option.supplier_id, option.supplier_name);
+    }));
+    return [...names].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [quoteBuilderLines]);
+
+  function chooseBulkSupplier() {
+    const supplierId = bulkSupplierId.trim();
+    if (!supplierId) return;
+    const supplierName = bulkSupplierOptions.find(option => option.id === supplierId)?.name || supplierId;
+    const choices = quoteBuilderLinesRef.current.flatMap(line => {
+      const candidates = line.supplierOptions.map((option, index) => ({ option, index }))
+        .filter(({ option }) => !option.saved_order_offer && option.supplier_id === supplierId && Number(option.buy_price) > 0);
+      if (candidates.length !== 1) return [];
+      const { option, index } = candidates[0];
+      const key = `${option.supplier_name}-${index}`;
+      if (key === line.selectedSupplierKey || refreshingSupplierLines[line.lineId]) return [];
+      return [{ line, key, adjustment: normalizeOrderQuantity(line.qty, option) }];
+    });
+    if (!choices.length) {
+      setBuilderStatus(locale === "tr" ? "Uygun değiştirilecek satır bulunamadı." : "No eligible lines to change.");
+      return;
+    }
+    const changes = choices.filter(choice => choice.adjustment.adjusted);
+    const details = changes.slice(0, 5).map(choice => `${choice.line.resolvedCode || choice.line.requestedCode}: ${choice.adjustment.requested} → ${choice.adjustment.corrected}`).join(", ");
+    const message = locale === "tr"
+      ? `${supplierName} ${choices.length} uygun satıra uygulanacak; satış birim fiyatları korunacak.${changes.length ? ` ${changes.length} satırın miktarı asgari adet / kat nedeniyle değişecek (${details}${changes.length > 5 ? ", …" : ""}); satır toplamları da değişir.` : " Miktarlar değişmeyecek."} Devam edilsin mi?`
+      : `${supplierName} will be applied to ${choices.length} eligible lines; sales unit prices stay unchanged.${changes.length ? ` Quantities change on ${changes.length} lines due to minimums / pack multiples (${details}${changes.length > 5 ? ", …" : ""}); line totals also change.` : " Quantities stay unchanged."} Continue?`;
+    if (!window.confirm(message)) return;
+    const byLine = new Map(choices.map(choice => [choice.line.lineId, choice]));
+    setQuoteBuilderLines(current => current.map(item => {
+      const choice = byLine.get(item.lineId);
+      if (!choice || item.qty !== choice.line.qty || item.selectedSupplierKey !== choice.line.selectedSupplierKey) return item;
+      return applySupplierOption(item, choice.key);
+    }));
+    setBuilderStatus(locale === "tr" ? `${choices.length} satırın tedarikçisi değiştirildi; satış birim fiyatları korundu. Taslağı kaydedin.` : `Supplier changed on ${choices.length} lines; sales unit prices were kept. Save the draft.`);
+  }
+
+  async function refreshLineSupplierOptions(row: QuoteBuilderLine) {
+    if (refreshingSupplierLinesRef.current.has(row.lineId)) return;
+    const request = Symbol(row.lineId);
+    refreshingSupplierLinesRef.current.set(row.lineId, request);
+    const generation = salesOrderLoadGenerationRef.current;
+    const originalKey = row.selectedSupplierKey;
+    const code = row.resolvedCode || row.requestedCode;
+    setRefreshingSupplierLines(current => ({ ...current, [row.lineId]: true }));
+    setBuilderStatus(locale === "tr" ? `${code}: tedarikçi seçenekleri aranıyor…` : `${code}: loading supplier options…`);
+    try {
+      const { resolved, supplierOptions } = await resolveQuoteLine({
+        code, brand: row.brand, quantity: row.qty, customerType,
+        marginA: effectiveMarginA, marginB: effectiveMarginB,
+        includeSupplierOptions: true, calculateSellPrice: false,
+      });
+      if (!isSalesOrderWorkCurrent(generation, salesOrderLoadGenerationRef.current)) return;
+      if (!resolved.found || confirmationSku(resolved.product_code) !== confirmationSku(code) || !supplierOptions.length) {
+        setBuilderStatus(locale === "tr" ? `${code}: güncel tedarikçi seçeneği bulunamadı; mevcut seçim korundu.` : `${code}: no current supplier options found; the saved choice was kept.`);
+        return;
+      }
+      const latest = quoteBuilderLinesRef.current.find(item => item.lineId === row.lineId);
+      if (!latest || latest.selectedSupplierKey !== originalKey || latest.supplier_name !== row.supplier_name
+        || latest.buy_price !== row.buy_price || latest.qty !== row.qty || confirmationSku(latest.resolvedCode || latest.requestedCode) !== confirmationSku(code)) {
+        setBuilderStatus(locale === "tr" ? `${code}: satır değiştiği için seçenekler uygulanmadı. Tekrar deneyin.` : `${code}: the line changed, so options were not applied. Try again.`);
+        return;
+      }
+      const prior = row.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === originalKey);
+      const matching = supplierOptions.findIndex(option => prior?.supplier_id
+        ? option.supplier_id === prior.supplier_id
+        : option.supplier_name.trim().toLowerCase() === row.supplier_name.trim().toLowerCase());
+      const current = supplierOptions[matching];
+      const isSameOffer = matching >= 0 && current.buy_price === row.buy_price
+        && (current.moq ?? null) === (row.moq ?? null)
+        && (current.order_multiple ?? null) === (row.order_multiple ?? null)
+        && (current.stock_qty ?? null) === (row.stock_qty ?? null)
+        && (current.valid_to ?? null) === (row.valid_to ?? null)
+        && (current.price_date || "") === (row.price_date || "")
+        && (current.notes || "") === (row.notes || "");
+      const savedOffer = { ...(prior || {}), supplier_name: row.supplier_name, buy_price: row.buy_price,
+        sell_price: row.sell_price, price_date: row.price_date || null, notes: row.notes || null,
+        moq: row.moq ?? null, order_multiple: row.order_multiple ?? null,
+        stock_qty: row.stock_qty ?? null, valid_to: row.valid_to ?? null, saved_order_offer: true };
+      const nextOptions = isSameOffer ? supplierOptions : [savedOffer, ...supplierOptions];
+      const nextIndex = isSameOffer ? matching : 0;
+      const nextKey = `${nextOptions[nextIndex].supplier_name}-${nextIndex}`;
+      setQuoteBuilderLines(currentLines => currentLines.map(item => {
+        if (item.lineId !== row.lineId || item.selectedSupplierKey !== originalKey || item.supplier_name !== row.supplier_name
+          || item.buy_price !== row.buy_price || item.qty !== row.qty || confirmationSku(item.resolvedCode || item.requestedCode) !== confirmationSku(code)) return item;
+        return { ...item, supplierOptions: nextOptions, selectedSupplierKey: nextKey };
+      }));
+      setBuilderStatus(locale === "tr" ? `${code}: ${supplierOptions.length} güncel seçenek bulundu; mevcut alış ve satış fiyatı korundu. Seçiminizi yapabilirsiniz.` : `${code}: ${supplierOptions.length} current options found; purchase and sales prices were kept. Choose an option to update the supplier.`);
+    } catch {
+      if (isSalesOrderWorkCurrent(generation, salesOrderLoadGenerationRef.current)) setBuilderStatus(locale === "tr" ? `${code}: tedarikçi seçenekleri alınamadı; mevcut seçim korundu.` : `${code}: supplier options could not be loaded; the saved choice was kept.`);
+    } finally {
+      if (refreshingSupplierLinesRef.current.get(row.lineId) !== request) return;
+      refreshingSupplierLinesRef.current.delete(row.lineId);
+      if (isSalesOrderWorkCurrent(generation, salesOrderLoadGenerationRef.current)) setRefreshingSupplierLines(current => {
+        const { [row.lineId]: _removed, ...rest } = current;
+        return rest;
+      });
+    }
   }
 
   async function confirmSalesOrderNavigation(nextAction: () => void | Promise<void>) {
@@ -2473,55 +2593,30 @@ export function QuotesPage({
           key: "supplierOption",
           header: t("sales.orders.purchaseOption"),
           render: (row: QuoteBuilderLine) => (
+            <div>
             <select
               className="inline-edit-input"
               value={row.selectedSupplierKey}
-              disabled={wahlerQuantityEdits[row.lineId] !== undefined}
-              onChange={(event) => {
-                const nextKey = event.target.value;
-                setQuoteBuilderLines((current) =>
-                  current.map((item) => {
-                    if (item.lineId !== row.lineId) return item;
-                    const selected = item.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === nextKey);
-                    if (!selected) return { ...item, selectedSupplierKey: nextKey };
-                    const adjustment = normalizeOrderQuantity(item.qty, selected);
-                    return {
-                      ...item,
-                      selectedSupplierKey: nextKey,
-                      qty: adjustment.corrected,
-                      requested_qty: adjustment.adjusted ? adjustment.requested : null,
-                      moq: selected.moq ?? null,
-                      order_multiple: selected.order_multiple ?? null,
-                      quantity_adjusted: adjustment.adjusted,
-                      quantity_adjustment_note: orderQuantityAdjustmentMessage(adjustment, (key, params) => t(key, params)),
-                      supplier_name: selected.supplier_name || "",
-                      buy_price: selected.buy_price ?? null,
-                      sell_price:
-                        item.manual_sell_price
-                          ? item.sell_price
-                          : !hasCustomerPricingProfile && (workbenchMode === "new" || item.customer_pricing_pending)
-                          ? null
-                          : shouldUseCPricePricing
-                          ? item.c_sell_price ?? item.sell_price
-                          : selected.buy_price != null
-                            ? markupMoney(selected.buy_price, (workbenchMode === "new" || item.customer_pricing_pending ? effectiveCustomerType : customerType) === "B" ? effectiveMarginB : effectiveMarginA)
-                            : selected.sell_price ?? null,
-                      price_date: selected.price_date || "",
-                      notes: selected.notes || "",
-                    };
-                  }),
-                );
-              }}
+              aria-label={`${row.resolvedCode || row.requestedCode} ${t("sales.orders.purchaseOption")}`}
+              title={row.supplierOptions.find((option, index) => `${option.supplier_name}-${index}` === row.selectedSupplierKey)?.notes || ""}
+              disabled={wahlerQuantityEdits[row.lineId] !== undefined || Boolean(refreshingSupplierLines[row.lineId]) || currentLocalSalesOrder?.status === "confirmed" || savingDraft || confirmingOrder}
+              onChange={(event) => chooseAttentionLineSupplier(row.lineId, event.target.value)}
             >
+              {!row.supplierOptions.length ? <option value="">{row.supplier_name || (locale === "tr" ? "Seçenek yok" : "No options")}</option> : null}
               {row.supplierOptions.map((option, index) => {
                 const optionKey = `${option.supplier_name}-${index}`;
                 return (
                   <option key={optionKey} value={optionKey}>
-                    {option.supplier_name} | {t("sales.orders.buy")} {option.buy_price ?? "-"} | {t("sales.orders.sell")} {!hasCustomerPricingProfile && (workbenchMode === "new" || row.customer_pricing_pending) ? "-" : option.sell_price ?? "-"}{option.applied_min_quantity ? ` · ${option.applied_min_quantity}+` : ""}
+                    {option.supplier_name}{option.saved_order_offer ? (locale === "tr" ? " (siparişteki)" : " (on order)") : ""} · {t("sales.orders.buy")} {option.buy_price == null ? "—" : formatMoney(option.buy_price, currency)}{option.moq ? ` · MOQ ${option.moq}` : ""}{option.order_multiple && option.order_multiple > 1 ? ` · ×${option.order_multiple}` : ""}{option.applied_min_quantity ? ` · ${option.applied_min_quantity}+` : ""}
                   </option>
                 );
               })}
             </select>
+            {currentLocalSalesOrder?.status !== "confirmed" ? <button type="button" className="button button--secondary button--compact" disabled={Boolean(refreshingSupplierLines[row.lineId]) || savingDraft || confirmingOrder}
+              onClick={() => void refreshLineSupplierOptions(row)} aria-label={`${row.resolvedCode || row.requestedCode} ${locale === "tr" ? "güncel tedarikçileri getir" : "load current suppliers"}`}>
+              {refreshingSupplierLines[row.lineId] ? (locale === "tr" ? "Aranıyor…" : "Loading…") : (locale === "tr" ? "Güncel seçenekler" : "Current options")}
+            </button> : null}
+            </div>
           ),
         });
       }
@@ -2604,7 +2699,7 @@ export function QuotesPage({
     });
 
     return columns;
-  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t, locale, wahlerQuantityEdits, shouldUseCPricePricing, wahlerPricingScope, savingDraft, confirmingOrder, resyncingCatalog, hasCustomerPricingProfile, workbenchMode]);
+  }, [currency, customerType, pdfView, effectiveMarginA, effectiveMarginB, inventoryAvailabilityLookup, effectiveWorkbenchColumnVisibility, t, locale, wahlerQuantityEdits, shouldUseCPricePricing, wahlerPricingScope, savingDraft, confirmingOrder, resyncingCatalog, hasCustomerPricingProfile, workbenchMode, refreshingSupplierLines, currentLocalSalesOrder?.status]);
 
   const attentionColumns = useMemo(
     () => [
@@ -2618,10 +2713,11 @@ export function QuotesPage({
         render: (row: QuoteBuilderLine) => row.supplierOptions.length > 1 ? (
           <select className="inline-edit-input" value={row.selectedSupplierKey}
             aria-label={`${row.resolvedCode || row.requestedCode} ${t("sales.orders.purchaseOption")}`}
+            disabled={Boolean(refreshingSupplierLines[row.lineId]) || currentLocalSalesOrder?.status === "confirmed" || savingDraft || confirmingOrder}
             onChange={(event) => chooseAttentionLineSupplier(row.lineId, event.target.value)}>
             {row.supplierOptions.map((option, index) => (
               <option key={`${option.supplier_name}-${index}`} value={`${option.supplier_name}-${index}`}>
-                {option.supplier_name} · {t("sales.orders.buy")} {formatMoney(option.buy_price, currency)}
+                {option.supplier_name}{option.saved_order_offer ? (locale === "tr" ? " (siparişteki)" : " (on order)") : ""} · {t("sales.orders.buy")} {option.buy_price == null ? "—" : formatMoney(option.buy_price, currency)}{option.moq ? ` · MOQ ${option.moq}` : ""}{option.order_multiple && option.order_multiple > 1 ? ` · ×${option.order_multiple}` : ""}
               </option>
             ))}
           </select>
@@ -2651,7 +2747,7 @@ export function QuotesPage({
       },
       { key: "sell", header: t("sales.orders.sell"), render: (row: QuoteBuilderLine) => row.sell_price == null ? "—" : formatMoney(row.sell_price, currency) },
     ],
-    [currency, t, customerType, effectiveMarginA, effectiveMarginB, shouldUseCPricePricing, hasCustomerPricingProfile, workbenchMode],
+    [currency, t, customerType, effectiveMarginA, effectiveMarginB, shouldUseCPricePricing, hasCustomerPricingProfile, workbenchMode, refreshingSupplierLines, currentLocalSalesOrder?.status, savingDraft, confirmingOrder, locale],
   );
 
   async function buildBuilderLine(
@@ -4160,6 +4256,23 @@ export function QuotesPage({
                   </div>
                 </div>
                 <DataTable rows={attentionLines} columns={attentionColumns} emptyText={t("sales.orders.noWarningItems")} />
+              </div>
+            ) : null}
+            {!pdfView && quoteBuilderLines.length > 1 && currentLocalSalesOrder?.status !== "confirmed" ? (
+              <div className="sales-supplier-bulk">
+                <label>
+                  <span>{locale === "tr" ? "Tedarikçiyi toplu seç" : "Choose supplier for matching lines"}</span>
+                  <select className="field__input" value={bulkSupplierId} onChange={event => setBulkSupplierId(event.target.value)}
+                    aria-label={locale === "tr" ? "Toplu tedarikçi" : "Bulk supplier"}>
+                    <option value="">{locale === "tr" ? "Tedarikçi seçin" : "Select supplier"}</option>
+                    {bulkSupplierOptions.map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
+                  </select>
+                </label>
+                <Button variant="secondary" className="button--compact" onClick={chooseBulkSupplier}
+                  disabled={!bulkSupplierId || savingDraft || confirmingOrder || Object.keys(refreshingSupplierLines).length > 0}>
+                  {locale === "tr" ? "Uygun satırlara uygula" : "Apply to eligible lines"}
+                </Button>
+                <span className="info-text">{locale === "tr" ? "Yalnızca bu tedarikçiye ait tek fiyat seçeneği bulunan satırlara uygulanır; satış birim fiyatı korunur." : "Only lines with one offer from this supplier are changed; sales unit prices are kept."}</span>
               </div>
             ) : null}
             <DataTable

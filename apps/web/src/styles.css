@@ -6975,6 +6975,20 @@ body {
   max-height: min(56vh, 620px);
 }
 
+.sales-supplier-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.sales-supplier-bulk label {
+  display: grid;
+  gap: 4px;
+  min-width: 220px;
+}
+
 .sales-lines-table .data-table {
   min-width: 1320px;
 }
