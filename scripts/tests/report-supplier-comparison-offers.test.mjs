@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 
-const migration = await readFile(new URL('../../supabase/migrations/20261127101916_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
+const migration = await readFile(new URL('../../supabase/migrations/20261127102812_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
 const org='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 const brand='33333333-3333-4333-8333-333333333333';
