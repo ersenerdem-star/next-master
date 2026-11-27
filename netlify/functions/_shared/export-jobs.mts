@@ -1545,7 +1545,7 @@ export async function startCatalogMasterExport(
     marginB,
     format: "xlsx",
     maxRows: CATALOG_MASTER_EXPORT_MAX_ROWS,
-    schemaVersion: 6,
+    schemaVersion: 7,
   };
   const cacheKey = hashObject({
     exportType,
@@ -1901,7 +1901,7 @@ async function fetchSupplierPriceExportPage(input: {
 type RemainingAdminExportType = "supplier_price_list" | "catalog_export" | "catalog_master";
 
 async function appendCatalogMasterSupplierOffers(writer: StreamingExportWriter, supabaseUrl: string, serviceRoleKey: string,
-  organizationId: string, brandId: string, page: CatalogMasterExportWorkbookRow[]) {
+  organizationId: string, brandId: string, page: CatalogMasterExportWorkbookRow[], includeNotes: boolean) {
   if (!writer.appendAdditional) throw new Error("Supplier offer worksheet is unavailable.");
   const rowsByCode = new Map(page.map((row) => [row.productCode, row]));
   const codes = [...rowsByCode.keys()];
@@ -1931,7 +1931,7 @@ async function appendCatalogMasterSupplierOffers(writer: StreamingExportWriter, 
       const rank = (ranks.get(code) || 0) + 1;
       ranks.set(code, rank);
       exportRows.push([normalizeAdminExportProductCode(source.productCode, source.brand), source.productCode, source.brand,
-        rank, supplierName, price, String(offer.price_date || "")]);
+        rank, supplierName, price, String(offer.price_date || ""), ...(includeNotes ? [String(offer.notes || "")] : [])]);
     }
     await writer.appendAdditional(exportRows);
   }
@@ -1983,6 +1983,7 @@ async function runPagedRemainingAdminExportJob(
     if (!brandId || (exportType === "supplier_price_list" && !supplierId)) throw new Error("Export job is missing its supplier or brand scope.");
     const includeSupplierTerms = exportType === "supplier_price_list" && Number(scope.schemaVersion || 2) >= 3;
     const includeAllMasterOffers = exportType === "catalog_master" && Number(scope.schemaVersion || 0) >= 6;
+    const includeSupplierOfferNotes = includeAllMasterOffers && Number(scope.schemaVersion || 0) >= 7;
     const includeQuantityTiers = exportType === "supplier_price_list" && isWahlerBrand(brandName) && Number(scope.schemaVersion) >= 4;
     const headers = exportType === "supplier_price_list"
       ? ["Supplier", "Product_Code", "Brand", "Product_Name", "OEM_No", "Buy_Price_EUR", "Price_Date", "MOQ", "Order_Multiple", "Lead_Time_Days", "Notes", ...(includeSupplierTerms ? ["Stock_Qty", "Valid_To"] : []), ...(includeQuantityTiers ? ["Quantity_Buy_Prices_EUR"] : [])]
@@ -1990,7 +1991,7 @@ async function runPagedRemainingAdminExportJob(
     writer = format === "csv"
       ? await createCsvExportStream(headers, { bom: true })
       : await createXlsxExportStream(headers, sanitizeSheetName(`${brandName} ${exportType === "catalog_master" ? "Master" : "Catalog"}`),
-        includeAllMasterOffers ? { headers: CATALOG_MASTER_SUPPLIER_HEADERS, sheetName: "Supplier Offers" } : undefined);
+        includeAllMasterOffers ? { headers: [...CATALOG_MASTER_SUPPLIER_HEADERS, ...(includeSupplierOfferNotes ? ["Supplier_Notes"] : [])], sheetName: "Supplier Offers" } : undefined);
     let rowCount = 0;
     let totalCount: number | null = null;
     let afterCode: string | null = null;
@@ -2047,7 +2048,7 @@ async function runPagedRemainingAdminExportJob(
         nextCode = page.at(-1)!.cursorCode;
         nextId = page.at(-1)!.cursorId;
         sheetRows = catalogMasterExportSheetRows(page).slice(1);
-        if (includeAllMasterOffers) await appendCatalogMasterSupplierOffers(writer, supabaseUrl, serviceRoleKey, job.organization_id, brandId, page);
+        if (includeAllMasterOffers) await appendCatalogMasterSupplierOffers(writer, supabaseUrl, serviceRoleKey, job.organization_id, brandId, page, includeSupplierOfferNotes);
       }
       totalCount = verifiedSourceTotal(pageTotal, totalCount, CATALOG_EXPORT_MAX_ROWS);
       for (const cursor of cursors) {

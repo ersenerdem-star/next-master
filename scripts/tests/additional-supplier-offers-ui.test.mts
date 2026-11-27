@@ -33,34 +33,39 @@ const offer = (supplier_id: string, supplier_name: string, buy_price: number, ex
 function content(node: ReactTestInstance | string): string { return typeof node === "string" ? node : node.children.map(content).join(""); }
 function deferred() { let resolve!: (value: any) => void, reject!: (error: Error) => void; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 
-test("opens lazily and shows third and subsequent suppliers without repeating first two", async () => {
+test("opens lazily and shows notes for every supplier including the first two", async () => {
   const request = deferred(); const calls: any[] = [];
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   (globalThis as any).__supplierReportTest = { load: (input: unknown) => { calls.push(input); return request.promise; } };
   let renderer: ReturnType<typeof create>;
-  await act(async () => { renderer = create(createElement(AdditionalSupplierOffers, { brandId: "brand-id", row: baseRow })); });
+  await act(async () => { renderer = create(createElement(AdditionalSupplierOffers, { brandId: "brand-id", row: { ...baseRow, has_notes: true } })); });
   const toggle = renderer!.root.findByType("button");
   assert.equal(toggle.props["aria-expanded"], false); assert.equal(calls.length, 0);
   await act(async () => toggle.props.onClick());
   assert.equal(toggle.props["aria-expanded"], true); assert.deepEqual(calls, [{ brandId: "brand-id", productCode: "001/20" }]);
   assert.match(content(renderer!.root), /yükleniyor/);
-  await act(async () => request.resolve([offer("1", "First", 3.89), offer("2", "Second", 4.05),
-    offer("3", "Third", 4.96, { stock_qty: 0, moq: 5 }), offer("4", "Fourth", 6.2)]));
+  await act(async () => request.resolve([offer("1", "First", 3.89, {notes: "First note"}), offer("2", "Second", 4.05, {notes: "Second note"}),
+    offer("3", "Third", 4.96, { stock_qty: 0, moq: 5, notes: "Third note" }), offer("4", "Fourth", 6.2)]));
   const text = content(renderer!.root); assert.match(text, /Third/); assert.match(text, /Fourth/); assert.match(text, /4\.96/);
-  assert.match(text, /Tedarikçi stoku: 0/); assert.match(text, /MOQ: 5/); assert.doesNotMatch(text, /First|Second/);
+  assert.match(text, /Tedarikçi stoku: 0/); assert.match(text, /MOQ: 5/);
+  const items = renderer!.root.findAllByType("li").map(content);
+  assert.match(items[0], /First.*Tedarikçi notu: First note/);
+  assert.match(items[1], /Second.*Tedarikçi notu: Second note/);
+  assert.match(items[2], /Third.*Tedarikçi notu: Third note/);
+  assert.doesNotMatch(items[3], /Tedarikçi notu/);
   await act(async () => toggle.props.onClick()); assert.equal(toggle.props["aria-expanded"], false); assert.doesNotMatch(content(renderer!.root), /Third/);
   await act(async () => renderer!.unmount());
 });
 
 test("failure gives retry and an empty current result is explicit", async () => {
   let count = 0;
-  (globalThis as any).__supplierReportTest = { load: async () => { if (++count === 1) throw Error("failed"); return [offer("1", "First", 3.89), offer("2", "Second", 4.05)]; } };
+  (globalThis as any).__supplierReportTest = { load: async () => { if (++count === 1) throw Error("failed"); return []; } };
   let renderer: ReturnType<typeof create>;
   await act(async () => { renderer = create(createElement(AdditionalSupplierOffers, { brandId: "brand-id", row: baseRow })); });
   await act(async () => renderer!.root.findByType("button").props.onClick());
   assert.match(content(renderer!.root), /yüklenemedi/);
   const retry = renderer!.root.findAllByType("button").find(button => content(button) === "Tekrar dene"); assert.ok(retry);
-  await act(async () => retry.props.onClick()); assert.match(content(renderer!.root), /Başka güncel tedarikçi bulunamadı/);
+  await act(async () => retry.props.onClick()); assert.match(content(renderer!.root), /Güncel tedarikçi bulunamadı/);
   await act(async () => renderer!.unmount());
 });
 
@@ -77,11 +82,24 @@ test("stale two-supplier summary can discover a newly added third supplier", asy
   (globalThis as any).__supplierReportTest = { load: async () => [offer("1", "First", 3.89), offer("2", "Second", 4.05), offer("3", "New supplier", 4.96)] };
   let renderer: ReturnType<typeof create>;
   await act(async () => { renderer = create(createElement(AdditionalSupplierOffers, { brandId: "brand-id", row: { ...baseRow, supplier_count: 2 } })); });
-  assert.match(content(renderer!.root), /Güncel tedarikçileri kontrol et/);
+  assert.match(content(renderer!.root), /Tedarikçiler ve notları/);
   await act(async () => renderer!.root.findByType("button").props.onClick());
   assert.match(content(renderer!.root), /New supplier/);
   await act(async () => renderer!.unmount());
 });
+
+test("the only supplier's note remains visible in the expanded panel", async () => {
+  (globalThis as any).__supplierReportTest = { load: async () => [offer("1", "Only supplier", 2.5, {notes: "Important condition"})] };
+  let renderer: ReturnType<typeof create>;
+  const row = { ...baseRow, cheapest_supplier: "Only supplier", cheapest_price: 2.5, supplier_count: 1, second_supplier_name: null, second_price: null };
+  await act(async () => { renderer = create(createElement(AdditionalSupplierOffers, { brandId: "brand-id", row })); });
+  await act(async () => renderer!.root.findByType("button").props.onClick());
+  const text = content(renderer!.root);
+  assert.match(text, /Only supplier.*Tedarikçi notu: Important condition/);
+  assert.doesNotMatch(text, /fiyatlar değişmiş olabilir/);
+  await act(async () => renderer!.unmount());
+});
+
 
 test("closing and reopening ignores a late response from the earlier request", async () => {
   const oldRequest = deferred(), currentRequest = deferred(); let count = 0;

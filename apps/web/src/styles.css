@@ -13672,6 +13672,7 @@ body {
 .additional-supplier-offers__toggle:focus-visible { outline: 2px solid #137bd1; outline-offset: 3px; }
 .additional-supplier-offers__panel { margin-top: 8px; padding: 10px; border: 1px solid #dae5f1; border-radius: 8px; background: #f7fbff; color: #263b58; font-size: 12px; line-height: 1.4; }
 .additional-supplier-offers__notice { margin: 0 0 8px; color: #8a5014; }
+.additional-supplier-offers__summary-note { display: block; margin: 4px 0; color: #8a5014; overflow-wrap: anywhere; }
 .additional-supplier-offers__list { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .additional-supplier-offers__list li + li { border-top: 1px solid #dae5f1; padding-top: 8px; }
 .additional-supplier-offers__primary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }

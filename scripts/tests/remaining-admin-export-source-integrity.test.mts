@@ -283,9 +283,9 @@ test("master XLSX includes every supplier in an additional sheet with numeric pr
   const codes = ["001.234", "002567"];
   const pages = [[{ ...masterRow(), product_code: codes[0], cursor_code: codes[0], brand: "Mann", supplier_count: 5, total_count: 2 },
     { ...masterRow(), product_code: codes[1], cursor_code: codes[1], brand: "Mann", supplier_count: 1, total_count: 2 }]];
-  const offers = [3.89, 4.05, 4.96, 5.55, 6].map((price, i) => ({ product_code: codes[0], supplier_id: `sup-${i}`, supplier_name: ["GroupAuto", "Romany", "TPM", "Fourth", "Fifth"][i], buy_price: price, price_date: "2026-11-27" }));
+  const offers = [3.89, 4.05, 4.96, 5.55, 6].map((price, i) => ({ product_code: codes[0], supplier_id: `sup-${i}`, supplier_name: ["GroupAuto", "Romany", "TPM", "Fourth", "Fifth"][i], buy_price: price, price_date: "2026-11-27", notes: i === 2 ? "Teslim süresi: üç hafta" : null }));
   offers.push({ product_code: codes[1], supplier_id: "sup-1", supplier_name: "Romany", buy_price: 1.5, price_date: "2026-11-27" });
-  await withExportSource({ kind: "catalog_master", pages, schemaVersion: 6, offers }, async ({ run, job, uploads, events }) => {
+  await withExportSource({ kind: "catalog_master", pages, schemaVersion: 7, offers }, async ({ run, job, uploads, events }) => {
     await run();
     assert.equal(job.status, "finalized");
     const workbook = XLSX.read(uploads[0], { type: "array" });
@@ -297,11 +297,24 @@ test("master XLSX includes every supplier in an additional sheet with numeric pr
     assert.equal(rows.length, 6);
     assert.deepEqual(rows.slice(0, 5).map((r) => r.Supplier), ["GroupAuto", "Romany", "TPM", "Fourth", "Fifth"]);
     assert.deepEqual(rows.slice(0, 5).map((r) => r.Buy_Price_EUR), [3.89, 4.05, 4.96, 5.55, 6]);
+    assert.equal(rows[2].Supplier_Notes, "Teslim süresi: üç hafta");
+    assert.equal(rows[0].Supplier_Notes ?? "", "");
     assert.deepEqual(rows.map((r) => r.Supplier_Rank), [1, 2, 3, 4, 5, 1]);
     assert.equal(rows[0].Original_Product_Code, "001.234");
     assert.equal(rows[5].Original_Product_Code, "002567");
     assert.equal(typeof rows[0].Buy_Price_EUR, "number");
     assert.ok(events.indexOf("source-offers") < events.indexOf("source-version"));
+  });
+});
+
+test("master export keeps v6 in-flight workbook schema unchanged", async () => {
+  const offers = [{ product_code: "SKU-000001", supplier_id: "sup-1", supplier_name: "Supplier", buy_price: 12.34, notes: "Existing note" }];
+  await withExportSource({ kind: "catalog_master", pages: [[masterRow()]], schemaVersion: 6, offers }, async ({ run, uploads }) => {
+    await run();
+    const workbook = XLSX.read(uploads[0], { type: "array" });
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[workbook.SheetNames[1]]);
+    assert.equal(rows.length, 1);
+    assert.equal(Object.hasOwn(rows[0], "Supplier_Notes"), false);
   });
 });
 

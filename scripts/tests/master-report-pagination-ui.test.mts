@@ -96,14 +96,27 @@ test('switching brand with the same product code hides old details and ignores t
  const v=await fixture();try{
   const p=v.hold();await v.click('Sonraki');await act(async()=>p.resolve([{...row('Mann',2,0),product_code:'SHARED-001',supplier_count:3}]));
   const offer=v.holdOffer();
-  const details=v.renderer.root.findAllByType('button').find((b:any)=>text(b).includes('Diğer tedarikçileri gör')); assert.ok(details);
+  const details=v.renderer.root.findAllByType('button').find((b:any)=>text(b).includes('Tedarikçiler ve notları')); assert.ok(details);
   await act(async()=>details.props.onClick());
   const next=v.hold();const selects=v.renderer.root.findAll((n:any)=>typeof n.type==='function'&&n.type.name==='Select');
   await act(async()=>selects.find((n:any)=>n.props.value==='mann').props.onChange('bosch'));
   await act(async()=>next.resolve([{...row('Bosch',1,0),product_code:'SHARED-001',supplier_count:3}]));
   await act(async()=>offer.resolve([{supplier_id:'one',supplier_name:'old supplier',buy_price:1,price_date:null,moq:null,order_multiple:null,stock_qty:null,valid_to:null,notes:null}]));
   assert.doesNotMatch(text(v.renderer.root),/old supplier/);
-  const boschButton=v.renderer.root.findAllByType('button').find((b:any)=>text(b).includes('Diğer tedarikçileri gör'));assert.ok(boschButton);
+  const boschButton=v.renderer.root.findAllByType('button').find((b:any)=>text(b).includes('Tedarikçiler ve notları'));assert.ok(boschButton);
   assert.equal(boschButton.props['aria-expanded'],false);
+ }finally{await v.close()}
+});
+
+test('supplier summary notes are visible with the product before expanding supplier details',async()=>{
+ const v=await fixture();try{
+  const pending=v.hold();await v.click('Sonraki');
+  await act(async()=>pending.resolve([{...row('Mann',2,0),product_code:'W11025',notes:'5.53 SNP TPM',has_notes:true}]));
+  const cells=v.renderer.root.findAllByType('td');
+  const productCell=cells.find((c:any)=>text(c).includes('W11025'));assert.ok(productCell);
+  assert.match(text(productCell),/Tedarikçi notu: 5\.53 SNP TPM/);
+  const secondSupplierCell=cells.find((c:any)=>text(c).includes('Tedarikçiler ve notları'));assert.ok(secondSupplierCell);
+  assert.doesNotMatch(text(secondSupplierCell),/5\.53 SNP TPM/);
+  assert.equal(v.calls.filter((x:any)=>x.name==='fetchSupplierComparisonOffers').length,0);
  }finally{await v.close()}
 });

@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 
 const migration = await readFile(new URL('../../supabase/migrations/20261127102812_report_supplier_comparison_offers.sql', import.meta.url), 'utf8');
 const exportMigration = await readFile(new URL('../../supabase/migrations/20261127115259_supplier_comparison_export_offers.sql', import.meta.url), 'utf8');
+const exportNotesMigration = await readFile(new URL('../../supabase/migrations/20261127131813_supplier_comparison_export_notes.sql', import.meta.url), 'utf8');
 const org='11111111-1111-4111-8111-111111111111';
 const other='22222222-2222-4222-8222-222222222222';
 const brand='33333333-3333-4333-8333-333333333333';
@@ -147,4 +148,26 @@ test('batch JSON includes more than 1000 offers without row-limit truncation',as
   await db.query(`insert into supplier_prices select md5('r'||s||'x'||p)::uuid,$1,$2,md5('s'||s)::uuid,'PART'||p,'PART'||p,s,current_date,null,1,1,null,null,true,'EUR' from generate_series(1,60) s cross join generate_series(1,20) p`,[org,brand]);
   const result=(await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,Array.from({length:20},(_,n)=>`PART${n+1}`)])).rows[0].offers;
   assert.equal(result.length,1200);assert.equal(result.filter(x=>x.product_code==='PART1').length,60);
+});
+
+test('batch exports retain the note of each effective supplier price',async t=>{
+  const db=await fixture(t);
+  await db.exec(`create function public.get_admin_price_list_export_version(uuid,uuid) returns text language sql stable as $$select 'v1'::text$$`);
+  await db.exec(exportMigration);
+  await db.exec(exportNotesMigration);
+  await db.query(`insert into suppliers values($1,$4,'Manual',true),($2,$4,'Published',true),($3,$4,'Legacy',true)`,[id(1),id(2),id(3),org]);
+  await db.query(`insert into supplier_prices values($1,$2,$3,$4,'W11025','W11025',1,current_date,'eski not',1,1,null,null,true,'EUR'),($5,$2,$3,$6,'W11025','W11025',3,current_date,'legacy: hızlı',1,1,null,null,true,'EUR')`,[id(100),org,brand,id(1),id(101),id(3)]);
+  await db.query(`insert into supplier_manual_price_internal.entries values($1,$2,$3,$4,'W11025','W11025',2,current_date,'manuel: üç hafta',1,1,true)`,[id(300),org,brand,id(1)]);
+  await db.query(`insert into supplier_current_price_pointers values($1,$2,$3,$4,$5)`,[org,brand,id(2),id(501),id(502)]);
+  await db.query(`insert into supplier_price_publications values($1,$2,$3,$4,$5,'published')`,[id(502),id(501),org,id(2),brand]);
+  await db.query(`insert into supplier_price_release_rows values($1,$2,'W11025','W11025',4,current_date,'yayın notu',1,1,null,null,'accepted','EUR')`,[id(503),id(501)]);
+  const offers=(await db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[]) offers`,[org,brand,['W11025']])).rows[0].offers;
+  assert.deepEqual(offers.map(x=>[x.supplier_name,x.notes]),[['Manual','manuel: üç hafta'],['Legacy','legacy: hızlı'],['Published','yayın notu']]);
+  const screen=(await db.query(`select supplier_name,notes from public.report_supplier_comparison_offers($1,'W11025')`,[brand])).rows;
+  assert.deepEqual(offers.map(x=>[x.supplier_name,x.notes]),screen.map(x=>[x.supplier_name,x.notes]));
+  await db.exec(`set role authenticated`);
+  await assert.rejects(db.query(`select public.cloud_catalog_master_export_offers($1,$2,$3::text[])`,[org,brand,['W11025']]),/permission denied/);
+  await db.exec(`reset role;set role service_role`);
+  assert.equal((await db.query(`select jsonb_array_length(public.cloud_catalog_master_export_offers($1,$2,$3::text[])) n`,[org,brand,['W11025']])).rows[0].n,3);
+  await db.exec(`reset role`);
 });

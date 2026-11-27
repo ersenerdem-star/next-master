@@ -208,7 +208,11 @@ export function MasterPage() {
       {
         key: "product",
         header: r("master.columns.product"),
-        render: (row: MasterRow) => <ProductIdentityCell row={row} />,
+        render: (row: MasterRow) => <>
+          <ProductIdentityCell row={row} />
+          {row.notes?.trim() ? <span className="additional-supplier-offers__summary-note">{locale === "tr" ? "Tedarikçi notu" : "Supplier note"}: {row.notes}</span>
+            : row.has_notes ? <span className="additional-supplier-offers__summary-note">{locale === "tr" ? "Tedarikçi notu var" : "Supplier note available"}</span> : null}
+        </>,
         sortValue: (row: MasterRow) => row.product_code,
       },
       {
@@ -273,7 +277,7 @@ export function MasterPage() {
         ),
       },
     ],
-    [t, brandId],
+    [t, brandId, locale],
   );
 
   async function handleMasterExport() {
