@@ -353,8 +353,12 @@ async function resolveQuoteImportRowsOnce(input: {
     // Quantity tiers must be checked for the final order quantity. Do not
     // accept a tier read at the requested quantity if pack rules changed it.
     if (input.useQuantityPrice && currentSupplierQuantity(row.brand, row.qty) !== undefined && quantityAdjustment.adjusted) {
-      throw new Error(`Quantity price needs verification for corrected quantity ${quantityAdjustment.corrected}.`);
+      return delayedQuoteImportLine(row, `Quantity price needs verification for corrected quantity ${quantityAdjustment.corrected}.`);
     }
+    const priceVerified = Boolean(selected?.supplier_id && selected.supplier_name && selected.buy_price != null
+      && Number.isFinite(Number(selected.buy_price)) && Number(selected.buy_price) > 0
+      && Number.isInteger(row.qty) && row.qty > 0
+      && (currentSupplierQuantity(row.brand, row.qty) === undefined || (input.useQuantityPrice === true && !quantityAdjustment.adjusted)));
     const lifecycleStatus = normalizeCatalogLifecycleStatus(String(catalogMatch?.lifecycle_status || ""));
     const lifecycleNote = String(catalogMatch?.lifecycle_note || "").trim() || null;
 
@@ -402,6 +406,7 @@ async function resolveQuoteImportRowsOnce(input: {
           : null,
       supplierOptions: supplierMatches as QuoteSupplierOption[],
       selectedSupplierKey: selected ? `${selected.supplier_name}-0` : "",
+      ...(priceVerified ? { purchase_qty_recheck_required: false, supplier_options_qty: quantityAdjustment.corrected } : {}),
     } satisfies QuoteBuilderLine;
   });
 }

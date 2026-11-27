@@ -389,3 +389,39 @@ test('automotive aliases share canonical price scope in CSV import without mappi
  assert.ok(result.slice(0,3).every(x=>x.brand==='Continental CTAM'&&x.buy_price===10&&x.sell_price===11&&x.requestedCode==='6PK1870'));
  assert.ok(result.slice(3).every(x=>x.buy_price===null));
 });
+
+test('quantity-aware import verifies valid rows independently and never marks an unresolved row verified', async () => {
+  const requests = [];
+  globalThis.__quoteImportMocks = {
+    organizationId: async () => 'org-1',
+    codeReferences: async () => new Map(),
+    supabaseClient: tableClient({brands:[{id:'wahler',name:'Wahler',organization_id:'org-1'},{id:'bosch',name:'Bosch',organization_id:'org-1'}]}, []),
+    callAppRpc: async (_name,args)=>args.input_requests.map((row,request_index)=>{
+      requests.push(row);
+      return {request_index,has_published_scope:true,options:[{supplier_id:'s',supplier_name:'Supplier',product_code:row.code,buy_price:10,moq:row.brand==='Wahler'?5:1,order_multiple:1,stock_qty:null,valid_to:null}]};
+    }),
+  };
+  const {batchResolveQuoteImportRows}=await loadQuoteImport();
+  const lines=await batchResolveQuoteImportRows({rows:[{code:'WA1',brand:'Wahler',qty:1},{code:'BS1',brand:'Bosch',qty:1}],customerType:'A',marginA:10,marginB:15,useQuantityPrice:true});
+  assert.equal(requests.find(row=>row.code==='WA1').quantity,1);
+  assert.equal(lines[0].found,false);assert.equal(lines[0].buy_price,null);
+  assert.equal(Object.hasOwn(lines[0],'purchase_qty_recheck_required'),false);
+  assert.equal(lines[1].found,true);assert.equal(lines[1].buy_price,10);assert.equal(lines[1].purchase_qty_recheck_required,false);
+});
+
+test('quantity-aware import marks a fresh Wahler price verified only for its actual quantity', async () => {
+  const requests=[];
+  globalThis.__quoteImportMocks={
+    organizationId:async()=> 'org-1',codeReferences:async()=>new Map(),
+    supabaseClient:tableClient({brands:[{id:'wahler',name:'Wahler',organization_id:'org-1'}]},[]),
+    callAppRpc:async(_name,args)=>args.input_requests.map((row,request_index)=>{
+      requests.push(row);return {request_index,has_published_scope:true,options:[{supplier_id:'s',supplier_name:'Supplier',product_code:row.code,buy_price:18,moq:5,order_multiple:2,stock_qty:null,valid_to:null}]};
+    }),
+  };
+  const {batchResolveQuoteImportRows}=await loadQuoteImport();
+  const input={rows:[{code:'WA1',brand:'Wahler',qty:6}],customerType:'A',marginA:10,marginB:15};
+  const [verified]=await batchResolveQuoteImportRows({...input,useQuantityPrice:true});
+  assert.equal(requests.at(-1).quantity,6);assert.equal(verified.purchase_qty_recheck_required,false);assert.equal(verified.supplier_options_qty,6);
+  const [unverified]=await batchResolveQuoteImportRows(input);
+  assert.equal(Object.hasOwn(unverified,'purchase_qty_recheck_required'),false);
+});

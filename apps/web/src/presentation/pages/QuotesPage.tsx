@@ -25,7 +25,7 @@ import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
 import { fetchCloudQuoteDetail, fetchCloudQuotes } from "../../infrastructure/api/quotesApi";
 import { fetchCloudBrands } from "../../infrastructure/api/brandsApi";
 import { buildInventoryAvailabilityLookup, fetchInventoryAvailabilitySummary, inventoryAvailabilityLookupKey, type InventoryAvailabilitySummary } from "../../infrastructure/api/inventoryApi";
-import { canonicalizeBrandName, matchesOriginalNumberSearch, normalizeBrandKey, normalizeBrandName, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
+import { canonicalizeBrandName, canonicalizePriceBrandName, canonicalizePriceProductCode, matchesOriginalNumberSearch, normalizeBrandKey, normalizeBrandName, normalizePartCode, normalizeSearchText } from "../../domain/shared/normalize";
 import { normalizeOrderQuantity, orderQuantityAdjustmentMessage } from "../../domain/shared/orderQuantityRules";
 import { buildBrandResolutionLookup, resolveCanonicalBrandName } from "../../shared/brandResolver";
 import { parseCsv } from "../../shared/csv";
@@ -667,11 +667,36 @@ function getQuoteBuilderLineIssues(t: TranslateFn, line: QuoteBuilderLine) {
   return issues;
 }
 
+function isVerifiedNewSupplierPrice(
+  resolved: { found?: boolean; product_code?: string | null; brand?: string | null; supplier_id?: string | null; supplier_name?: string | null; buy_price?: number | null } | undefined,
+  option: QuoteBuilderLine["supplierOptions"][number] | undefined,
+  input: { code: string; brand: string; quantity: number; buyPrice: number | null; supplierName: string },
+) {
+  if (!resolved?.found || !option?.supplier_id || !option.supplier_name || !input.supplierName
+      || !Number.isInteger(input.quantity) || input.quantity < 1 || input.buyPrice == null || option.buy_price == null || resolved.buy_price == null
+      || !Number.isFinite(Number(input.buyPrice)) || Number(input.buyPrice) <= 0
+      || Number(option.buy_price) !== Number(input.buyPrice) || Number(resolved.buy_price) !== Number(input.buyPrice)
+      || (resolved.supplier_id && resolved.supplier_id !== option.supplier_id)
+      || String(resolved.supplier_name || "").trim().toLowerCase() !== input.supplierName.trim().toLowerCase()
+      || option.supplier_name.trim().toLowerCase() !== input.supplierName.trim().toLowerCase()
+      || !resolved.product_code || !resolved.brand) return false;
+  const inputBrand = canonicalizePriceBrandName(input.brand, input.code);
+  if (!inputBrand || normalizeBrandKey(inputBrand) !== normalizeBrandKey(canonicalizePriceBrandName(resolved.brand, resolved.product_code))) return false;
+  if (canonicalizePriceProductCode(input.code, inputBrand) !== canonicalizePriceProductCode(resolved.product_code, inputBrand)) return false;
+  if (normalizeOrderQuantity(input.quantity, option).adjusted) return false;
+  return option.applied_min_quantity == null || (Number.isInteger(option.applied_min_quantity)
+    && option.applied_min_quantity > 0 && option.applied_min_quantity <= input.quantity);
+}
+
 function mapDetailLineToBuilderLine(
   t: TranslateFn,
   line: QuoteDetail["lines"][number],
   currencyType: "A" | "B" | "C" | "Other",
   fallbackResolved?: {
+    found?: boolean;
+    product_code?: string | null;
+    brand?: string | null;
+    supplier_id?: string | null;
     supplier_name?: string | null;
     buy_price?: number | null;
     sell_price?: number | null;
@@ -708,6 +733,10 @@ function mapDetailLineToBuilderLine(
         ];
   const quantityRule = supplierOptions[0] || option;
   const quantityAdjustment = normalizeOrderQuantity(Number(line.qty || 1), quantityRule);
+  const priceVerified = !quantityAdjustment.adjusted && isVerifiedNewSupplierPrice(fallbackResolved, supplierOptionsInput?.[0], {
+    code: line.product_code || "", brand: line.brand_text || "", quantity: Number(line.qty || 1),
+    buyPrice, supplierName,
+  });
 
   return {
     lineId: String(line.id || nextLineId()),
@@ -749,6 +778,7 @@ function mapDetailLineToBuilderLine(
     product_conflict_fields: Array.isArray(line.product_conflict_fields) ? line.product_conflict_fields : [],
     supplierOptions,
     selectedSupplierKey: `${option.supplier_name}-0`,
+    ...(priceVerified ? { purchase_qty_recheck_required: false, supplier_options_qty: quantityAdjustment.corrected } : {}),
   };
 }
 
@@ -1397,11 +1427,16 @@ export function QuotesPage({
               const { resolved, supplierOptions } = await resolveQuoteLine({
                 code: line.product_code,
                 brand: line.brand_text || "",
+                quantity: Number(line.qty || 1),
                 customerType,
                 marginA: effectiveMarginA,
                 marginB: effectiveMarginB,
               });
               return {
+                found: resolved.found,
+                product_code: resolved.product_code,
+                brand: resolved.brand,
+                supplier_id: resolved.supplier_id,
                 description: resolved.description,
                 oem_no: resolved.oem_no,
                 hs_code: resolved.hs_code,
@@ -2846,6 +2881,11 @@ export function QuotesPage({
           : [];
 
     const selectedKey = effectiveSupplierOptions[0] ? `${effectiveSupplierOptions[0].supplier_name}-0` : "";
+    const initialBuyPrice = resolved.buy_price ?? effectiveSupplierOptions[0]?.buy_price ?? null;
+    const initialSupplierName = resolved.supplier_name || effectiveSupplierOptions[0]?.supplier_name || "";
+    const priceVerified = isVerifiedNewSupplierPrice(resolved, supplierOptions[0], {
+      code: codeToResolve, brand: input.brand, quantity: input.qty, buyPrice: initialBuyPrice, supplierName: initialSupplierName,
+    });
 
     return {
       lineId: nextLineId(),
@@ -2858,8 +2898,8 @@ export function QuotesPage({
       hs_code: resolved.hs_code || "",
       origin: resolved.origin || "",
       weight_kg: resolved.weight_kg ?? null,
-      supplier_name: resolved.supplier_name || effectiveSupplierOptions[0]?.supplier_name || "",
-      buy_price: resolved.buy_price ?? effectiveSupplierOptions[0]?.buy_price ?? null,
+      supplier_name: initialSupplierName,
+      buy_price: initialBuyPrice,
       sell_price: shouldUseCPricePricing
         ? cSellPrice ?? resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null
         : resolved.sell_price ?? effectiveSupplierOptions[0]?.sell_price ?? null,
@@ -2883,6 +2923,7 @@ export function QuotesPage({
       product_conflict_fields: Array.isArray(resolved.product_conflict_fields) ? resolved.product_conflict_fields : [],
       supplierOptions: effectiveSupplierOptions,
       selectedSupplierKey: selectedKey,
+      ...(priceVerified ? { purchase_qty_recheck_required: false, supplier_options_qty: input.qty } : {}),
     } satisfies QuoteBuilderLine;
   }
 
@@ -2921,6 +2962,7 @@ export function QuotesPage({
         marginA: customerPricingContextRef.current.marginA,
         marginB: customerPricingContextRef.current.marginB,
         calculateSellPrice: customerPricingContextRef.current.hasCustomerProfile && !customerPricingContextRef.current.pricingBlocked,
+        useQuantityPrice: true,
       });
       if (!isCurrent()) break;
       processedRows += batch.length;

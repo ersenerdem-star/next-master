@@ -911,3 +911,60 @@ test('supplier choice, current offer refresh, draft save and confirmation never 
     assert.equal(view.calls.some(call=>/(?:write|save|update|upsert|publish|delete|import).*(?:price.?list|supplier.?price|publication)/i.test(call.name)),false);
   } finally {await view.close()}
 });
+
+const verifiedFreshOffer=(code:string,buy=10)=>({resolved:{found:true,product_code:code,brand:'Synthetic',supplier_id:'supplier a',supplier_name:'Supplier A',buy_price:buy,sell_price:null},supplierOptions:[supplierOption('Supplier A',buy)]});
+test('manual new line marks fresh exact supplier price verified, but unresolved or mismatched lines do not',async()=>{
+  for(const mode of ['valid','unresolved','wrong-sku','wrong-supplier','wrong-brand','zero-price','minimum'] as const){
+    const view=await fixture({cache:customerlessCache([]),orders:[]});
+    try {
+      await view.fillNewLine();await view.click('sales.orders.addNewRow');
+      const response=verifiedFreshOffer('0012');
+      if(mode==='unresolved') response.resolved.found=false;
+      if(mode==='wrong-sku') response.resolved.product_code='0013';
+      if(mode==='wrong-supplier') response.supplierOptions[0].supplier_id='other';
+      if(mode==='wrong-brand') response.resolved.brand='Other';
+      if(mode==='zero-price') {response.resolved.buy_price=0;response.supplierOptions[0].buy_price=0;}
+      if(mode==='minimum') response.supplierOptions[0].moq=5;
+      await view.resolve(view.resolveRequest,response);
+      const row=view.lineRows()[0];
+      if(mode==='valid') {assert.equal(row.purchase_qty_recheck_required,false);assert.equal(row.supplier_options_qty,1);}
+      else assert.notEqual(row.purchase_qty_recheck_required,false,`${mode} must not become a verified price`);
+    } finally {await view.close()}
+  }
+});
+
+test('catalog transfer marks a valid new supplier price verified and does not mark an unresolved item',async()=>{
+  for(const found of [true,false]){
+    const view=await fixture({cache:customerlessCache([]),orders:[]});
+    try {
+      view.holdSingleLookup();await view.queueCatalogHandoff();const response=verifiedFreshOffer('HANDOFF');response.resolved.found=found;
+      await view.resolve(view.resolveRequest,response);
+      const row=view.lineRows()[0];
+      if(found) assert.equal(row.purchase_qty_recheck_required,false);
+      else assert.notEqual(row.purchase_qty_recheck_required,false);
+    } finally {await view.close()}
+  }
+});
+
+test('CSV order import requests quantity-sensitive supplier prices',async()=>{
+  const view=await fixture({cache:customerlessCache([]),orders:[]});
+  try {
+    await view.startImport();const call=view.calls.find(call=>call.name==='batchResolveQuoteImportRows');
+    assert.equal(call?.args[0].useQuantityPrice,true);
+    await view.resolve(view.importRequest,[unpricedLine()]);
+  } finally {await view.close()}
+});
+
+test('quote mapping marks verification only when saved purchase price agrees with the fresh exact offer',async()=>{
+  for(const oldBuy of [10,9]){
+    const view=await fixture({cache:customerlessCache([]),orders:[],selectedQuoteId:'quote-verified',holdQuotes:true,holdQuoteDetail:true});
+    try {
+      const mock=(globalThis as any)[fixtureKey], original=mock.call;
+      mock.call=(name:string,...args:any[])=>{if(name==='resolveQuoteLine'){view.calls.push({name,args});return Promise.resolve(verifiedFreshOffer('CODE'));}return original(name,...args);};
+      await view.resolve(view.quoteDetailRequest,{quote:{quote_no:'Q-REAL',customer_name:'Customer A'},lines:[{id:'q1',product_code:'CODE',brand_text:'Synthetic',description:'Quote product',qty:2,buy_price:oldBuy,sell_price:13,supplier_name:'Supplier A'}]});
+      const row=view.lineRows()[0];assert.equal(row.buy_price,oldBuy);
+      if(oldBuy===10) assert.equal(row.purchase_qty_recheck_required,false);else assert.notEqual(row.purchase_qty_recheck_required,false);
+      const query=view.calls.find(call=>call.name==='resolveQuoteLine');assert.equal(query?.args[0].quantity,2);
+    } finally {await view.close()}
+  }
+});
