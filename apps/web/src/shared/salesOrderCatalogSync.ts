@@ -217,8 +217,16 @@ export async function resyncSalesOrderLinesFromCatalog(
     if (!referenceMatch || canonicalizePriceProductCode(referenceMatch.old_code, line.brand)
         !== canonicalizePriceProductCode(requestedCode, line.brand)) return line;
     const changesSku=canonicalizePriceProductCode(referenceMatch.new_code,line.brand)!==exactProductCode(line.resolvedCode||line.requestedCode);
+    // A supplier override belongs to a particular product. The old product's
+    // sale-price basis must never be reused when resolving a new SKU.
+    const successorLine = { ...line };
+    if (changesSku) {
+      delete successorLine.supplier_override_keep_sell_price;
+      delete successorLine.customer_price_basis_buy_price;
+      delete successorLine.customer_price_basis_context_key;
+    }
     return {
-      ...line,
+      ...successorLine,
       ...(changesSku?{description:'',oem_no:'',hs_code:'',origin:'',weight_kg:null,found:false,
         supplier_name:'',
         buy_price:null,sell_price:null,c_sell_price:null,manual_sell_price:false,price_date:'',
@@ -254,11 +262,13 @@ export async function resyncSalesOrderLinesFromCatalog(
     );
   });
 
-  // A replacement must use the successor's current supplier price on every
-  // sync, including when the saved row already contains the successor code.
-  // "Keep prices" applies to other rows, not to a changed product identity.
+  // Replacement prices must be verified on the initial change of product.
+  // Once the successor is already saved and the user explicitly chooses its
+  // supplier, "keep prices" also protects that customer's agreed sale price.
   const replacementIndexes = new Set(patchedLines.map((line, index) =>
     line.codeChanged && exactProductCode(line.requestedCode) !== exactProductCode(line.resolvedCode)
+      && !(line.supplier_override_keep_sell_price === true
+        && exactProductCode(lines[index].resolvedCode || lines[index].requestedCode) === exactProductCode(line.resolvedCode))
       ? index : -1).filter((index) => index >= 0));
 
   const refreshesCurrentPrice = !keepPrices
@@ -387,7 +397,7 @@ async function refreshLinePricesFromCatalog(
       onlyFillBlanks,
     );
 
-    return {
+    const updated: QuoteBuilderLine = {
       ...refreshed,
       price_sync_issue:null,
       brand: canonicalizeBrandName(resolved.brand || refreshed.brand || line.brand || "") || refreshed.brand || line.brand,
@@ -406,7 +416,15 @@ async function refreshLinePricesFromCatalog(
       price_date: reprice ? String(selected!.price_date || "") : selected?.price_date || resolved.price_date || line.price_date,
       supplierOptions: reprice ? supplierOptions : supplierOptions.length ? supplierOptions : line.supplierOptions,
       selectedSupplierKey: selected ? `${selected.supplier_name}-${supplierOptions.indexOf(selected)}` : line.selectedSupplierKey,
-    } satisfies QuoteBuilderLine;
+    };
+    // Explicitly unchecking "keep prices" establishes a new customer price
+    // basis, so a previous preserved-supplier basis no longer applies.
+    if (reprice) {
+      delete updated.supplier_override_keep_sell_price;
+      delete updated.customer_price_basis_buy_price;
+      delete updated.customer_price_basis_context_key;
+    }
+    return updated;
   } catch (error) {
     if (reprice) {
       const reason = error instanceof Error ? error.message : "Current price lookup failed.";

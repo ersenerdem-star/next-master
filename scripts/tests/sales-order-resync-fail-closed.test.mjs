@@ -4,6 +4,7 @@ import test from "node:test";
 import ts from "typescript";
 import { currentSupplierQuantity, exactProductCode } from "../../apps/web/src/shared/currentSupplierPriceSync.mts";
 import { canonicalizePriceProductCode, canonicalizePriceBrandName } from "../../apps/web/src/domain/shared/normalize.ts";
+import { applySalesOrderCustomerPricing } from "../../apps/web/src/shared/salesOrderCustomerPricing.ts";
 
 function loadSalesResync(dependencies, exportedName = "resyncSalesOrderLinesFromCatalog") {
   dependencies = { canonicalizePriceProductCode, canonicalizePriceBrandName, ...dependencies };
@@ -145,16 +146,69 @@ test('unavailable prices and lookup failures remain explicit per-line outcomes w
   await assert.rejects(resync([blank('GOOD')],{...repriceOptions,currency:'USD',keepPrices:true,hydrateMissingPricesIfKeepingPrices:true}),/currency to EUR/);
 });
 
-test('changing SKU discards old product fields and prices before exact successor resolution',async()=>{
-  const old={...savedLine('318189'),brand:'Sachs',weight_kg:999,oem_no:'OLD-OEM',origin:'XX',hs_code:'OLD'};
+test('changing SKU discards old product fields, supplier choice and price basis before exact successor resolution',async()=>{
+  const old={...savedLine('318189'),brand:'Sachs',weight_kg:999,oem_no:'OLD-OEM',origin:'XX',hs_code:'OLD',
+    supplier_override_keep_sell_price:true,customer_price_basis_buy_price:8.34,customer_price_basis_context_key:'old-customer'};
   const before=structuredClone(old);
   const refs=new Map([['sachs::318189',{old_code:'318189',new_code:'350038',reason:'Official replacement'}]]);
   const resync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Sachs',description:'Correct successor',weight_kg:4.18,oem_no:'NEW-OEM'},
     supplierOptions:[{supplier_id:'s',supplier_name:'Sood',buy_price:67.76,sell_price:74.54}]}),refs);
   const [result]=await resync([old],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
   assert.equal(result.requestedCode,'318189');assert.equal(result.resolvedCode,'350038');assert.equal(result.buy_price,67.76);
+  assert.equal(result.sell_price,74.54);
+  assert.equal(Object.hasOwn(result,'supplier_override_keep_sell_price'),false);
+  assert.equal(Object.hasOwn(result,'customer_price_basis_buy_price'),false);
+  assert.equal(Object.hasOwn(result,'customer_price_basis_context_key'),false);
   assert.equal(result.description,'Correct successor');assert.equal(result.weight_kg,4.18);assert.equal(result.oem_no,'NEW-OEM');assert.equal(result.origin,'');
   assert.deepEqual(old,before);
+});
+
+test('keeping prices preserves a supplier choice on an already saved successor SKU',async()=>{
+  const old={...savedLine('318189'),brand:'Sachs',resolvedCode:'350038',codeChanged:true,
+    supplier_name:'Alternative',buy_price:15,sell_price:12,selectedSupplierKey:'Alternative-0',
+    supplier_override_keep_sell_price:true,customer_price_basis_buy_price:10,customer_price_basis_context_key:'customer-A',
+    supplierOptions:[{supplier_id:'alt',supplier_name:'Alternative',buy_price:15,sell_price:16.5}]};
+  const before=structuredClone(old);
+  const refs=new Map([['sachs::318189',{old_code:'318189',new_code:'350038',reason:'Official replacement'}]]);
+  let lookups=0;
+  const resync=makeResync(async()=>{lookups++;throw Error('Must not reprice a saved user choice');},refs);
+  const [result]=await resync([old],{...repriceOptions,keepPrices:true,onlyFillBlanks:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.equal(lookups,0);
+  assert.equal(result.supplier_name,'Alternative');assert.equal(result.buy_price,15);assert.equal(result.sell_price,12);
+  assert.equal(result.supplier_override_keep_sell_price,true);assert.equal(result.customer_price_basis_buy_price,10);
+  assert.deepEqual(old,before);
+  const reopened=JSON.parse(JSON.stringify(result));
+  assert.equal(reopened.supplier_name,'Alternative');assert.equal(reopened.buy_price,15);assert.equal(reopened.sell_price,12);
+  assert.equal(reopened.supplier_override_keep_sell_price,true);assert.equal(reopened.customer_price_basis_buy_price,10);
+});
+
+test('explicit repricing uses the selected current price and clears the old customer price basis',async()=>{
+  const original={...savedLine('ORDINARY'),supplier_name:'Alternative',buy_price:15,sell_price:12,
+    selectedSupplierKey:'Alternative-0',manual_sell_price:false,supplier_override_keep_sell_price:true,
+    customer_price_basis_buy_price:10,customer_price_basis_context_key:'old-customer',
+    supplierOptions:[{supplier_id:'alt',supplier_name:'Alternative',buy_price:15,sell_price:16.5}]};
+  const before=structuredClone(original);
+  const sync=makeResync(async({code})=>({resolved:{found:true,product_code:code,brand:'Clevite'},supplierOptions:[
+    {supplier_id:'alt',supplier_name:'Alternative',buy_price:20,sell_price:22},
+  ]}));
+  const [result]=await sync([original],{...repriceOptions,keepPrices:false});
+  assert.equal(result.supplier_name,'Alternative');assert.equal(result.buy_price,20);assert.equal(result.sell_price,22);
+  assert.equal(Object.hasOwn(result,'supplier_override_keep_sell_price'),false);
+  assert.equal(Object.hasOwn(result,'customer_price_basis_buy_price'),false);
+  assert.equal(Object.hasOwn(result,'customer_price_basis_context_key'),false);
+  assert.deepEqual(original,before);
+  const [afterCustomerChange]=applySalesOrderCustomerPricing([result],{workbenchMode:'new',hasCustomerProfile:true,customerId:'next',customerType:'B',marginA:10,marginB:15});
+  assert.equal(afterCustomerChange.sell_price,23, 'customer pricing must use the refreshed basis, not the old 10 EUR basis');
+});
+
+test('a selected successor with an explicit zero sale price is not silently repriced when prices are kept',async()=>{
+  const line={...savedLine('OLD'),resolvedCode:'NEXT',codeChanged:true,sell_price:0,buy_price:15,
+    supplier_override_keep_sell_price:true,customer_price_basis_buy_price:10};
+  const refs=new Map([['clevite::OLD',{old_code:'OLD',new_code:'NEXT'}]]);
+  let calls=0;
+  const sync=makeResync(async()=>{calls++;throw Error('Must not reprice when prices are kept');},refs);
+  const [result]=await sync([line],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
+  assert.equal(result.sell_price,0);assert.equal(result.buy_price,15);assert.equal(calls,0);
 });
 
 test('a Sachs replacement sync survives an unrelated full-order price failure and preserves other saved prices',async()=>{
