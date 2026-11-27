@@ -224,6 +224,9 @@ export async function resyncSalesOrderLinesFromCatalog(
       delete successorLine.supplier_override_keep_sell_price;
       delete successorLine.customer_price_basis_buy_price;
       delete successorLine.customer_price_basis_context_key;
+      delete successorLine.explicit_supplier_choice_id;
+      delete successorLine.purchase_qty_recheck_required;
+      delete successorLine.supplier_options_qty;
     }
     return {
       ...successorLine,
@@ -412,6 +415,11 @@ async function refreshLinePricesFromCatalog(
       quantity_adjustment_note: quantityAdjustment.adjusted
         ? `Order amount ${quantityAdjustment.requested} pcs corrected to ${quantityAdjustment.corrected} pcs by supplier quantity rule.`
         : null,
+      // The option was queried for the old quantity. A tier-sensitive offer
+      // must be rechecked at the adjusted quantity before confirmation.
+      supplier_options_qty: line.qty,
+      purchase_qty_recheck_required: Boolean(quantityAdjustment.adjusted &&
+        (currentSupplierQuantity(line.brand, line.qty) !== undefined || selected?.applied_min_quantity != null)),
       c_sell_price: reprice ? null : line.c_sell_price,
       price_date: reprice ? String(selected!.price_date || "") : selected?.price_date || resolved.price_date || line.price_date,
       supplierOptions: reprice ? supplierOptions : supplierOptions.length ? supplierOptions : line.supplierOptions,
@@ -423,6 +431,7 @@ async function refreshLinePricesFromCatalog(
       delete updated.supplier_override_keep_sell_price;
       delete updated.customer_price_basis_buy_price;
       delete updated.customer_price_basis_context_key;
+      delete updated.explicit_supplier_choice_id;
     }
     return updated;
   } catch (error) {

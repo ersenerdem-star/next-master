@@ -691,6 +691,66 @@ test('existing order supplier choice updates purchase while preserving its sale,
   try {assert.equal(reopened.lineRows()[0].supplier_name,'Supplier B');assert.equal(reopened.lineRows()[0].sell_price,11);assert.equal(reopened.lineRows()[0].selectedSupplierKey,'Supplier B-1');} finally {await reopened.close()}
 });
 
+test('changing to a distinct same-name supplier is dirty even if prices and conditions match',async()=>{
+  const first=supplierOption('Supplier A',10,{supplier_id:'vendor-a'});
+  const second=supplierOption('Supplier A',10,{supplier_id:'vendor-b'});
+  const samePrice={...supplierLine(),supplier_override_keep_sell_price:true,customer_price_basis_buy_price:10,
+    explicit_supplier_choice_id:'vendor-a',supplierOptions:[first,second],selectedSupplierKey:'Supplier A-0'};
+  const order=fullOrder('same-name-suppliers',[samePrice]);const view=await fixture({cache:{...draftCache(),salesOrdersView:'list',workbenchMode:'existing',selectedLocalSalesOrderId:'',quoteBuilderLines:[]},orders:[order]});
+  try {
+    await view.clickOrder(order.id);view.setConfirmResponse(false);
+    await chooseSupplier(view,'Supplier A-1');
+    assert.equal(view.lineRows()[0].explicit_supplier_choice_id,'vendor-b');
+    assert.equal(view.lineRows()[0].sell_price,11); assert.equal(view.lineRows()[0].buy_price,10);
+    await view.click('sales.orders.exit');
+    assert.ok(view.confirms.some(text=>/unsavedChangesPrompt/.test(text)),'navigation must ask before discarding the different supplier');
+    assert.equal(view.lineRows()[0].explicit_supplier_choice_id,'vendor-b');
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
+test('refreshing options or changing their order does not create a false unsaved change',async()=>{
+  const noSupplierId={...supplierLine(),price_date:'2026-11-26',moq:1,order_multiple:1,stock_qty:5,valid_to:null,supplierOptions:[supplierOption('Supplier A',10,{supplier_id:null}),supplierOption('Supplier B',15)]};
+  const order=fullOrder('supplier-refresh-no-dirty',[noSupplierId]);const view=await fixture({cache:{...draftCache(),salesOrdersView:'list',workbenchMode:'existing',selectedLocalSalesOrderId:'',quoteBuilderLines:[]},orders:[order]});
+  try {
+    await view.clickOrder(order.id);view.setConfirmResponse(false);view.holdSingleLookup();await view.click('Current options');
+    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Synthetic'},supplierOptions:[supplierOption('Supplier B',15),supplierOption('Supplier A',10,{supplier_id:'newly-known'})]});
+    assert.equal(view.lineRows()[0].supplier_name,'Supplier A');assert.equal(view.lineRows()[0].selectedSupplierKey,'Supplier A-1');
+    assert.equal(view.lineRows()[0].buy_price,10);assert.equal(view.lineRows()[0].sell_price,11);
+    await view.click('sales.orders.exit');
+    assert.equal(view.confirms.length,0,'loading option metadata is not a commercial change');
+    assert.match(view.text(),/sales.orders.listTitle/);
+    assert.equal(view.saved.length,0);
+  } finally {await view.close()}
+});
+
+test('catalog sync asks before changing quantities and declining does not save or change the line',async()=>{
+  const original=supplierLine(); const order=fullOrder('resync-quantity-declined',[original]);
+  const view=await fixture({cache:{...draftCache(),salesOrdersView:'list',workbenchMode:'existing',selectedLocalSalesOrderId:'',quoteBuilderLines:[]},orders:[order]});
+  try {
+    await view.clickOrder(order.id);view.setConfirmResponse(false);
+    await view.click('sales.orders.resyncFromCatalog');
+    await view.resolve(view.resyncRequest,{lines:[{...original,qty:6,purchase_qty_recheck_required:true}],preservedOtherPrices:false});
+    assert.match(view.confirms.at(-1) || '',/TEST-001: 3 → 6/);
+    assert.equal(view.saved.length,0);assert.equal(view.lineRows()[0].qty,3);
+    assert.ok(view.feedbackEvents.some(event=>event.kind==='succeed' && /cancelled.*not changed/i.test(event.text)));
+  } finally {await view.close()}
+});
+
+test('accepting catalog quantity adjustment saves it and reports pending tier verification',async()=>{
+  const original=supplierLine(); const order=fullOrder('resync-quantity-approved',[original]);
+  const view=await fixture({cache:{...draftCache(),salesOrdersView:'list',workbenchMode:'existing',selectedLocalSalesOrderId:'',quoteBuilderLines:[]},orders:[order]});
+  try {
+    await view.clickOrder(order.id);view.setConfirmResponse(true);
+    await view.click('sales.orders.resyncFromCatalog');
+    await view.resolve(view.resyncRequest,{lines:[{...original,qty:6,purchase_qty_recheck_required:true}],preservedOtherPrices:false});
+    assert.match(view.confirms.at(-1) || '',/TEST-001: 3 → 6/);
+    assert.equal(view.saved.length,1);assert.equal(view.saved[0].lines[0].qty,6);
+    assert.equal(view.saved[0].lines[0].purchase_qty_recheck_required,true);
+    assert.match(view.text(),/Verify the current quantity-tier supplier price on 1 lines/);
+  } finally {await view.close()}
+});
+
 test('supplier MOQ or pack adjustment asks explicitly before changing the customer quantity',async()=>{
   const original={...supplierLine(),supplierOptions:[supplierOption('Supplier A',10),supplierOption('Supplier B',15,{moq:5,order_multiple:2})]};
   const order=fullOrder('supplier-quantity',[original]); const view=await fixture({cache:existingCache(order),orders:[order]});

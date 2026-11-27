@@ -72,6 +72,8 @@ export type QuoteBuilderLine = {
   manual_sell_price?: boolean;
   /** An explicit procurement choice must not reprice the customer's sale. */
   supplier_override_keep_sell_price?: boolean;
+  /** Supplier identity explicitly chosen by the user, independent of option ordering. */
+  explicit_supplier_choice_id?: string | null;
   /** Purchase-price basis used for customer pricing before that choice. */
   customer_price_basis_buy_price?: number | null;
   /** Identifies the customer price context for a preserved sale price. */

@@ -2009,6 +2009,21 @@ export function QuotesPage({
         calculateSellPrice: workbenchMode !== "new" || hasCustomerPricingProfile,
       });
       if (!isCurrent()) return;
+      const quantityChanges = syncedLines.flatMap((line, index) => {
+        const previous = quoteBuilderLines[index];
+        return previous && line.qty !== previous.qty ? [{ line, previous }] : [];
+      });
+      if (quantityChanges.length) {
+        const examples = quantityChanges.slice(0, 5).map(({ line, previous }) =>
+          `${line.resolvedCode || line.requestedCode}: ${previous.qty} → ${line.qty}`).join(", ");
+        const message = locale === "tr"
+          ? `Tedarikçi asgari adet veya sipariş katı nedeniyle ${quantityChanges.length} satırın miktarı değişecek (${examples}${quantityChanges.length > 5 ? ", …" : ""}). Satır toplamları da değişebilir. Devam edilsin mi?`
+          : `Supplier minimums or order multiples will change quantity on ${quantityChanges.length} lines (${examples}${quantityChanges.length > 5 ? ", …" : ""}). Line totals may change. Continue?`;
+        if (!window.confirm(message)) {
+          actionFeedback.succeed(locale === "tr" ? "Katalog eşitlemesi iptal edildi; sipariş değiştirilmedi." : "Catalog synchronization cancelled; the order was not changed.");
+          return;
+        }
+      }
       if (selectedLocalSalesOrderId) {
         const order = buildLocalSalesOrder({
           id: selectedLocalSalesOrderId,
@@ -2060,7 +2075,11 @@ export function QuotesPage({
           checked: replacements.length, changed: changedReplacementPrices,
           unchanged: replacements.length - changedReplacementPrices,
         })}` : "";
-      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncDiscontinuedCount", { count: discontinuedCount })}${replacementPriceMessage} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}`;
+      const tierPending = syncedLines.filter((line) => line.purchase_qty_recheck_required).length;
+      const tierNotice = tierPending
+        ? locale === "tr" ? ` ${tierPending} satırda adet kademesi için güncel tedarikçi fiyatını doğrulayın.` : ` Verify the current quantity-tier supplier price on ${tierPending} lines.`
+        : "";
+      const message = `${t("sales.orders.resyncCodeChanges", { count: codeChanges })} ${t("sales.orders.resyncDiscontinuedCount", { count: discontinuedCount })}${replacementPriceMessage} ${t("sales.orders.resyncPriceSummary", summary)}${preservedOtherPrices ? ` ${t("sales.orders.resyncOtherPricesPreserved")}` : ""}${tierNotice}`;
       setBuilderStatus(message);
       if (summary.failed) actionFeedback.fail(message);
       else actionFeedback.succeed(message);
@@ -2137,6 +2156,15 @@ export function QuotesPage({
         origin: line.origin || "",
         weight_kg: line.weight_kg ?? null,
         supplier_name: line.supplier_name || "",
+        explicit_supplier_choice_id: line.explicit_supplier_choice_id ?? null,
+        supplier_override_keep_sell_price: Boolean(line.supplier_override_keep_sell_price),
+        customer_price_basis_buy_price: line.customer_price_basis_buy_price ?? null,
+        customer_price_basis_context_key: line.customer_price_basis_context_key ?? null,
+        purchase_qty_recheck_required: Boolean(line.purchase_qty_recheck_required),
+        moq: line.moq ?? null,
+        order_multiple: line.order_multiple ?? null,
+        stock_qty: line.stock_qty ?? null,
+        valid_to: line.valid_to ?? null,
         buy_price: line.buy_price ?? null,
         sell_price: line.sell_price ?? null,
         price_date: line.price_date || "",
@@ -2335,6 +2363,7 @@ export function QuotesPage({
     return {
       ...item,
       supplier_override_keep_sell_price: true,
+      explicit_supplier_choice_id: String(selected.supplier_id || "").trim() || null,
       customer_price_basis_buy_price: Object.prototype.hasOwnProperty.call(item, "customer_price_basis_buy_price")
         ? item.customer_price_basis_buy_price : item.buy_price,
       purchase_qty_recheck_required: quantitySensitive && (adjustment.adjusted

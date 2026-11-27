@@ -37,7 +37,7 @@ function savedLine(code = "61/1") {
   };
 }
 
-function makeResync(resolveQuoteLine, references = new Map(), exportedName = "resyncSalesOrderLinesFromCatalog", metadata = new Map()) {
+function makeResync(resolveQuoteLine, references = new Map(), exportedName = "resyncSalesOrderLinesFromCatalog", metadata = new Map(), quantityNormalizer = (qty) => ({ corrected: qty, adjusted: false, requested: qty })) {
   return loadSalesResync({
     exactProductCode,
     currentSupplierQuantity,
@@ -50,7 +50,7 @@ function makeResync(resolveQuoteLine, references = new Map(), exportedName = "re
     fillNumber: (current, next, onlyFillBlanks) => onlyFillBlanks ? current ?? next : next ?? current,
     getSelectedSupplierName: (line) => String(line.supplier_name || "").trim().toLowerCase(),
     lineHasVisiblePrices: (line) => Number(line.buy_price ?? 0) > 0 || Number(line.sell_price ?? 0) > 0,
-    normalizeOrderQuantity: (qty) => ({ corrected: qty, adjusted: false, requested: qty }),
+    normalizeOrderQuantity: quantityNormalizer,
     resolveQuoteLine,
   }, exportedName);
 }
@@ -209,6 +209,21 @@ test('a selected successor with an explicit zero sale price is not silently repr
   const sync=makeResync(async()=>{calls++;throw Error('Must not reprice when prices are kept');},refs);
   const [result]=await sync([line],{...repriceOptions,keepPrices:true,hydrateMissingPricesIfKeepingPrices:true});
   assert.equal(result.sell_price,0);assert.equal(result.buy_price,15);assert.equal(calls,0);
+});
+
+test('resync requires quantity-tier recheck when pack rules change the queried quantity',async()=>{
+  const original={...savedLine('TIER'),qty:3,supplier_name:'Sood',
+    supplierOptions:[{supplier_id:'supplier-1',supplier_name:'Sood',buy_price:8.34,sell_price:9.17}],selectedSupplierKey:'Sood-0'};
+  const sync=makeResync(async({code,quantity})=>{
+    assert.equal(quantity,3);
+    return {resolved:{found:true,product_code:code,brand:'Clevite'},supplierOptions:[
+      {supplier_id:'supplier-1',supplier_name:'Sood',buy_price:10,sell_price:11,moq:5,order_multiple:2,applied_min_quantity:1},
+    ]};
+  },new Map(),'resyncSalesOrderLinesFromCatalog',new Map(),qty=>({requested:qty,corrected:6,adjusted:true}));
+  const [result]=await sync([original],{...repriceOptions,keepPrices:false});
+  assert.equal(result.qty,6);assert.equal(result.supplier_options_qty,3);
+  assert.equal(result.purchase_qty_recheck_required,true);
+  assert.equal(original.qty,3);
 });
 
 test('a Sachs replacement sync survives an unrelated full-order price failure and preserves other saved prices',async()=>{
