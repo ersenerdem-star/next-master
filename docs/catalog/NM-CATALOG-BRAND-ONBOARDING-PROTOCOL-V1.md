@@ -63,8 +63,8 @@ the canonical reread passed.
   catalog review jobs and the legacy TecAlliance bulk reader. Registry
   additions inherit this group. The Elring worker uses it for article and
   vehicle requests. The shared clock resumes due Elring budget waits only
-  when the existing source gate allows it. The Elring incident hold remains
-  authoritative.
+  when the existing source gate allows it. The Elring bulk publication hold
+  remains in force during bounded review.
 
 ## Kolbenschmidt / Wilmink distributor engine — 2026-10-21
 
@@ -715,6 +715,15 @@ limits are repaired and validated. Collection evidence is complete for
 12,642 inserts. Database restart restored SQL, Auth and authenticated portal
 data access. Caller timeout did not establish server-side cancellation; the
 publication statement timed out later inside product-code normalization.
+
+**Bounded review recovery (2026-11-27).** The official Elring queue supports
+up to three exact products per job and six linked-vehicle requests per
+product. The reader uses the shared TecAlliance budget. A review writes a
+compact source receipt to its own queue item, with no generic staging or
+canonical product writes. Queue checkpoints use short lock waits and retry
+at most three times after a busy transaction. The historical bulk and
+publication paths remain closed in this mode. The shared dispatcher can
+recover queued or due work without a browser session.
 The user's 2026-10-19 instruction to collect from the official Elring link
 extends the registered scope to bounded manufacturer collection. This path
 requires `brand_collection_allowed=true` as well as the existing publication

@@ -20,7 +20,7 @@ export function assertSource(source, { publish = false, approvalActor, approvalR
     || source.credential_boundary !== 'none' || source.rate_limit_posture !== 'bounded'
     || source.metadata?.automated_read_only_approved !== true || source.metadata?.internal_observation_allowed !== true
     || !source.metadata?.allowed_brands?.some(brand => text(brand).toLowerCase() === 'elring')) throw Error('ELRING_SOURCE_NOT_AUTHORIZED');
-  if (publish && (!approvalActor || !approvalReference || source.metadata?.approval_actor !== approvalActor
+  if (publish && (source.metadata?.bounded_review_only === true || !approvalActor || !approvalReference || source.metadata?.approval_actor !== approvalActor
     || source.metadata?.publication_approval_reference !== approvalReference
     || source.metadata?.internal_catalog_persistence_allowed !== true)) throw Error('ELRING_PUBLICATION_NOT_AUTHORIZED');
 }
