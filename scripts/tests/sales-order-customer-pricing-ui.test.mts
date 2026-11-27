@@ -155,7 +155,7 @@ async function fixture({ cache = draftCache(), orders = [fullOrder()], selectedS
       if (name === 'batchResolveQuoteImportRows') return importRequest.promise;
       if (name === 'resyncSalesOrderWithCodeReferenceFallback') return resyncRequest.promise;
       if (name === 'findCodeReferenceMatch') return Promise.resolve(null);
-      if (name === 'resolveQuoteLine') return holdLineLookup ? resolveRequest.promise : Promise.reject(Error('Synthetic enrichment unavailable'));
+      if (name === 'resolveQuoteLine' || name === 'fetchCurrentSupplierOptionsForOrder') return holdLineLookup ? resolveRequest.promise : Promise.reject(Error('Synthetic enrichment unavailable'));
       if (name === 'fetchCloudQuotes') return holdQuotes ? quoteListRequest.promise : Promise.resolve([]);
       if (name === 'fetchCloudQuoteDetail') return holdQuoteDetail ? quoteDetailRequest.promise : Promise.reject(Error('unexpected quote detail'));
       if (['fetchPurchaseOrderSalesLinkSummaries', 'fetchInvoiceSalesLinkSummaries', 'fetchSalesOrderBrandSummaries', 'fetchInventoryAvailabilitySummary', 'fetchPriceListSettings'].includes(name)) return Promise.resolve([]);
@@ -780,8 +780,8 @@ test('refreshing supplier options is buy-only and preserves the order choice and
   const order=fullOrder('supplier-refresh',[supplierLine()]); const view=await fixture({cache:existingCache(order),orders:[order]});
   try {
     view.holdSingleLookup(); await view.click('Current options');
-    assert.equal(view.calls.find(call=>call.name==='resolveQuoteLine')?.args[0].calculateSellPrice,false);
-    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Synthetic'},supplierOptions:[supplierOption('Supplier A',12),supplierOption('Supplier B',15),supplierOption('Supplier C',16)]});
+    assert.deepEqual(view.calls.find(call=>call.name==='fetchCurrentSupplierOptionsForOrder')?.args[0],{code:'TEST-001',brand:'Synthetic',quantity:3});
+    await view.resolve(view.resolveRequest,[supplierOption('Supplier A',12),supplierOption('Supplier B',15),supplierOption('Supplier C',16)]);
     const row=view.lineRows()[0];assert.equal(row.supplier_name,'Supplier A');assert.equal(row.buy_price,10);assert.equal(row.sell_price,11);
     assert.equal(row.supplierOptions.length,4);assert.equal(row.supplierOptions[0].saved_order_offer,true);
     await chooseSupplier(view,'Supplier C-3');assert.equal(view.lineRows()[0].buy_price,16);assert.equal(view.lineRows()[0].sell_price,11);
@@ -852,8 +852,8 @@ test('quantity-tier supplier change requires fresh offer for adjusted quantity b
     assert.equal(view.calls.filter(call=>call.name==='confirmSalesOrderWithPurchases').length,0);
     assert.ok(view.feedbackEvents.some(event=>event.kind==='fail' && /quantity tier changed/i.test(event.text)));
     view.holdSingleLookup();await view.click('Current options');
-    assert.equal(view.calls.find(call=>call.name==='resolveQuoteLine')?.args[0].quantity,6);
-    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Wahler'},supplierOptions:[supplierOption('Supplier A',10,{applied_min_quantity:1}),supplierOption('Supplier B',18,{moq:5,order_multiple:2,applied_min_quantity:6})]});
+    assert.equal(view.calls.find(call=>call.name==='fetchCurrentSupplierOptionsForOrder')?.args[0].quantity,6);
+    await view.resolve(view.resolveRequest,[supplierOption('Supplier A',10,{applied_min_quantity:1}),supplierOption('Supplier B',18,{moq:5,order_multiple:2,applied_min_quantity:6})]);
     assert.equal(view.lineRows()[0].buy_price,15);assert.equal(view.lineRows()[0].purchase_qty_recheck_required,true);
     await chooseSupplier(view,'Supplier B-2');assert.equal(view.lineRows()[0].buy_price,18);assert.equal(view.lineRows()[0].sell_price,11);
     assert.equal(view.lineRows()[0].purchase_qty_recheck_required,false);
@@ -892,7 +892,22 @@ test('late supplier offer refresh does not modify another order after navigation
   try {
     view.holdSingleLookup();await view.click('Current options');
     await view.externalOrder(second.id);assert.equal(view.lineRows()[0].buy_price,20);
-    await view.resolve(view.resolveRequest,{resolved:{found:true,product_code:'TEST-001',brand:'Synthetic'},supplierOptions:[supplierOption('Supplier A',12),supplierOption('Supplier B',15)]});
+    await view.resolve(view.resolveRequest,[supplierOption('Supplier A',12),supplierOption('Supplier B',15)]);
     assert.equal(view.lineRows()[0].buy_price,20);assert.equal(view.lineRows()[0].sell_price,22);
+  } finally {await view.close()}
+});
+
+test('supplier choice, current offer refresh, draft save and confirmation never write customer or supplier price lists',async()=>{
+  const order=fullOrder('supplier-isolation',[supplierLine()]);const view=await fixture({cache:existingCache(order),orders:[order]});
+  try {
+    await chooseSupplier(view,'Supplier B-1');view.holdSingleLookup();await view.click('Current options');
+    await view.resolve(view.resolveRequest,[supplierOption('Supplier A',10),supplierOption('Supplier B',16)]);
+    await chooseSupplier(view,'Supplier B-2');await view.click('sales.orders.saveDraft');await view.click('sales.orders.markConfirmed');
+    const saved=view.calls.find(call=>call.name==='upsertSalesOrder');
+    const confirmed=view.calls.find(call=>call.name==='confirmSalesOrderWithPurchases');
+    assert.equal(saved?.args[0].lines[0].buy_price,16);assert.equal(saved?.args[0].lines[0].sell_price,11);
+    assert.equal(confirmed?.args[0].lines[0].buy_price,16);assert.equal(confirmed?.args[0].lines[0].sell_price,11);
+    assert.deepEqual(view.calls.filter(call=>call.name==='callAppRpc').map(call=>call.args[0]),['cloud_sales_order_preserved_supplier_lines','cloud_current_supplier_price_options_batch']);
+    assert.equal(view.calls.some(call=>/(?:write|save|update|upsert|publish|delete|import).*(?:price.?list|supplier.?price|publication)/i.test(call.name)),false);
   } finally {await view.close()}
 });

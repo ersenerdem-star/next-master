@@ -18,7 +18,7 @@ import {
   createFullSalesInvoices,
   upsertSalesOrder,
 } from "../../infrastructure/api/ordersApi";
-import { batchResolveQuoteImportRows } from "../../infrastructure/api/quoteImportApi";
+import { batchResolveQuoteImportRows, fetchCurrentSupplierOptionsForOrder } from "../../infrastructure/api/quoteImportApi";
 import { fetchCPriceMapForRows, getCPriceForRow } from "../../infrastructure/api/cPriceApi";
 import { fetchPriceListSettings } from "../../infrastructure/api/priceListsApi";
 import { resolveQuoteLine } from "../../infrastructure/api/quoteResolverApi";
@@ -2456,13 +2456,9 @@ export function QuotesPage({
     setRefreshingSupplierLines(current => ({ ...current, [row.lineId]: true }));
     setBuilderStatus(locale === "tr" ? `${code}: tedarikçi seçenekleri aranıyor…` : `${code}: loading supplier options…`);
     try {
-      const { resolved, supplierOptions } = await resolveQuoteLine({
-        code, brand: row.brand, quantity: row.qty, customerType,
-        marginA: effectiveMarginA, marginB: effectiveMarginB,
-        includeSupplierOptions: true, calculateSellPrice: false,
-      });
+      const supplierOptions = await fetchCurrentSupplierOptionsForOrder({ code, brand: row.brand, quantity: row.qty });
       if (!isSalesOrderWorkCurrent(generation, salesOrderLoadGenerationRef.current)) return;
-      if (!resolved.found || confirmationSku(resolved.product_code) !== confirmationSku(code) || !supplierOptions.length) {
+      if (!supplierOptions.length) {
         setBuilderStatus(locale === "tr" ? `${code}: güncel tedarikçi seçeneği bulunamadı; mevcut seçim korundu.` : `${code}: no current supplier options found; the saved choice was kept.`);
         return;
       }

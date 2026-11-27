@@ -37,6 +37,7 @@ type CurrentSupplierPriceOption = SupplierCommercialTerms & {
   buy_price: number | string | null;
   price_date: string | null;
   notes: string | null;
+  applied_min_quantity?: number | null;
 };
 
 type CurrentSupplierPriceBatchRow = {
@@ -86,6 +87,37 @@ async function fetchCurrentSupplierPriceBatch(rows: Array<{ code: string; brand:
     resolved.push(...ordered);
   }
   return resolved;
+}
+
+/** Read all current offers for one order line without picking a supplier or changing its quantity. */
+export async function fetchCurrentSupplierOptionsForOrder(input: { code: string; brand: string; quantity: number }): Promise<QuoteSupplierOption[]> {
+  const brand = canonicalizePriceBrandName(input.brand, input.code);
+  const code = canonicalizePriceProductCode(input.code, brand);
+  if (!brand || !code || !Number.isInteger(input.quantity) || input.quantity < 1) throw new Error("A valid product, brand and quantity are required.");
+  const [result] = await fetchCurrentSupplierPriceBatch([{ code, brand, quantity: currentSupplierQuantity(brand, input.quantity) }]);
+  const unique = new Map<string, CurrentSupplierPriceOption>();
+  const names = new Map<string, string>();
+  for (const item of result.options) {
+    const key = String(item.supplier_id || "").trim();
+    const name = item.supplier_name.trim().toLowerCase();
+    if ((unique.has(key) && unique.get(key)!.supplier_name.trim().toLowerCase() !== name)
+        || (names.has(name) && names.get(name) !== key)) throw new Error("Supplier identities are ambiguous.");
+    if (item.applied_min_quantity != null && (!Number.isInteger(item.applied_min_quantity)
+        || item.applied_min_quantity < 1 || item.applied_min_quantity > input.quantity)) throw new Error("Supplier quantity tier could not be verified.");
+    names.set(name, key);
+    const previous = unique.get(key);
+    if (!previous || Number(item.buy_price) < Number(previous.buy_price)) unique.set(key, item);
+  }
+  return [...unique.values()].map(item => ({
+    ...readSupplierCommercialTerms(item),
+    supplier_id: item.supplier_id,
+    supplier_name: item.supplier_name,
+    buy_price: Number(item.buy_price),
+    price_date: item.price_date || null,
+    sell_price: null,
+    notes: item.notes || null,
+    ...(item.applied_min_quantity != null ? { applied_min_quantity: item.applied_min_quantity } : {}),
+  })).sort((a, b) => Number(a.buy_price) - Number(b.buy_price));
 }
 
 function codeKey(brandId: string, normalizedCode: string) {
